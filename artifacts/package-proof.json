@@ -1,0 +1,8 @@
+{
+  "installed_module_used": true,
+  "bundled_html_and_assets": true,
+  "bundled_license_notices": true,
+  "native_worker_geometry": true,
+  "durable_command": true,
+  "mesh_bytes": 740
+}

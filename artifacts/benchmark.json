@@ -1,0 +1,34 @@
+{
+  "platform": "Windows-11-10.0.26200-SP0",
+  "processor": "AMD64 Family 25 Model 97 Stepping 2, AuthenticAMD",
+  "python": "3.12.14",
+  "fixture": {
+    "name": "Four-part mold tooling",
+    "features": 14,
+    "parameters": 72,
+    "instances": 4,
+    "triangles": 4088
+  },
+  "cold_worker_start_and_first_durable_design_ms": 3494.574,
+  "root_edit_including_geometry_and_durable_commit": {
+    "samples": 20,
+    "median_ms": 195.265,
+    "p95_ms": 236.556,
+    "maximum_ms": 245.832
+  },
+  "cached_geometry_metadata_edit_and_durable_commit": {
+    "samples": 20,
+    "median_ms": 18.299,
+    "p95_ms": 20.204,
+    "maximum_ms": 45.882
+  },
+  "state_query": {
+    "samples": 20,
+    "median_ms": 1.844,
+    "p95_ms": 2.251,
+    "maximum_ms": 6.946
+  },
+  "stl_batch_ms": 1948.161,
+  "exported_files": 4,
+  "conditions": "Local Windows host, .cache project on workspace filesystem, worker persistent, no competing benchmark. Not a GPU/UI or competing-CAD benchmark."
+}

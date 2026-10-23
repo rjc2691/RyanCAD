@@ -1,0 +1,39 @@
+name: Verify RyanCAD
+on: [push, pull_request, workflow_dispatch]
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@v4
+        with:
+          version: '11'
+      - uses: astral-sh/setup-uv@v6
+      - name: macOS native solver build dependencies
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          brew install eigen boost cmake
+          echo "CMAKE_PREFIX_PATH=$(brew --prefix)" >> "$GITHUB_ENV"
+      - name: Build interface
+        run: |
+          pnpm --dir frontend install --frozen-lockfile
+          pnpm --dir frontend build
+      - name: Install locked engine
+        run: uv sync --frozen --extra dev
+      - name: Exercise real geometry and recovery
+        run: |
+          uv run python -c "from pathlib import Path; Path('.cache').mkdir(exist_ok=True)"
+          uv run python -m pytest -q --basetemp=.cache/ci-tests
+      - name: Build installable package
+        run: uv build --wheel

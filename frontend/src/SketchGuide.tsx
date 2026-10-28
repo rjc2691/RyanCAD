@@ -6,6 +6,7 @@ import {
   useRef,
 } from "react";
 import { sketchMeasurements } from "./sketchMeasurements";
+import { sketchPlaneBounds } from "./sketchGrid";
 import * as THREE from "three";
 import {
   entityPoints,
@@ -27,8 +28,12 @@ export interface SketchDimensionEditor {
 }
 export default forwardRef<
   SketchGuideHandle,
-  { draft?: SketchDraft | null; dimensionEditor?: SketchDimensionEditor | null }
->(function SketchGuide({ draft, dimensionEditor }, ref) {
+  {
+    draft?: SketchDraft | null;
+    dimensionEditor?: SketchDimensionEditor | null;
+    gridOnly?: boolean;
+  }
+>(function SketchGuide({ draft, dimensionEditor, gridOnly }, ref) {
   const root = useRef<SVGSVGElement>(null),
     latest = useRef(draft),
     editorRoot = useRef<HTMLDivElement>(null),
@@ -53,26 +58,10 @@ export default forwardRef<
       const svg = root.current,
         d = latest.current;
       if (!svg || !d) return;
-      const f = sketchBasis(d.frame),
-        plane = new THREE.Plane().setFromNormalAndCoplanarPoint(
-          f.normal,
-          f.origin,
-        ),
-        ray = new THREE.Raycaster();
-      const at = (x: number, y: number) => {
-        ray.setFromCamera(new THREE.Vector2(x, y), camera);
-        const p = new THREE.Vector3();
-        return ray.ray.intersectPlane(plane, p)
-          ? p.sub(f.origin)
-          : new THREE.Vector3();
-      };
-      const corners = [at(-1, -1), at(1, 1)],
-        us = corners.map((p) => p.dot(f.u)),
-        vs = corners.map((p) => p.dot(f.v));
-      const minU = Math.min(...us),
-        maxU = Math.max(...us),
-        minV = Math.min(...vs),
-        maxV = Math.max(...vs),
+      const f = sketchBasis(d.frame);
+      const bounds = sketchPlaneBounds(camera, d.frame);
+      if (!bounds) return;
+      const { minU, maxU, minV, maxV } = bounds,
         span = Math.max(maxU - minU, maxV - minV);
       const target = span / 30,
         power = 10 ** Math.floor(Math.log10(Math.max(target, 0.001))),
@@ -349,58 +338,73 @@ export default forwardRef<
     <>
       <svg
         ref={root}
-        className="sketch-viewport-guide"
+        className={`sketch-viewport-guide${gridOnly ? " sketch-grid-preview" : ""}`}
         aria-label="Sketch geometry and coordinate grid"
       >
         <path data-sketch="grid" className="sketch-grid-minor" />
         <path data-sketch="major" className="sketch-grid-major" />
-        <path data-sketch="u" className="sketch-axis-u" />
-        <path data-sketch="v" className="sketch-axis-v" />
-        <text data-sketch="u-label" className="sketch-axis-label">
-          U
-        </text>
-        <text data-sketch="v-label" className="sketch-axis-label">
-          V
-        </text>
-        {draft.entities.map((e) => (
-          <path
-            key={e.id}
-            data-sketch={e.id}
-            className={`sketch-entity ${e.construction ? "construction" : ""} ${e.id === draft.selected ? "selected" : ""}`}
+        {!gridOnly && (
+          <>
+            <path data-sketch="u" className="sketch-axis-u" />
+            <path data-sketch="v" className="sketch-axis-v" />
+            <text data-sketch="u-label" className="sketch-axis-label">
+              U
+            </text>
+            <text data-sketch="v-label" className="sketch-axis-label">
+              V
+            </text>
+          </>
+        )}
+        {!gridOnly && (
+          <>
+            {draft.entities.map((e) => (
+              <path
+                key={e.id}
+                data-sketch={e.id}
+                className={`sketch-entity ${e.construction ? "construction" : ""} ${e.id === draft.selected ? "selected" : ""}`}
+              />
+            ))}
+            {sketchAnchors(draft).map((a) => (
+              <g
+                key={a.id}
+                data-sketch={a.id}
+                aria-label={`${a.entity} ${a.kind === "mid" ? "midpoint" : a.kind}`}
+                className={`sketch-anchor ${a.kind} ${draft.selectedAnchor?.id === a.id ? "selected" : ""} ${draft.cursor && Math.hypot(draft.cursor[0] - a.point[0], draft.cursor[1] - a.point[1]) < 1e-6 ? "hovered" : ""}`}
+              >
+                {a.kind === "mid" ? (
+                  <path d="M0 -4L4 0L0 4L-4 0Z" />
+                ) : (
+                  <circle r={a.kind === "center" ? 3 : 3.5} />
+                )}
+              </g>
+            ))}
+            {measurements.map((m) => (
+              <g
+                key={m.id}
+                data-measurement={m.id}
+                className={`sketch-measurement ${m.constrained ? "constrained" : "reference"}`}
+                aria-label={`${m.constrained ? "Constrained dimension" : "Reference measurement"} ${m.label}`}
+              >
+                <path />
+                <text textAnchor="middle">{m.label}</text>
+              </g>
+            ))}
+            <path data-sketch="preview" className="sketch-rubberband" />
+            <g data-sketch="cursor" className="sketch-cursor">
+              <path d="M-8 0H8 M0-8V8" />
+              <circle r="4" />
+            </g>
+            <text data-sketch="dimension" className="sketch-live-dimension" />
+          </>
+        )}
+        {!gridOnly && (
+          <text
+            data-sketch="scale"
+            x="24"
+            y="80"
+            className="sketch-grid-scale"
           />
-        ))}
-        {sketchAnchors(draft).map((a) => (
-          <g
-            key={a.id}
-            data-sketch={a.id}
-            aria-label={`${a.entity} ${a.kind === "mid" ? "midpoint" : a.kind}`}
-            className={`sketch-anchor ${a.kind} ${draft.selectedAnchor?.id === a.id ? "selected" : ""} ${draft.cursor && Math.hypot(draft.cursor[0] - a.point[0], draft.cursor[1] - a.point[1]) < 1e-6 ? "hovered" : ""}`}
-          >
-            {a.kind === "mid" ? (
-              <path d="M0 -4L4 0L0 4L-4 0Z" />
-            ) : (
-              <circle r={a.kind === "center" ? 3 : 3.5} />
-            )}
-          </g>
-        ))}
-        {measurements.map((m) => (
-          <g
-            key={m.id}
-            data-measurement={m.id}
-            className={`sketch-measurement ${m.constrained ? "constrained" : "reference"}`}
-            aria-label={`${m.constrained ? "Constrained dimension" : "Reference measurement"} ${m.label}`}
-          >
-            <path />
-            <text textAnchor="middle">{m.label}</text>
-          </g>
-        ))}
-        <path data-sketch="preview" className="sketch-rubberband" />
-        <g data-sketch="cursor" className="sketch-cursor">
-          <path d="M-8 0H8 M0-8V8" />
-          <circle r="4" />
-        </g>
-        <text data-sketch="dimension" className="sketch-live-dimension" />
-        <text data-sketch="scale" x="24" y="80" className="sketch-grid-scale" />
+        )}
       </svg>
       {dimensionEditor && (
         <div

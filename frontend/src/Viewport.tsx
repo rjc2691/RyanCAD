@@ -1,4 +1,5 @@
 import MovementGuide, { type MovementGuideHandle } from "./MovementGuide";
+import { sketchOrbitOffset } from "./sketchOrbit";
 import { expandedGroupSelection } from "./groupModel";
 import SketchGuide, {
   type SketchGuideHandle,
@@ -530,6 +531,68 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     controls.touches = { ONE: THREE.TOUCH.ROTATE, TWO: THREE.TOUCH.DOLLY_PAN };
     controls.minZoom = 0.05;
     controls.maxZoom = 100;
+    let sketchOrbit: {
+      pointer: number;
+      x: number;
+      y: number;
+      offset: THREE.Vector3;
+      frame: SketchDraft["frame"];
+    } | null = null;
+    const orbitDown = (event: PointerEvent) => {
+      const d = propsRef.current.sketch;
+      if (
+        !d ||
+        propsRef.current.sketchPlanePicking ||
+        event.button !== 2 ||
+        !event.shiftKey
+      )
+        return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      controls.enableDamping = false;
+      controls.update();
+      controls.enabled = false;
+      sketchOrbit = {
+        pointer: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        offset: camera.position.clone().sub(controls.target),
+        frame: d.frame,
+      };
+      renderer.domElement.setPointerCapture(event.pointerId);
+    };
+    const orbitMove = (event: PointerEvent) => {
+      if (!sketchOrbit || event.pointerId !== sketchOrbit.pointer) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      const width = Math.max(1, renderer.domElement.clientWidth),
+        height = Math.max(1, renderer.domElement.clientHeight);
+      const offset = sketchOrbitOffset(
+        sketchOrbit.offset,
+        sketchOrbit.frame,
+        (-3 * (event.clientX - sketchOrbit.x)) / width,
+        (3 * (event.clientY - sketchOrbit.y)) / height,
+      );
+      camera.position.copy(controls.target).add(offset);
+      camera.up.copy(sketchBasis(sketchOrbit.frame).v);
+      camera.lookAt(controls.target);
+      camera.updateMatrixWorld();
+    };
+    const orbitEnd = (event: PointerEvent) => {
+      if (!sketchOrbit || event.pointerId !== sketchOrbit.pointer) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      sketchOrbit = null;
+      controls.enabled = true;
+      controls.update();
+      controls.enableDamping = true;
+      if (renderer.domElement.hasPointerCapture(event.pointerId))
+        renderer.domElement.releasePointerCapture(event.pointerId);
+    };
+    renderer.domElement.addEventListener("pointerdown", orbitDown, true);
+    renderer.domElement.addEventListener("pointermove", orbitMove, true);
+    renderer.domElement.addEventListener("pointerup", orbitEnd, true);
+    renderer.domElement.addEventListener("pointercancel", orbitEnd, true);
     scene.add(new THREE.HemisphereLight("#d9e7fa", "#4d525f", 2.0));
     const key = new THREE.DirectionalLight("#eef5ff", 3.5);
     key.position.set(-100, -160, 230);
@@ -1211,8 +1274,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         clearProfileRole();
       }
       movementGuide.current?.update(camera, state.width, state.height);
-      if (propsRef.current.sketch)
-        sketchGuide.current?.update(camera, state.width, state.height);
+      sketchGuide.current?.update(camera, state.width, state.height);
       propsRef.current.orientationRef?.current?.update(camera);
       renderer.render(scene, camera);
     };
@@ -1226,6 +1288,10 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       displayedPreview.current = null;
       controls.removeEventListener("change", clearHover);
       controls.dispose();
+      renderer.domElement.removeEventListener("pointerdown", orbitDown, true);
+      renderer.domElement.removeEventListener("pointermove", orbitMove, true);
+      renderer.domElement.removeEventListener("pointerup", orbitEnd, true);
+      renderer.domElement.removeEventListener("pointercancel", orbitEnd, true);
       renderer.dispose();
       renderer.domElement.removeEventListener("pointerdown", pointerdown);
       renderer.domElement.removeEventListener("pointerup", pointerup);
@@ -1252,8 +1318,13 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   useEffect(() => {
     const s = sceneRef.current;
     if (!s) return;
+    const preview =
+      !props.sketch &&
+      !props.operationDraft &&
+      !props.placementTarget &&
+      props.sketchObjects?.some((d) => d.feature?.id === props.selectedSketch);
     s.grid.visible =
-      props.grid && (!props.sketch || !!props.sketchPlanePicking);
+      props.grid && !preview && (!props.sketch || !!props.sketchPlanePicking);
     s.axes.visible =
       props.grid && (!props.sketch || !!props.sketchPlanePicking);
     s.parts.visible = !props.sketch || props.sketch.showComponents;
@@ -1262,6 +1333,10 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     !!props.sketch,
     props.sketch?.showComponents,
     props.sketchPlanePicking,
+    props.selectedSketch,
+    props.sketchObjects,
+    props.operationDraft,
+    props.placementTarget,
   ]);
 
   useEffect(() => {
@@ -1754,7 +1829,17 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       <MovementGuide ref={movementGuide} guide={props.movementGuide} />
       <SketchGuide
         ref={sketchGuide}
-        draft={props.sketchPlanePicking ? null : props.sketch}
+        draft={
+          props.sketchPlanePicking
+            ? null
+            : props.sketch ||
+              (props.grid && !props.operationDraft && !props.placementTarget
+                ? props.sketchObjects?.find(
+                    (d) => d.feature?.id === props.selectedSketch,
+                  )
+                : null)
+        }
+        gridOnly={!props.sketch}
         dimensionEditor={props.dimensionEditor}
       />
       <OperationGuide

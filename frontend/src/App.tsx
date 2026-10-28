@@ -254,6 +254,14 @@ export default function App() {
     definition: string;
     color: string;
   } | null>(null);
+  const [groupColorsEnabled, setGroupColorsEnabled] = useState(true);
+  const [fallbackGroupColors] = useState(() => {
+    const palette = ["#89959f", "#9b958a", "#808f8b", "#9a9098", "#92999b"];
+    return Array.from(
+      { length: 3 },
+      () => palette[Math.floor(Math.random() * palette.length)],
+    );
+  });
   const [contextMenu, setContextMenu] = useState<{
     selection: Selection | null;
     x: number;
@@ -313,8 +321,20 @@ export default function App() {
   }, [state?.document.revision, groupScope]);
   const [selectedFeature, setSelectedFeature] = useState<string | null>(null);
   const [dialog, setDialog] = useState<string | null>(null);
+  const dialogRef = useRef(dialog);
+  dialogRef.current = dialog;
   const [editParameter, setEditParameter] = useState<string | null>(null);
   const [sketch, setSketch] = useState<SketchDraft | null>(null);
+  const projectMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (dialog !== "project") return;
+    const dismiss = (event: PointerEvent) => {
+      if (!projectMenuRef.current?.contains(event.target as Node))
+        setDialog(null);
+    };
+    document.addEventListener("pointerdown", dismiss);
+    return () => document.removeEventListener("pointerdown", dismiss);
+  }, [dialog]);
   const sketchRef = useRef<SketchPanelHandle>(null);
   const [dimensionEditor, setDimensionEditor] = useState<{
     line: string;
@@ -347,6 +367,8 @@ export default function App() {
   const [section, setSection] = useState(false);
   const [explode, setExplode] = useState(0);
   const [historyView, setHistoryView] = useState<any>(null);
+  const escapeState = useRef({ contextMenu, appearance, editParameter, error, historyView });
+  escapeState.current = { contextMenu, appearance, editParameter, error, historyView };
   const [exports, setExports] = useState<any>(null);
   const [followAgent, setFollowAgent] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
@@ -1031,6 +1053,15 @@ export default function App() {
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && dialogRef.current === "project") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        setDialog(null);
+        projectMenuRef.current
+          ?.querySelector<HTMLButtonElement>(".brand")
+          ?.focus();
+        return;
+      }
       if (groupingActive.current && ["Enter", "Escape"].includes(event.key)) {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -1107,14 +1138,28 @@ export default function App() {
         return;
       }
       if (event.key === "Escape") {
+        // Focused editors and popovers handle their own cancellation first.
+        if (escapeState.current.contextMenu || escapeState.current.appearance) return;
+        if (dialogRef.current || escapeState.current.editParameter || escapeState.current.error) {
+          setDialog(null);
+          setEditParameter(null);
+          setError(null);
+          return;
+        }
+        if (input) return;
         if (groupScopeRef.current && !input) {
           event.preventDefault();
           endGroupEditingRef.current();
           return;
         }
-        setDialog(null);
-        setEditParameter(null);
-        setError(null);
+        if (escapeState.current.historyView) {
+          setHistoryView(null);
+          return;
+        }
+        setSelection(null);
+        setSelectionSet([]);
+        setSelectedSketch(null);
+        setSelectedFeature(null);
         return;
       }
       if (input) return;
@@ -1332,6 +1377,12 @@ export default function App() {
     `${t.label} ${t.category}`.toLowerCase().includes(toolSearch.toLowerCase()),
   );
   const featureOrder = state?.document.feature_order || [];
+  const sketchFeatures = Object.values(state?.document.features || {}).filter(
+    (feature) => feature.type === "sketch",
+  );
+  const anySketchVisible = sketchFeatures.some(
+    (feature) => !hiddenSketches.has(feature.id),
+  );
   const savedSketchObjects = useMemo(
     () =>
       state
@@ -1566,6 +1617,21 @@ export default function App() {
     ),
     expandedGroups,
   );
+  const groupColorDefinitions = [
+    ...new Set(
+      (state?.occurrences || [])
+        .filter((o) => o.kind === "assembly")
+        .map((o) => o.definition),
+    ),
+  ];
+  const groupIconColors = Array.from({ length: 3 }, (_, index) => {
+    const id = groupColorDefinitions[index];
+    return id
+      ? (colorPreview?.definition === id
+          ? colorPreview.color
+          : state?.document.components[id]?.color) || fallbackGroupColors[index]
+      : fallbackGroupColors[index];
+  });
   const createParent = selection
     ? parentPath(selection.occurrence)
     : groupScope;
@@ -1615,17 +1681,74 @@ export default function App() {
       }
     >
       <header className="app-header">
-        <button
-          className="brand"
-          onClick={() => setDialog("project")}
-          title="Project menu"
-        >
-          <Logo />
-          <span>
-            RYAN<span>CAD</span>
-          </span>
-          <ChevronDown size={12} />
-        </button>
+        <div className="brand-container" ref={projectMenuRef}>
+          <button
+            className="brand"
+            onClick={() => setDialog(dialog === "project" ? null : "project")}
+            title="Project menu"
+            aria-label="Project menu"
+            aria-expanded={dialog === "project"}
+            aria-controls="project-dropdown"
+          >
+            <Logo />
+            <span>
+              Ryan<span>CAD</span>
+            </span>
+            <ChevronDown size={12} />
+          </button>
+          {dialog === "project" && (
+            <div
+              id="project-dropdown"
+              className="project-dropdown project-menu"
+              aria-label="Project menu"
+            >
+              <button
+                onClick={() => {
+                  setDialog("new-confirm");
+                }}
+              >
+                <FilePlus2 />
+                <span>
+                  <strong>New design</strong>
+                  <small>Current work stays in revision history.</small>
+                </span>
+              </button>
+              <button
+                onClick={() => {
+                  importRef.current?.click();
+                  setDialog(null);
+                }}
+              >
+                <FolderOpen />
+                <span>
+                  <strong>Open a native design copy</strong>
+                  <small>Import a YAML manifest or portable .rycad.zip.</small>
+                </span>
+              </button>
+              <a href="/api/native" download onClick={() => setDialog(null)}>
+                <Save />
+                <span>
+                  <strong>Download native project snapshot</strong>
+                  <small>Editable model and its durable journal.</small>
+                </span>
+              </a>
+              <a href="/api/manifest" download onClick={() => setDialog(null)}>
+                <GitBranch />
+                <span>
+                  <strong>Download readable YAML</strong>
+                  <small>Current parametric intent.</small>
+                </span>
+              </a>
+              <button onClick={() => setDialog("references")}>
+                <Boxes />
+                <span>
+                  <strong>Reference designs</strong>
+                  <small>Fully editable examples.</small>
+                </span>
+              </button>
+            </div>
+          )}
+        </div>
         <button className="command-search" onClick={() => setDialog("palette")}>
           <Search size={14} />
           <span>Find a tool or action</span>
@@ -1950,6 +2073,44 @@ export default function App() {
             )}
           </div>
           <div className="structure-section design-category">
+            <button
+              className="component-color-mode"
+              aria-label={
+                groupColorsEnabled
+                  ? "Switch to monochrome component colors"
+                  : "Switch to group component colors"
+              }
+              aria-pressed={groupColorsEnabled}
+              title={
+                groupColorsEnabled
+                  ? "Switch to monochrome colors"
+                  : "Switch to group colors"
+              }
+              onClick={() => setGroupColorsEnabled((enabled) => !enabled)}
+            >
+              <svg
+                width="19"
+                height="19"
+                viewBox="0 0 20 20"
+                aria-hidden="true"
+              >
+                <circle cx="7" cy="7" r="5" fill={groupIconColors[0]} />
+                <circle
+                  cx="13"
+                  cy="7"
+                  r="5"
+                  fill={groupIconColors[1]}
+                  fillOpacity=".85"
+                />
+                <circle
+                  cx="10"
+                  cy="12.5"
+                  r="5"
+                  fill={groupIconColors[2]}
+                  fillOpacity=".85"
+                />
+              </svg>
+            </button>
             <Boxes size={15} />
             <span>Components</span>
           </div>
@@ -2298,13 +2459,29 @@ export default function App() {
             <div className="structure-section">
               <SquareDashed size={15} />
               <span>2D Sketches</span>
-              <small>
-                {
-                  Object.values(state?.document.features || {}).filter(
-                    (f) => f.type === "sketch",
-                  ).length
+              <small>{sketchFeatures.length}</small>
+              <button
+                className="icon-button"
+                aria-label={
+                  anySketchVisible ? "Hide all sketches" : "Show all sketches"
                 }
-              </small>
+                title={
+                  anySketchVisible ? "Hide all sketches" : "Show all sketches"
+                }
+                disabled={!sketchFeatures.length}
+                onClick={() =>
+                  setHiddenSketches((previous) => {
+                    const next = new Set(previous);
+                    for (const feature of sketchFeatures) {
+                      if (anySketchVisible) next.add(feature.id);
+                      else next.delete(feature.id);
+                    }
+                    return next;
+                  })
+                }
+              >
+                {anySketchVisible ? <Eye size={13} /> : <EyeOff size={13} />}
+              </button>
               <button
                 className="icon-button"
                 aria-label="New sketch"
@@ -2314,52 +2491,50 @@ export default function App() {
                 <Plus size={13} />
               </button>
             </div>
-            {Object.values(state?.document.features || {})
-              .filter((f) => f.type === "sketch")
-              .map((f) => (
-                <div
-                  key={f.id}
-                  className={`sketch-tree-row ${selectedSketch === f.id ? "selected" : ""}`}
+            {sketchFeatures.map((f) => (
+              <div
+                key={f.id}
+                className={`sketch-tree-row ${selectedSketch === f.id ? "selected" : ""}`}
+              >
+                <button
+                  className="sketch-tree-name"
+                  onClick={() => {
+                    if (sketch) return;
+                    selectSketch(f.id);
+                  }}
+                  onDoubleClick={() => openSketch(f)}
                 >
-                  <button
-                    className="sketch-tree-name"
-                    onClick={() => {
-                      if (sketch) return;
-                      selectSketch(f.id);
-                    }}
-                    onDoubleClick={() => openSketch(f)}
-                  >
-                    <SquareDashed size={14} />
-                    <span>{f.name}</span>
-                  </button>
-                  <button
-                    className="icon-button"
-                    aria-label={`Edit ${f.name}`}
-                    disabled={!!sketch || busy}
-                    onClick={() => openSketch(f)}
-                  >
-                    <Pencil size={12} />
-                  </button>
-                  <button
-                    className="icon-button"
-                    aria-label={`${hiddenSketches.has(f.id) ? "Show" : "Hide"} sketch ${f.name}`}
-                    onClick={() =>
-                      setHiddenSketches((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(f.id)) next.delete(f.id);
-                        else next.add(f.id);
-                        return next;
-                      })
-                    }
-                  >
-                    {hiddenSketches.has(f.id) ? (
-                      <EyeOff size={12} />
-                    ) : (
-                      <Eye size={12} />
-                    )}
-                  </button>
-                </div>
-              ))}
+                  <SquareDashed size={14} />
+                  <span>{f.name}</span>
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`Edit ${f.name}`}
+                  disabled={!!sketch || busy}
+                  onClick={() => openSketch(f)}
+                >
+                  <Pencil size={12} />
+                </button>
+                <button
+                  className="icon-button"
+                  aria-label={`${hiddenSketches.has(f.id) ? "Show" : "Hide"} sketch ${f.name}`}
+                  onClick={() =>
+                    setHiddenSketches((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(f.id)) next.delete(f.id);
+                      else next.add(f.id);
+                      return next;
+                    })
+                  }
+                >
+                  {hiddenSketches.has(f.id) ? (
+                    <EyeOff size={12} />
+                  ) : (
+                    <Eye size={12} />
+                  )}
+                </button>
+              </div>
+            ))}
             {selectedSketch &&
               state?.document.features[selectedSketch] &&
               !sketch && (
@@ -2612,6 +2787,7 @@ export default function App() {
             ...o,
             name: state?.document.components[o.definition]?.name || o.name,
             color: (() => {
+              if (!groupColorsEnabled) return "#84919a";
               const ancestors =
                 state?.occurrences
                   .filter(
@@ -2693,18 +2869,18 @@ export default function App() {
                       ? "TOOL SETUP · UNAPPLIED PREVIEW"
                       : "ASSEMBLY WORKSPACE"}
             </span>
-            <div>
-              <span className="status-orb small" />
-              {sketch
-                ? sketchPlanePicking
+            {(!sketch || sketchPlanePicking) && (
+              <div>
+                <span className="status-orb small" />
+                {sketchPlanePicking
                   ? "Pick a planar face"
-                  : "Aligned sketch plane · right-drag to pan · scroll to zoom"
-                : historyView
-                  ? "Earlier build stage · current parameter values"
-                  : section
-                    ? "Section view · clipped display"
-                    : "Orthographic"}
-            </div>
+                  : historyView
+                    ? "Earlier build stage · current parameter values"
+                    : section
+                      ? "Section view · clipped display"
+                      : "Orthographic"}
+              </div>
+            )}
             {groupScope && !sketch && (
               <div className="group-edit-banner">
                 <FolderOpen size={14} />
@@ -2872,7 +3048,10 @@ export default function App() {
           <div className="navigation-hint">
             <MousePointer2 size={12} />
             <span>
-              Drag to orbit <b>·</b> Right-drag to pan <b>·</b> Scroll to zoom
+              {sketch && !sketchPlanePicking
+                ? "Shift + right-drag to orbit"
+                : "Left-drag to orbit"}{" "}
+              <b>·</b> Right-drag to pan <b>·</b> Scroll to zoom
             </span>
           </div>
           <div className="viewport-options">
@@ -4190,55 +4369,6 @@ export default function App() {
                     <ArrowUpRight size={13} />
                   </button>
                 ))}
-          </div>
-        </Modal>
-      )}
-      {dialog === "project" && (
-        <Modal
-          title="Project"
-          eyebrow="PROJECT"
-          onClose={() => setDialog(null)}
-        >
-          <div className="project-menu">
-            <button
-              onClick={() => {
-                setDialog("new-confirm");
-              }}
-            >
-              <FilePlus2 />
-              <span>
-                <strong>New design</strong>
-                <small>Current work stays in revision history.</small>
-              </span>
-            </button>
-            <button onClick={() => importRef.current?.click()}>
-              <FolderOpen />
-              <span>
-                <strong>Open a native design copy</strong>
-                <small>Import a YAML manifest or portable .rycad.zip.</small>
-              </span>
-            </button>
-            <a href="/api/native" download>
-              <Save />
-              <span>
-                <strong>Download native project snapshot</strong>
-                <small>Editable model and its durable journal.</small>
-              </span>
-            </a>
-            <a href="/api/manifest" download>
-              <GitBranch />
-              <span>
-                <strong>Download readable YAML</strong>
-                <small>Current parametric intent.</small>
-              </span>
-            </a>
-            <button onClick={() => setDialog("references")}>
-              <Boxes />
-              <span>
-                <strong>Reference designs</strong>
-                <small>Fully editable examples.</small>
-              </span>
-            </button>
           </div>
         </Modal>
       )}

@@ -1,0 +1,14 @@
+{
+  "checks": [
+    "One Tool button; visible viewport; automatic preview; one atomic saved operation",
+    "Face + T → hole; exact on-plane placement and panel diameter; original target retained",
+    "Edge + T; panel finish size; round↔bevel without leaving; invalid sizes cannot apply",
+    "Round/bevel → custom polygon on perpendicular plane → swept subtraction, with the same origin/path",
+    "Combined rotation and travel creates a native helical solid as its own component",
+    "Placed body Boolean retains target ownership; disconnected cut is rejected; intersection applies",
+    "Authored history, undo, and native reload preserve the unified operations",
+    "1280/1100 px windows retain a visible viewport, dock and Apply; cancel preserves revision; preview export/explode guarded"
+  ],
+  "errors": [],
+  "revision": 6
+}

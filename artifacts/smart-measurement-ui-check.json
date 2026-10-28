@@ -1,0 +1,10 @@
+{
+  "checks": [
+    "6 × 47 × 47 mm plate shows its real spans with at most three annotations",
+    "Hover dwell, smaller hover budget, face selection, camera tracking, zero measurement edits",
+    "Millimeter/inch display conversion retains authoritative geometry",
+    "End-on dimensions suppressed; labels refresh after a real parameter edit",
+    "Annotations remain inside a compact viewport without overlapping each other"
+  ],
+  "errors": []
+}

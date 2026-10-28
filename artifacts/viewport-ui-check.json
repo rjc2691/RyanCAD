@@ -1,0 +1,11 @@
+{
+  "checks": [
+    "Face/edge hover and selection; ranked geometry-anchored dimension lines",
+    "Context actions, keyboard navigation, and right-drag panning",
+    "Live color previews, no geometry downloads, one commit per gesture, undo",
+    "Tree rename/color editor; outside dismissal saves pending name",
+    "Display-unit conversion and durable reload",
+    "Menu remains on screen in a compact viewport"
+  ],
+  "errors": []
+}

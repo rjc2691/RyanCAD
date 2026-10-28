@@ -26,13 +26,21 @@ On a fresh machine, install Python 3.12/3.13, Node.js 22+, and pnpm 11 (or npm),
 
 After setup the application works offline, with local bundled assets, no cloud service, telemetry, account, embedded model or chat panel.
 
+### Public access behind a reverse proxy
+
+Set `RYANCAD_PUBLIC_URL` to the exact public origin, for example `https://cad.example.com`, and restart RyanCAD. The proxy must forward the original `Host` header and browser `Origin` unchanged to `127.0.0.1:8790`, and terminate HTTPS. For a systemd service add `Environment=RYANCAD_PUBLIC_URL=https://cad.example.com` under `[Service]`, then run `sudo systemctl daemon-reload` and `sudo systemctl restart ryancad`. Check `curl http://127.0.0.1:8790/api/health` locally and visit the public URL in a browser. Leave port 8790 private.
+
+Anyone who can reach the public URL can open and edit the same project, including its history. There are no user accounts or per-user projects; use a separate test project and retain backups. HTTPS protects traffic in transit but does not restrict access.
+
 ## Use it
 
 - Create automatically organized parts; repeat linked instances, make independent copies, group assemblies and set exact placements.
-- Model primitives, constrained line/circle/arc sketches, planar regions, extrusions/cuts, revolves, holes, fillets/chamfers, Booleans, mirrors and patterns.
+- Press **T / Tool** for one viewport-driven operation workspace: Tool Origin, Tool Profile, Tool Path, Tool Effect in one scrolling form. Enter applies; Escape cancels the whole draft. Shift-click groups connected path edges and parallel planar profiles; plain viewport picks replace profiles/paths, and Auto suggests Add/Remove from native overlap. Native previews cover extrusions, holes, round/bevel, custom sweeps, revolutions, helices and body Booleans. See [launch walkthroughs](docs/UNIFIED_OPERATIONS.md).
+- Use primitives, existing constrained sketches, planar regions, mirrors, connected geometry repeats and linked part instances.
 - Edit automatically named parameters, reuse standards, trace roots/dependencies/consumers and specify tolerances and fit intervals.
 - Work with planar fabrication profiles, cutouts, stock thickness and display-only thickness previews in the shared workspace.
-- Inspect dimensions, volume/area, quantities, selected faces/edges, section clipping and static separation/interference.
+- Inspect dimensions and scoped volume/area in the inspector; part counts live in the structure tree and revision/Undo/Redo in the timeline. The viewport is reserved for geometry, selection and annotations.
+- Hover/select geometry for ranked contextual dimension lines. A [portable information service](docs/CONTEXTUAL_INFORMATION.md) balances interest, recent interactions, repetition, readability, and available space.
 - Preview, undo/redo, checkpoint, inspect attributed actions and feature rollback, cancel native work and recover durable edits.
 - Export separate validated binary STL files with explicit selection, frames, precision and a revision/unit receipt.
 
@@ -80,8 +88,21 @@ uv run python scripts/generate_examples.py
 uv build --wheel
 ```
 
-`scripts/ui_check.mjs` tests preview/edit/undo/export on the mold app at port 8790. `scripts/ui_modeling_check.mjs` creates a plate, linked pins and a planar part through an empty isolated project at port 8791. Browser tests require Playwright and Chromium; `PLAYWRIGHT_MODULE_PATH`, `PLAYWRIGHT_CHANNEL` and `RYANCAD_UI_URL` override defaults. `scripts/check_mcp.py` exercises the official client against the running app.
+`node --test scripts/inspector_measurements.test.mjs scripts/operation_model.test.mjs scripts/measurement_service.test.mjs` checks draft logic and information ranking. `node --test scripts/operation_path_extent.test.mjs scripts/geometry_labels.test.mjs` checks fractional intent and entity labels. `scripts/ui_path_extent_check.mjs` verifies panel-only distance/percentage travel and reference-name hover on an empty isolated project at port 8817. `scripts/ui_implicit_operations_check.mjs` verifies Auto, implicit picks, stale previews and cached-candidate recovery on an empty isolated project at port 8797. `scripts/preview_latency_check.mjs` reproduces the small warm preview benchmark. `scripts/ui_operation_check.mjs` exercises the unified flow in an **empty isolated project** at port 8793 and commits test edits. Earlier per-tool-dialog creation scripts predate this workflow; see the acceptance record. Browser tests require Playwright and Chromium; `PLAYWRIGHT_MODULE_PATH`, `PLAYWRIGHT_CHANNEL` and `RYANCAD_UI_URL` override defaults. `scripts/check_mcp.py` exercises the official client against the running app.
 
 The wheel includes production UI assets and depends on the Python/native runtime. It is not a self-contained installer. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
 Product intent remains in [PRODUCT_REQUEST.md](docs/PRODUCT_REQUEST.md), [ARCHITECTURE.md](docs/ARCHITECTURE.md), [TECHNOLOGY_OPTIONS.md](docs/TECHNOLOGY_OPTIONS.md), and [ROADMAP_AND_ACCEPTANCE.md](docs/ROADMAP_AND_ACCEPTANCE.md). Materials/cost systems, SVG/3MF/OBJ/STEP adapters, joints and simulation remain later phases.
+
+
+`scripts/ui_move_component_check.mjs` exercises Move Component and the camera-following XYZ indicator on an empty isolated project at port 8821. `scripts/view_orientation.test.mjs` and the placement cases in `viewport_operation_display.test.mjs` cover camera projection and source-mesh placement restoration.
+
+`G` opens Move Component; `Shift+G` toggles the viewport grid. Movement offers one inferred reference workflow (points, direction and optional exact distance), XYZ increments, and true axis-and-angle rotation. Each reference and the active component can be cleared or replaced in the panel. See `docs/USER_GUIDE.md` for reference picking and frame semantics. `scripts/movement_model.test.mjs`, `tests/test_movement.py`, and the movement native API case cover exact snapping and movement math/transactions.
+
+Tool Path supports semantic travel targets, full finite travel from blank inputs, and face-boundary path selection. The corner indicator center selects world origin. Corner-finish profiles are native changed-material cross sections; single straight finishes support target-limited travel with planar end caps. `tests/test_operation_targets.py` covers target regeneration, arc length, native sections and partial finish geometry.
+
+
+Sketch is available from the toolbar or **E**, using the main viewport and side panel. World/picked planes, exact inputs, line/rectangle/circle/arc/point tools, snapping, copied projection and native relationships share one workflow with ad hoc Tool Profile drawing. New sketches belong to the design root and appear separately from components. See [the sketch workflow](docs/SKETCH_WORKSPACE.md) for current behavior and limits.
+
+
+**Group** in the top bar organizes components into selectable, movable and copyable assembly-backed groups. Double-click to edit their parts; Done exits. Group copies have independent membership/placement with linked part geometry. The former All tools dropdown is removed; distinct actions are directly in the toolbar and shape edits stay inside Tool. See [the group workflow](docs/GROUPS.md).

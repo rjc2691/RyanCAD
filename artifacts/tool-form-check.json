@@ -1,0 +1,207 @@
+{
+  "checks": [
+    "Type controls are outside reference boxes; offset label follows its reference; extent has no divider; obsolete header/footer prose is absent; feature naming and Apply/Cancel/status share the new footer",
+    "Effect dropdown retains Auto/Remove behavior, invalid preview disables Apply without overflowing the footer, and Enter from Feature Name commits exactly once",
+    "1280/1100 windows keep all footer controls inside the panel on one horizontal row; cancel preserves the design"
+  ],
+  "errors": [],
+  "layouts": [
+    {
+      "panel": {
+        "x": 1240,
+        "y": 132,
+        "width": 360,
+        "height": 708
+      },
+      "row": {
+        "x": 1257,
+        "y": 801,
+        "width": 327,
+        "height": 30
+      },
+      "buttons": [
+        {
+          "x": 1257,
+          "y": 801,
+          "width": 108.484375,
+          "height": 30
+        },
+        {
+          "x": 1372.484375,
+          "y": 801,
+          "width": 47.90625,
+          "height": 30
+        }
+      ],
+      "names": [
+        "Apply operation",
+        "Cancel"
+      ],
+      "status": {
+        "x": 1427.390625,
+        "y": 809.5,
+        "width": 156.609375,
+        "height": 13
+      },
+      "name": {
+        "x": 1257,
+        "y": 760,
+        "width": 327,
+        "height": 31
+      },
+      "window": {
+        "width": 1600,
+        "height": 1000
+      },
+      "rowColumns": "108.484px 47.9062px 156.609px"
+    },
+    {
+      "panel": {
+        "x": 1240,
+        "y": 132,
+        "width": 360,
+        "height": 708
+      },
+      "row": {
+        "x": 1257,
+        "y": 793.21875,
+        "width": 327,
+        "height": 37.78125
+      },
+      "buttons": [
+        {
+          "x": 1257,
+          "y": 797.109375,
+          "width": 108.484375,
+          "height": 30
+        },
+        {
+          "x": 1372.484375,
+          "y": 797.109375,
+          "width": 47.90625,
+          "height": 30
+        }
+      ],
+      "names": [
+        "Apply operation",
+        "Cancel"
+      ],
+      "status": {
+        "x": 1427.390625,
+        "y": 793.21875,
+        "width": 156.609375,
+        "height": 37.78125
+      },
+      "name": {
+        "x": 1257,
+        "y": 752.21875,
+        "width": 327,
+        "height": 31
+      },
+      "window": {
+        "width": 1600,
+        "height": 1000
+      },
+      "rowColumns": "108.484px 47.9062px 156.609px"
+    },
+    {
+      "panel": {
+        "x": 920,
+        "y": 123,
+        "width": 360,
+        "height": 527
+      },
+      "row": {
+        "x": 937,
+        "y": 611,
+        "width": 327,
+        "height": 30
+      },
+      "buttons": [
+        {
+          "x": 937,
+          "y": 611,
+          "width": 108.484375,
+          "height": 30
+        },
+        {
+          "x": 1052.484375,
+          "y": 611,
+          "width": 47.90625,
+          "height": 30
+        }
+      ],
+      "names": [
+        "Apply operation",
+        "Cancel"
+      ],
+      "status": {
+        "x": 1107.390625,
+        "y": 619.5,
+        "width": 156.609375,
+        "height": 13
+      },
+      "name": {
+        "x": 937,
+        "y": 570,
+        "width": 327,
+        "height": 31
+      },
+      "window": {
+        "width": 1280,
+        "height": 800
+      },
+      "rowColumns": "108.484px 47.9062px 156.609px"
+    },
+    {
+      "panel": {
+        "x": 765,
+        "y": 123,
+        "width": 335,
+        "height": 487
+      },
+      "row": {
+        "x": 782,
+        "y": 571,
+        "width": 302,
+        "height": 30
+      },
+      "buttons": [
+        {
+          "x": 782,
+          "y": 571,
+          "width": 108.484375,
+          "height": 30
+        },
+        {
+          "x": 897.484375,
+          "y": 571,
+          "width": 47.90625,
+          "height": 30
+        }
+      ],
+      "names": [
+        "Apply operation",
+        "Cancel"
+      ],
+      "status": {
+        "x": 952.390625,
+        "y": 573.40625,
+        "width": 131.609375,
+        "height": 25.1875
+      },
+      "name": {
+        "x": 782,
+        "y": 530,
+        "width": 302,
+        "height": 31
+      },
+      "window": {
+        "width": 1100,
+        "height": 760
+      },
+      "rowColumns": "108.484px 47.9062px 131.609px"
+    }
+  ],
+  "revision": 2
+}

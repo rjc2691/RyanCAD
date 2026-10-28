@@ -63,6 +63,7 @@ class Component(Model):
     id: str
     name: str
     kind: Literal["assembly", "solid", "planar"] = "solid"
+    purpose: Literal["part", "tool"] = "part"
     feature_ids: list[str] = Field(default_factory=list)
     color: str = "#9eafc5"
     description: str = ""

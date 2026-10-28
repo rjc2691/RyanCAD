@@ -1,6 +1,26 @@
 # RyanCAD architecture
 
-**Revision 2 — October 23, 2026. Architectural intent. The concrete 0.1 contracts are documented in [API.md](API.md), with gaps tracked in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).**
+**Revision 3 — October 24, 2026. Architectural intent. The concrete 0.1 contracts are documented in [API.md](API.md), with gaps tracked in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).**
+
+## Unified operation implementation
+
+The [unified workspace](UNIFIED_OPERATIONS.md) uses `operation.create`. `operations.py` owns the strict recipe schema, parameter creation, separate origin/profile/path references, recipe version and native execution. `placements.py` shares exact assembly transforms between evaluation and service queries. Document schema remains 0.2; single-reference operation semantics use `recipe_version: 1`; grouped recipes use version 2, percentage/partial sweep recipes use version 3, and all three remain supported.
+
+The frontend separates draft/default/serialization math (`operationModel.ts`), continuous setup/picking (`OperationPanel.tsx`), serialized debounced proposals and bounded exact-candidate reuse (`useOperationPreview.ts`), and world-projected guides/inputs (`OperationGuide.tsx`). The viewport displays native candidate meshes while retaining original geometry for reference picking. Mouse, drawing and camera state never become authoritative geometry.
+
+`operationRoles.ts` owns the distinct reference colors. `OperationGuide` renders read-only references; every editable quantity lives in its relevant panel section. `Extent along path` uses independent Distance/Percent intent. Native execution resolves percent against current reference arc length and trims exact ordered edge/wire geometry for partial sweeps. Version 3 prevents older evaluators from silently interpreting fractional intent as a full sweep; versions 1/2 retain their old defaults. Display trimming is approximate sampled projection, never authoritative geometry. Source geometry metadata provides native contour loops and revision-local numbered entity labels. The frontend `geometryLabels.ts` separates readable names from guarded references and resolves panel hover onto current native buffers. Panel and viewport hover share a renderer, including safe buffer disposal. Body overlays borrow cached native buffers and own only materials. Hover and label presentation create no commands or document edits.
+
+Same-owner references resolve against the shape entering this feature; cross-owner geometry and relative rigid transforms participate in dependency/cache keys. Semantic references must match uniquely. Implicit sketch planes and placed instances are retained. This is a guarded reference strategy, not a complete persistent-topology naming solution.
+
+Enter requests confirmation of the current draft signature; pending validation/rendering completes before Apply. A later draft edit clears that intent. Escape cancels the whole draft, including picking/drawing. Boolean result and signed travel direction remain independent. Path guides distinguish implicit normals, real selected curves and translated parallel travel. Apply requires the current validated token and rendered mesh, then commits the exact candidate. Confirmed buffers hand off into the committed viewport cache. Export waits for Apply/Cancel; exploded display is disabled during setup and section clipping applies to both geometries. Existing commands, saved features and agents stay compatible. Organization, instance placement and the general constraint editor remain separate activities. Richer sections, path chains, libraries and recipe reopening extend this boundary.
+
+## Placement previews and camera orientation
+
+`MoveComponentPanel.tsx` uses the same revision-checked preview client with command `instance.transform`. Client preview signatures include command name to prevent cross-command cache collisions. The native document/API schema and parent-local rotation/translation semantics are unchanged. Apply commits the exact candidate token; only placement intent/parameters change, with normal durable history/undo. The selected placement is locked for the draft. The panel can begin without a target and acquire one through ordinary selection.
+
+`viewportOperationDisplay.ts` distinguishes material-operation and placement contexts. Placement candidates retain native source mesh buffers and apply the report's flattened world matrices, including parent transforms, patterns and affected descendants. Cancel restores committed matrices; applying restores the newly committed matrices. Linked definitions do not cause unrelated instances to move. Native geometry changes caused by moved references still use the existing concurrent mesh/atomic candidate pipeline. Readiness requires the current proposal to be represented in the scene. Stale proposals remain visible but cannot apply.
+
+`ViewOrientation.tsx` projects unit world-axis vectors through the inverse camera quaternion on each viewport render. It updates SVG attributes directly, without React state updates at frame rate. Translation/zoom do not change the indicator; orbit and named views do. The SVG is presentation-only and lives above the view buttons at the upper right.
 
 ## 1. Three layers, one source of design intent
 
@@ -238,6 +258,12 @@ Prepare a material/property attachment and quantity-aware cost evaluator boundar
 
 Phase 1 implements targeted nominal fit distances, section inspection and interference checks for the reference mold. Exhaustive collision detection during demolding, strength analysis and printer-specific feasibility are not implied.
 
+### Contextual viewport information
+
+The view's information policy is a separate analysis boundary described in [CONTEXTUAL_INFORMATION.md](CONTEXTUAL_INFORMATION.md). The current renderer-independent `MeasurementService` accepts measured candidate geometry, focus/recent-interest state, and projection/visibility callbacks, then returns ranked candidates, score contributions, and placements. React/Three.js only adapt live view state and render the result. Provider and signal registries support future information types without per-tool annotation code.
+
+Keep attention memory, layout, and candidate selection transient. They are not native CAD features and do not produce autosave/history commands. Values come from evaluated geometry metadata; projection coordinates are never used as physical measurements. Future read-only agent/UI contracts should expose scope/revision, source, quantity type, units, assumptions, confidence, and reasons, without granting a display policy authority to edit the document.
+
 ## 11. STL now; other formats through adapters
 
 Export a selected physical component instance, a selected definition in its local frame, or a batch of separate files. Default batch output is one STL per selected manufactured instance with stable collision-safe names and a receipt mapping files to component IDs, revisions, frames, unit convention and tessellation settings.
@@ -261,3 +287,81 @@ Separate curves, closed wires, filled regions with holes, and manufacturing oper
 Future SVG handles physical dimensions, viewBox/transforms, Y-axis conventions, fill rules and curve approximation. Preserve analytic curves where possible. SVG strokes are not automatically material boundaries; stroke outlining is explicit. Disable scripts/external resources and report unsupported content. [SVG coordinates](https://www.w3.org/TR/SVG2/coords.html), [SVG paths](https://www.w3.org/TR/SVG2/paths.html)
 
 Kerf and process allowances belong to fabrication settings, with direction, units and provenance. Do not bake them invisibly into nominal dimensions. Phase 1 supplies the shared model and interaction foundation; SVG interchange and fabrication compensation arrive when requested.
+
+
+## Implicit tools and fast previews
+
+`inferOperationSelection` maps geometry types into draft updates independently of scroll position; explicit picking and drawing roles take priority. Source geometry never implicitly changes the target. Manual result choices and pinned origins survive inference. Unsupported replacements invalidate the candidate.
+
+Native Auto computes overlap against the specified target, returns its decision, and is resolved by the service into fixed Add/Remove intent before a preview can commit. Selection metrics are provenance; they do not silently re-run the classification during parameter regeneration. Native decision caches follow the same feature-geometry keys and bounds as shape caches.
+
+The preview client uses 120 ms quiet time, an immediate Enter flush, one in-flight computation, 35 ms job polling and six revision/argument-keyed proposals with 60 s reuse. Stale meshes remain explicitly marked and cannot apply. Reference changes do not refetch unchanged preview buffers; changed meshes load concurrently. Expired tokens trigger revalidation and require another confirmation. The native model and tessellation accuracy are unchanged.
+
+
+## Measurement scope in the workspace
+
+`inspectorMeasurements.ts` is a display-only projection over native geometry and placed instances. One selected physical component reports one definition's geometry; a selected assembly reports its placed descendant subtree; no selection reports all unsuppressed physical occurrences, including hidden and linked uses. Historical geometry can be supplied without substituting current geometry for missing history. Planar parts have no invented solid volume and unfinished parts produce explicit availability/partial-total indicators. The inspector owns these measurements; the structure tree owns counts and the timeline owns revision/Undo/Redo. No document or engine schema changed for this layout. Viewport overlays reserve the relocated navigation/selection controls rather than an obsolete statistics strip.
+
+### Tool viewport presentation
+
+`viewportOperationDisplay.ts` separates operation focus and retained candidate presentation from native reference-picking geometry. Selection overlays have their own lifetime; selection changes do not reconstruct source meshes. Preview loads prepare a replacement group off-scene and swap it atomically, masking source color/depth drawing for replaced occurrences while keeping raycasting intact. Candidates stay opaque and match component colors; inactive context components become transparent by definition ownership. Pending/invalid drafts use textual stale status, with confirmation gated by the latest displayed token. Linked candidate assets are released once per asset map. Face highlights copy their own positions so their disposal cannot invalidate the native part buffer.
+
+The continuous tool form and inspector share layout width variables at every breakpoint. Tool Origin/Profile/Path/Effect are user-facing section names; recipe keys and schema version remain compatible.
+
+### Grouped references
+
+`groupedSelection.ts` owns entity identity, homogeneous Shift toggles, canonical role membership, placed-edge connectivity and profile-plane prevalidation. `operationModel.ts` stores complete grouped references alongside compatible primary references. Origin following is independent of role updates; choosing a path does not relocate a face anchor. The viewport renders independent overlays for every selected reference without rebuilding native parts.
+
+`operation_selection.py` validates native connected wires and parallel regions. Version-2 recipes store bounded `path_references` / `profile_references` in feature references; each source's current native shape/profile and occurrence matrix participate in the cache stamp. A shared translation preserves relative profile placement, each profile builds its own native tool with the common motion, and tools are fused before Auto/Boolean processing. Guarded coplanar face disambiguation is shared by picking metadata and native resolution. Component deletion scans nested references. Existing single-reference recipes remain unchanged in meaning.
+
+
+### Component movement methods
+
+`instance.move` is a native, previewable command separate from absolute `instance.transform`. `movement.py` resolves local point/direction snapshots against flattened saved occurrence matrices. It computes world displacement then converts through `occurrence_world × inverse(source_local)` so nested parents and circular-pattern member frames are respected. Directional alignment uses a normalized dot-product projection; orientations are unchanged outside the XYZ increment method. Expressions use the dimensional parameter evaluator, with named movement inputs and independent result placements so a shared prior placement parameter is not overwritten. Reference snapshots remain in the authored command record; they do not become persistent joints.
+
+`MoveComponentPanel` owns method, pick role, reference anchors, distances and confirmation intent. App forwards viewport/tree picks to the panel without retargeting. `MovementGuide` projects native source/destination/target/direction data and partial picked references with the active camera each frame. Mint displacement, amber source, blue target and violet direction provide separate visual roles; constrained moves also show the leftover gap. The common preview hook still serializes work, rejects stale responses, and commits only a displayed validated token.
+
+
+### Inferred reference movement and axis-angle placement
+
+`movementModel.inferMovePick` is the shared client selection policy: whole component → moved component; unarmed straight edge → direction; point/face on active occurrence → origin; outside point/face → target. Explicit component/origin/target/direction arming overrides the policy for one successful pick. Retargeting resets stale references/inputs. `movementArgs` serializes only the selected method's relevant fields. Reference motion is inferred in the native reducer as well, so external agents have the same exact-distance precedence and default-origin behavior as the UI.
+
+The native placement map supports an optional parameter-backed axis-angle delta (`rotation_angle`, `rotation_axis_*`, `rotation_origin_*`) over its base Euler placement. `placements.local_matrix` evaluates Rodrigues rotation around the actual parent-frame axis line. Keeping the angle native avoids lossy frozen Euler angle results and supports later parameter edits. `bake_rotation` and gimbal-safe `matrix_pose` snapshot the evaluated starting pose when another placement command follows. All existing geometry, measures, exports and flattened occurrence frames use this shared matrix path. The document schema remains a readable parameter-backed placement map.
+
+`MovementGuide` renders a camera-projected rotation arc around the selected line, plus axis and angle, while reference movement uses source/target/direction/displacement/gap roles. The fixed footer owns result measurements. Incomplete reference drafts clear old previews; explicit reference and component clear controls re-infer without starting a new operation.
+
+
+### Midpoint references, global axes and automatic movement distance
+
+Move viewport picking adds exact native edge midpoint candidates alongside topological vertices, with the existing screen-space tolerance and occlusion checks. A midpoint is a display point bound to its edge (`vertex.anchor=mid`); labeling and display-reference resolution distinguish it from topological vertices. In reference movement it infers origin/target; rotation and explicit direction picking normalize it back to its underlying straight edge. Hovering an edge exposes its midpoint marker. Material-operation edge selection keeps its established behavior.
+
+Global direction references serialize as `{axis: X|Y|Z}`. The native reducer resolves them without an occurrence transform and uses the world-origin line for rotation. The movement panel provides explicit X/Y/Z controls, and the enlarged camera indicator routes axis gestures to Move or the active material operation. Axis requests made before component acquisition are retained until the component is chosen. The indicator shares selected-axis state with the draft; its visible and hit-test segments both follow camera projection.
+
+`inferredMovementDistance` computes the displayed automatic value from saved reference frames. It uses a signed dot product when a direction is selected and point distance otherwise. The panel keeps that derived value separate from `values.distance`; only manual edits create exact overrides, and Use inferred distance clears them. Thus the field prepopulates without changing command signatures, freezing target motion or recursively triggering previews.
+
+Movement reference controls reuse the operation reference-card/pick-slot styling with amber origin (#ffc281), blue target (#a5caff), and violet direction/axis (#b4a0ff), matching the viewport guide. Role icons, pointer affordances, keyboard focus highlighting, clear controls and matching active-pick borders keep panel and model relationships explicit.
+
+
+### Native target extents and exact corner cross sections
+
+Operation recipe v4 adds a semantic travel-target reference and true full finite linear/axial travel. `prepare` resolves world-origin references directly and includes target geometry/placement in the feature cache stamp. `execute` projects targets into owner-local travel frames; sweep targets use closest points on the translated native wire followed by native arc-length parameterization. Legacy recipe behavior remains unchanged. Multiple parallel profiles use one shared target-derived travel extent, preserving their relative positions.
+
+`operation_display.py` derives finish profiles by sectioning the source and result solids at an interior station perpendicular to the primary edge, subtracting the planar regions, and returning the nearest changed region with exact area and native curved boundary sampling. This captures arbitrary corner angles and concave added material as well as ordinary removed corners. Only one primary section is computed per feature to bound preview cost. The metadata is cached beside shape evaluation and forwarded in the preview report; `operationFrame` renders those exact world loops rather than its former square sketch. Invalid/unavailable sections remain empty rather than inventing geometry.
+
+A target-limited straight finish clips native source/result difference solids with an exact finite slab. It keeps the kernel's corner form inside the requested segment and explicit planar end caps. Curved/multiple-edge partial finishing is guarded, not approximated. Viewport travel and target guides use evaluated endpoints. Face-to-path expansion uses native `edge_signatures`, never matching tessellated outlines or nearby edges.
+
+
+## Main-viewport design sketches
+
+`sketchModel.ts` defines a shared editable sketch draft, explicit orthonormal frame, entity transitions, snapping and copied projections. `SketchPanel` supplies the fixed-width operation form, local undo and constraint inputs; `SketchGuide` renders an adaptive grid, U/V axes, current geometry, cursor and size labels over the native viewport. The same WebGL component meshes remain reference pick targets with muted materials. Viewport camera state is captured once on entry, realigned on plane changes and restored on exit; pan and zoom remain available, orbit is disabled except during plane acquisition.
+
+App retains a pending material OperationPanel mounted but hidden with native preview generation suspended while the shared sketch session runs. Finish creates or updates one authored sketch, attaches its stable feature reference and resumes the tool. Cancel leaves its original draft intact. Sketch geometry uses root ownership by default and is rendered in a separate saved-sketch layer; it does not become an occurrence or body/export quantity. Legacy physical-component ownership remains valid and its first matching occurrence provides the editing display transform.
+
+The evaluator registers root sketches independently before evaluating bodies; root resolution returns assembly/no shape after registering profiles. Each sketch has its own native cache key and solver result. Nested loops form holes/islands; disjoint regions remain construction profiles. Unified tools currently require one closed region per sketch. Explicit frozen frame placement and independent sampled projections are intentional current limits; there is no associative face attachment/projection or continuous live solver yet. See SKETCH_WORKSPACE.md.
+
+
+## Group ownership and selection scope
+
+`groups.py` implements atomic assembly-backed grouping/add/copy/ungroup commands over the existing instance model. Identity insertion preserves member placement expressions. Transformed additions/ungrouping compose exact matrices, rebase into fresh placement parameters and retain existing parameter identities. Occurrence path remapping follows semantic modeling references through organization changes. Group copying recursively creates independent assembly definitions/instances while physical component definitions remain linked.
+
+`groupModel.ts` resolves viewport hits to the immediate closed object in the active edit scope and expands group highlights into physical descendants. `GroupPanel` handles explicit membership selection. App owns the edit-scope breadcrumb/tree and routes double-click to entry and Done/Escape to exit. Native part picking meshes remain available for in-group feature editing and movement references; viewport group movement uses existing retained transform previews. See GROUPS.md for limits.

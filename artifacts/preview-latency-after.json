@@ -1,0 +1,14 @@
+{
+  "label": "after",
+  "samples_ms": [
+    218.32709999999997,
+    198.10059999999976,
+    200.0858000000003,
+    201.70539999999983,
+    199.2442000000001,
+    204.00960000000032
+  ],
+  "median_ms": 201.70539999999983,
+  "max_ms": 218.32709999999997,
+  "fixture": "60×40×6 mm plate, whole-face addition; 1440×980 headless Edge; warm worker; unique inputs; includes debounce, native evaluation, polling and mesh display"
+}

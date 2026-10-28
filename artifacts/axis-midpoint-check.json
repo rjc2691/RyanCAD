@@ -1,0 +1,23 @@
+{
+  "interactive_checks": [
+    "Corner axis opens Move with no selection and survives component acquisition",
+    "Exact edge midpoint picks set source and target, with readable midpoint labels",
+    "Automatic signed distance tracks world axes: X=40, Y=21, Z=14 mm",
+    "12 mm manual override persists across axis edits; Use inferred distance restores automatic values",
+    "World axis choices synchronize panel and camera indicator",
+    "World axes work for rotation and material-operation travel direction",
+    "Role reference cards use matching colors/icons/pick and clear controls"
+  ],
+  "indicator_size_px": [
+    132,
+    123
+  ],
+  "saved_test_translation": [
+    0,
+    0,
+    14
+  ],
+  "saved_revision": 4,
+  "backend_tests_passed": 151,
+  "frontend_tests_passed": 85
+}

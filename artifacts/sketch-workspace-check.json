@@ -1,0 +1,15 @@
+{
+  "revision": 4,
+  "sketch_count": 3,
+  "physical_parts": 1,
+  "volume_mm3": 1199.9999999999998,
+  "all_new_sketches_root_owned": true,
+  "camera_orientation_max_pixel_error": 1.4210854715202004e-13,
+  "nested_cancel_preserved_profile": "circle",
+  "nested_cancel_preserved_distance_mm": 7,
+  "projection_copied_construction": true,
+  "exact_point": [
+    1.25,
+    2.75
+  ]
+}

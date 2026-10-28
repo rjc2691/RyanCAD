@@ -1,16 +1,30 @@
 # Roadmap and acceptance
 
-**Revision 2 — October 23, 2026. Phase 1 implementation authorized. Acceptance requirements remain unchanged; see [implementation evidence](IMPLEMENTATION_STATUS.md).**
+**Revision 3 — October 24, 2026. Phase 1 implementation authorized. Includes unified-operation acceptance; see [implementation evidence](IMPLEMENTATION_STATUS.md).**
 
 ## 1. Scope and authorization
 
 Phase 1 is a Windows/macOS application for precise multi-component functional designs, operated manually or by observable external agents. It includes automatic parameters, visible dependencies/tolerances, per-edit autosave and controlled STL export.
 
-After the owner approves Revision 2, start with 1A and proceed through the agreed Phase 1 milestones. Routine implementation does not need repeated approval. Discuss material scope changes, paid dependencies or failed feasibility gates before proceeding on a different basis. Phases 2 and 3 are future proposals.
+Implementation is authorized. Continue through the agreed Phase 1 milestones. Routine implementation does not need repeated approval. Discuss material scope changes, paid dependencies or failed feasibility gates before proceeding on a different basis. Phases 2 and 3 are future proposals.
 
 Set delivery estimates from the actual team and early measurements. Multi-component editing, constraints, topology recovery and two-platform packaging make this a substantial CAD project.
 
 ## 2. Phase 1 milestones
+
+### Unified tool interaction acceptance
+
+The [launch-flow specification](UNIFIED_OPERATIONS.md) adds the following observable requirements:
+
+- One nonmodal T/Tool workspace from edge, face, vertex, component, planar profile or empty selection; useful defaults and a locked active component.
+- Persistent Tool Origin, Tool Profile, Tool Path and Tool Effect sections in one scrolling form; geometry references picked while the model stays visible. Equal inspector/tool widths preserve viewport bounds. The target stays opaque, inactive parts are transparent, and candidate replacement is atomic. Implicit face/path/vertex updates work at any scroll position, while explicit roles, pinned origins and target ownership remain clear.
+- Auto Add/Remove exposes native overlap-based suggestions, respects manual overrides, and freezes accepted intent. Previous previews remain visibly stale and cannot commit while replacements run. Measure end-to-end latency without reducing geometric accuracy.
+- Face hole placement and edge round/bevel → custom perpendicular section → swept cut without leaving the workspace. Shift-click groups actual faces/edges; connected chains and parallel profiles travel together. Gaps, branches and nonparallel profiles block Apply.
+- Automatic native previews and in-canvas inputs; no saved revision during setup. Invalid/stale/disconnected results cannot apply.
+- One exact candidate commit with parameters, authored history, durable autosave and undo; cancellation preserves saved intent.
+- Compatible documents and external agents. Richer sections, path extents/chains, libraries and recipe reopening grow inside this workflow.
+
+Current bounded evidence is tracked in IMPLEMENTATION_STATUS.md. General equations, wrapped embossing and every arbitrary combination are not implementation completion claims.
 
 ### 1A — establish the foundation
 
@@ -66,6 +80,8 @@ Support planar physical-part components in the same tree, viewport and inspector
 
 **Exit:** valid parameter changes preserve intent; ambiguous topology does not silently target other geometry; unsupported cases preserve the last valid state. A planar plate and a solid part feel like the same application.
 
+The tool workspace must keep origin/profile/path visually distinct from selection and hover. Travel inputs belong in an Extent along path subsection after the path selection, with Distance/Percent alternatives and honest finite-reference eligibility. Radius/diameter belong in Tool Profile; no operation input floats over the geometry. Percentage intent must follow reference length changes; partial sweeps use true native arc length. Numbered entity names in selected-reference lists must highlight the exact geometry on hover/focus using the direct-hover styling, without selection changes, preview requests or document edits. Source/reference/count controls stay adjacent. Verify face, finish, grouped, curved and reversed paths, small windows, Enter/Escape and no unintended saved edits.
+
 ### 1E — cross-platform release quality
 
 Refine dark styling, high-DPI text, selection, dimension/tolerance display, keyboard and trackpad workflows. Complete bounded-job cancellation, recovery, migration fixtures, consistent project snapshots, STL checks and end-to-end usability testing.
@@ -106,6 +122,10 @@ Test actual Windows and Mac hardware with the same supported workflows. Package 
 | A26 | Open malformed or unsupported native files. | Safe validation/read-only behavior; no dropped features, executable loading or destructive overwrite. |
 | A27 | Count an assembly with linked instances and hidden parts. | Quantity-aware statistics are correct; visibility does not change physical quantities. |
 | A28 | Change units/display rounding. | Physical dimensions, fits and dependencies remain unchanged. |
+| A29 | Hover/select a thin plate such as 6 × 47 × 47 mm. | A small ranked set explains useful spans beside the geometry; a large area card does not automatically dominate. |
+| A30 | Inspect repeated features and recently interacted geometry. | Measurable scoring handles recency, competing similar measurements, readability, and stability; candidate reasons are inspectable. |
+| A31 | Navigate or resize a view with annotations. | Values remain correct; labels respect available space and protected controls, and hidden/end-on candidates do not create misleading dimensions. |
+| A32 | Add a measurement provider or ranking signal. | Selection policy and renderer can evolve independently; reading measurements creates no model edits/history. |
 
 For batch export, stage and validate the selected set before publishing. On failure, explain which parts failed and avoid presenting a partial set as complete. A destination may not support atomic replacement of an entire multi-file batch; use a staged directory and completion receipt so incomplete output is detectable.
 
@@ -144,7 +164,8 @@ Multiple components and basic assembly placement are already Phase 1. Phase 2 ad
 - Quantity-aware material/process cost models and “what changes if this dimension changes?” comparisons. Display selected instances, units, price basis, waste/support assumptions and uncertainty.
 - Requested adapters such as 3MF/OBJ/STEP, plus bounded SVG import/export for fabrication. Each format has explicit preserved/lost semantics.
 - Integrated laser-cutting workflows: cut/engrave roles, curves, offsets, kerf-aware output, stock thickness and layouts. Nominal geometry remains separate from compensation.
-- Selected modeling additions such as shell, draft, sweep or loft, justified by actual parts.
+- Selected modeling additions such as shell, draft, richer sweeps, loft, wrapped emboss and reusable tool profiles, integrated into the unified workspace and justified by actual parts.
+- Extend the contextual information service with fit/tolerance urgency, repeated-feature summaries, fabrication/material/cost context, recent edit context, and pin/dismiss/show-more controls. Preserve measurement provenance and explainable ranking.
 
 Evidence: a design variant updates the intended instances and quantity-based cost comparison; a dimensioned planar part exports at the intended physical scale; imported geometry does not falsely claim recovered feature history.
 
@@ -153,6 +174,8 @@ Evidence: a design variant updates the intended instances and quantity-based cos
 Add joints and kinematics, assembly degrees of freedom, motion limits and scoped collision studies. Keep force-based dynamics separate from kinematic movement.
 
 Add specialist analysis/manufacturing integrations with revision and assumption tracking, reproducible design comparisons, and advanced geometry only where required. Collaboration and a public extension system are optional separate workstreams.
+
+Extend contextual information ranking to mechanism state, interference and task context. Evaluate optional learned/personalized ranking against the deterministic weighted baseline; retain manual overrides and reasons for displayed information. See [the information-service plan](CONTEXTUAL_INFORMATION.md).
 
 Full illustration is not a planned phase. Continue 2D development toward fabricated parts. A broader graphics product would need an explicit future request.
 

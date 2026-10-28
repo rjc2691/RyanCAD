@@ -1,0 +1,16 @@
+{
+  "checks": [
+    "World XYZ indicator is above view buttons at the upper right; canonical views and free orbit update its actual projected axes",
+    "Live movement reuses retained meshes at the new placement, clears the old placement, preserves the document, and restores on Escape; invalid input cannot apply",
+    "Enter applies one attributed placement edit, preserves geometry/features and the other linked instance; reset restores the starting values",
+    "Movement survives reload and undo; Move Component can start with no selection and pick a component in the dock",
+    "A nested part moves in its rotated parent assembly frame; native world placement becomes X=10, Y=3 while the unrelated linked sibling stays fixed"
+  ],
+  "errors": [],
+  "brightness": {
+    "before": 135.66666666666666,
+    "after": 30,
+    "moved": 135.66666666666666
+  },
+  "revision": 8
+}

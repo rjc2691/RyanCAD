@@ -10,7 +10,7 @@ page.on('console',m=>{if(m.type()==='error')errors.push(m.text())});
 const read=()=>page.evaluate(()=>fetch('/api/state').then(r=>r.json()));
 async function tool(label,title){
   await page.getByRole('button',{name:'All tools',exact:true}).click();
-  await page.getByRole('dialog',{name:'Find your next action'}).locator('.palette-results button').filter({has:page.getByText(label,{exact:true})}).click();
+  await page.getByRole('dialog',{name:'Tools and actions'}).locator('.palette-results button').filter({has:page.getByText(label,{exact:true})}).click();
   return page.getByRole('dialog',{name:title,exact:true});
 }
 async function apply(dialog){

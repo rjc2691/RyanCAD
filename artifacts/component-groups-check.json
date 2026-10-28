@@ -1,0 +1,35 @@
+{
+  "revision": 8,
+  "physical_parts": 5,
+  "definitions": 2,
+  "groups": [
+    {
+      "name": "Fixture group",
+      "members": 3,
+      "origin": [
+        12.0,
+        5.0,
+        0.0
+      ]
+    },
+    {
+      "name": "Fixture group copy",
+      "members": 2,
+      "origin": [
+        112.0,
+        5.0,
+        0.0
+      ]
+    }
+  ],
+  "browser_checks": [
+    "checkbox grouping",
+    "double-click group entry",
+    "face editing within group",
+    "12/5 mm group movement",
+    "independent group copy",
+    "add to moved group",
+    "ungroup and undo",
+    "toolbar without All tools"
+  ]
+}

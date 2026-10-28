@@ -58,7 +58,8 @@ def test_native_fixed_arc_and_closed_rectangle_sketch(evaluator):
     ]})
     output = evaluator.evaluate(doc.model_dump(mode="json"))
     assert output["sketches"][sketch["feature_id"]]["fully_defined"]
-    assert output["components"][sketch["component_id"]]["status"] == "planar"
+    assert output["profiles"][sketch["feature_id"]]["status"] == "closed"
+    assert not output["components"]  # A design sketch is construction, not a part.
 
 
 def test_mirror_uses_source_component_geometry(evaluator):
@@ -71,7 +72,7 @@ def test_mirror_uses_source_component_geometry(evaluator):
 
 def test_revolve_xz_profile_around_z(evaluator):
     doc = Document()
-    profile = edit(doc, "sketch.create", {"plane": "XZ", "entities": [
+    profile = edit(doc, "sketch.create", {"owner": None, "plane": "XZ", "entities": [
         {"id": "a", "type": "line", "x1": 5, "y1": 0, "x2": 10, "y2": 0, "fixed": True},
         {"id": "b", "type": "line", "x1": 10, "y1": 0, "x2": 10, "y2": 10, "fixed": True},
         {"id": "c", "type": "line", "x1": 10, "y1": 10, "x2": 5, "y2": 10, "fixed": True},

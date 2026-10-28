@@ -1,0 +1,32 @@
+{
+  "checks": [
+    "Returning to the retained draft during another mesh load restores Apply and aborts the obsolete replacement",
+    "Repeated real edge picks and delayed mesh replacements keep one solid target surface visible; inactive context stays transparent",
+    "All four semantic sections share one scroll area and retain edits without stage navigation",
+    "Tree, timeline, blank-space and cross-component edge picks preserve the locked active component; external edges update the path and can drive a custom sweep",
+    "Cancel unlocks active-component selection; normal opaque colors return",
+    "Identical inspector/tool widths at 1800, 1280 and 1100 px; Apply stays visible; Escape restores original presentation"
+  ],
+  "errors": [],
+  "baseline": [
+    187.4814814814815,
+    188
+  ],
+  "focused": [
+    188.74074074074073,
+    81.37037037037037
+  ],
+  "restored": [
+    189.07407407407408,
+    186.66666666666666
+  ],
+  "frames": 240,
+  "targetRange": [
+    188.74074074074073,
+    188.74074074074073
+  ],
+  "contextRange": [
+    81.37037037037037,
+    81.37037037037037
+  ]
+}

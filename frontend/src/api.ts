@@ -26,6 +26,7 @@ export async function api(path: string, options: RequestInit = {}) {
 export async function waitJob(
   submission: any,
   onJob?: (job: any) => void,
+  pollIntervalMs = 120,
 ): Promise<any> {
   if (submission.status === "complete") return submission.result;
   if (!submission.job_id)
@@ -36,7 +37,7 @@ export async function waitJob(
     if (job.status === "complete") return job.result;
     if (job.status === "failed" || job.status === "cancelled")
       throw new ApiError(job.error || { message: "Operation cancelled." });
-    await new Promise((resolve) => setTimeout(resolve, 120));
+    await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
   }
 }
 export function expressionLabel(

@@ -1,0 +1,29 @@
+{
+  "verification": "Interactive browser checks against isolated local project; native API state assertions",
+  "checks": [
+    "G launches Move Component; all four methods in one selector",
+    "Source and target vertices picked in viewport; source remains locked",
+    "Point alignment previews exact source-to-target translation",
+    "Constrained X alignment leaves Y/Z unchanged and shows 22.361 mm remaining gap",
+    "Inactive-component edge accepted as reference direction; negative distance and reverse preview correctly",
+    "Successive offsets apply relative to nonzero starting placement: 40 + 6 + 2 = 48 mm",
+    "Component origin/tree references, method-switch missing-role inference, reset, Escape, Enter and reload checked",
+    "Reverse control remains 14 x 14 pixels"
+  ],
+  "saved_test_placements": {
+    "moving": [
+      48,
+      0,
+      0
+    ],
+    "reference": [
+      40,
+      20,
+      10
+    ]
+  },
+  "native_api_tests_passed": 10,
+  "movement_math_tests_passed": 12,
+  "frontend_tests_passed": 78,
+  "current_project_unchanged": true
+}

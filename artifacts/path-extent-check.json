@@ -1,0 +1,13 @@
+{
+  "checks": [
+    "Distance lives only under Tool Path; implicit normals explain why percent is unavailable; signed cuts preview correctly; face-name hover is cyan and read-only",
+    "Numbered edge names target each selected edge independently with the same cyan rendering as viewport hover; other edges remain selected, and no previews/history edits are issued",
+    "Connected 70 mm path previews exact 35 mm at 50 percent and 12 mm in Distance mode; oversize travel is rejected; Enter saves explicit percentage intent",
+    "Saved percentage follows the reference when total path changes from 70 to 90 mm, including reload",
+    "1280/1100 layouts retain extent inputs inside the scrolling panel and visible Apply/Cancel; Escape does not save a draft"
+  ],
+  "errors": [],
+  "directHoverPixels": 137,
+  "panelHoverPixels": 137,
+  "revision": 3
+}

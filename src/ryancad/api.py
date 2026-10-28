@@ -3,8 +3,10 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 import io
 import json
+import os
 from pathlib import Path
 import secrets
+from urllib.parse import urlsplit
 import zipfile
 
 from fastapi import FastAPI, Request
@@ -21,8 +23,33 @@ from .storage import read_manifest
 
 
 def create_app(project: Path, token: str, port: int = 8790, demo: str | None = None, frontend: Path | None = None, testing=False):
-    service = CadService(project)
     cookie_name = f"ryancad_session_{port}"
+    allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
+    allowed_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+    secure_public_host = None
+    public_url = os.environ.get("RYANCAD_PUBLIC_URL", "")
+    if public_url:
+        try:
+            url = urlsplit(public_url)
+            url_port = url.port
+            if (url.scheme not in {"http", "https"} or not url.hostname or url.username is not None
+                    or url.password is not None or url.path not in {"", "/"} or url.query or url.fragment
+                    or any(c.isspace() for c in url.netloc)):
+                raise ValueError
+        except ValueError:
+            raise ValueError("RYANCAD_PUBLIC_URL must be an http(s) origin, such as https://cad.example.com") from None
+        hostname = url.hostname.lower()
+        host = f"[{hostname}]" if ":" in hostname else hostname
+        if url_port is not None and url_port != (443 if url.scheme == "https" else 80):
+            host += f":{url_port}"
+        allowed_hosts.add(host)
+        allowed_origins.add(f"{url.scheme}://{host}")
+        if url.scheme == "https":
+            secure_public_host = host
+    if testing:
+        allowed_hosts.add("testserver")
+        allowed_origins.add("http://testserver")
+    service = CadService(project)
     frontend = frontend or Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if not frontend.exists():
         frontend = Path(__file__).resolve().parent / "web"
@@ -43,16 +70,10 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
 
     @app.middleware("http")
     async def local_access(request: Request, call_next):
-        host = request.headers.get("host", "")
-        allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
-        if testing:
-            allowed_hosts.add("testserver")
+        host = request.headers.get("host", "").lower()
         if host not in allowed_hosts:
             return JSONResponse({"error": {"code": "invalid_host", "message": "RyanCAD accepts local application hosts only."}}, status_code=403)
         origin = request.headers.get("origin")
-        allowed_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
-        if testing:
-            allowed_origins.add("http://testserver")
         if origin and origin not in allowed_origins:
             return JSONResponse({"error": {"code": "invalid_origin", "message": "This page is not authorized to control the local CAD service."}}, status_code=403)
         if int(request.headers.get("content-length", "0")) > 8_000_000:
@@ -99,7 +120,9 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
 
     @app.get("/api/capabilities")
     def capabilities():
+        from .operations import OperationRequest
         return {"schema_version": "0.2", "commands": COMMANDS, "feature_fields": FEATURE_FIELDS,
+                "operation_schema":OperationRequest.model_json_schema(),
                 "units": {"internal_length": "mm", "internal_angle": "deg", "export_length": "mm"},
                 "session": {"document_id": service.document.id, "revision": service.document.revision},
                 "limits": {"components": 250, "features": 2000, "batch_commands": 100, "sketch_entities": 200, "part_span_mm": 10000, "absolute_local_coordinate_mm": 10000},
@@ -113,6 +136,13 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
     @app.post("/api/previews")
     async def preview(request: Request):
         return service.submit("preview", actor_for(request), command=Command.model_validate(await request.json()))
+
+    @app.post("/api/sketch-preview")
+    async def sketch_preview(request: Request):
+        command = Command.model_validate(await request.json())
+        if command.name not in {"sketch.create", "sketch.update"}:
+            raise CadError("invalid_request", "A sketch preview requires sketch.create or sketch.update.")
+        return service.submit("sketch_preview", actor_for(request), command=command)
 
     @app.post("/api/previews/{preview_token}/commit")
     def commit_preview(preview_token: str, request: Request):
@@ -152,6 +182,7 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
 
     @app.get("/api/history/{feature_id}/cost")
     def history_cost(feature_id: str):
+        if feature_id=="origin":return {"cached":f"{service.document.revision}:origin" in service.history_cache,"estimated_ms":0,"explicit_compute_recommended":False}
         if feature_id not in service.document.features:
             raise CadError("missing_feature", "This feature no longer exists.")
         prefix = service.document.feature_order[:service.document.feature_order.index(feature_id) + 1]
@@ -262,11 +293,12 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
         return FileResponse(frontend / "third-party-licenses.txt", media_type="text/plain")
 
     @app.get("/")
-    def index():
+    def index(request: Request):
         if not (frontend / "index.html").exists():
             return HTMLResponse("<h1>RyanCAD engine is running</h1><p>Build the frontend, then refresh this page.</p>")
         response = HTMLResponse((frontend / "index.html").read_text("utf-8"))
-        response.set_cookie(cookie_name, token, httponly=True, samesite="strict", path="/")
+        response.set_cookie(cookie_name, token, httponly=True, samesite="strict", path="/",
+                            secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
         return response
 
     return app

@@ -27,6 +27,7 @@ export interface Component {
   id: string;
   name: string;
   kind: "assembly" | "solid" | "planar";
+  purpose?: "part" | "tool";
   feature_ids: string[];
   color: string;
   created_by: string;
@@ -36,6 +37,7 @@ export interface Component {
   stock_preview: boolean;
 }
 export interface Occurrence {
+  purpose?: "part" | "tool";
   id: string;
   source_id: string;
   name: string;
@@ -51,6 +53,10 @@ export interface Occurrence {
   pattern_mode?: "linear" | "circular" | null;
 }
 export interface FaceInfo {
+  edge_signatures?: string[];
+  name?: string;
+  outlines?: number[][][];
+  signature?: string;
   id: string;
   triangle_start: number;
   triangle_count: number;
@@ -62,6 +68,9 @@ export interface FaceInfo {
   bounds: { min: number[]; max: number[]; size: number[] };
 }
 export interface Geometry {
+  center?: number[];
+  vertices?: number[][];
+  vertex_info?: { id: string; name: string; point: number[] }[];
   stock_thickness_mm?: number | null;
   thickness_preview?: boolean;
   status: string;
@@ -76,12 +85,29 @@ export interface Geometry {
   geometry_key?: string;
 }
 export interface Selection {
+  worldOrigin?: boolean;
+  geometryKey?: string;
+  /** Homogeneous Shift-click selection, primary item first. */
+  items?: Selection[];
+  vertex?: { point: number[]; edge: any; anchor: "start" | "mid" | "end" };
   occurrence: string;
   definition: string;
   face?: FaceInfo;
   edge?: any;
+  /** Local surface hit, used to anchor viewport measurements on actual geometry. */
+  point?: number[];
 }
 export interface State {
+  profiles?: Record<
+    string,
+    {
+      status: string;
+      region_count?: number;
+      center?: number[];
+      normal?: number[];
+      outlines?: number[][][];
+    }
+  >;
   document: {
     id: string;
     name: string;

@@ -1,0 +1,9 @@
+{
+  "checks": [
+    "Shift selects distinct coplanar faces on one part; toggles and remove controls work; nonparallel faces block Apply; one native cut edits both bosses",
+    "Shift edge selection launches a grouped finisher; the same chain drives a complete native L-shaped sweep; a branch is rejected and can be removed",
+    "Multiple closed planar shapes from the tree share one extrusion preview; active-component lock and cancel remain intact"
+  ],
+  "errors": [],
+  "revision": 7
+}

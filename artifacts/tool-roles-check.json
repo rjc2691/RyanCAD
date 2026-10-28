@@ -1,0 +1,40 @@
+{
+  "checks": [
+    "Face setup shows native violet contours, coral origin, blue implicit path, and compact consistent reference groups without header shortcuts or world-origin action",
+    "Zoomed viewport docks the editor without overlapping references; input DOM and typing survive relocation; Escape cancels",
+    "Edge finishes show a blue direct path and a labeled violet native-section plane; shape controls switch round to bevel in place",
+    "Placed Boolean body is rendered in violet independently of the solid target; cancel does not change the design",
+    "Enter in the relocated input commits the validated signed face cut",
+    "1280 and 1100 pixel windows retain scrollable configuration, clear input placement and visible Apply/Cancel",
+    "Closed-profile dropdown updates its named reference, count, native outline and unpinned origin together; cancel preserves the revision"
+  ],
+  "errors": [],
+  "faceEditor": {
+    "placement": "panel",
+    "overlaps": [],
+    "controlsOverlap": [],
+    "rect": {
+      "x": 1257,
+      "y": 634,
+      "width": 147.421875,
+      "height": 38
+    }
+  },
+  "crowdedEditor": {
+    "placement": "panel",
+    "overlaps": [],
+    "controlsOverlap": [],
+    "rect": {
+      "x": 1257,
+      "y": 634,
+      "width": 147.421875,
+      "height": 38
+    }
+  },
+  "colors": {
+    "profile": "rgb(196, 154, 255)",
+    "reference": "rgb(101, 159, 255)",
+    "origin": "rgb(255, 139, 120)"
+  },
+  "bodyPixels": 928
+}

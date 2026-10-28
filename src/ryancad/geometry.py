@@ -25,6 +25,15 @@ def bounds(shape):
     return {"min": low, "max": high, "size": [b - a for a, b in zip(low, high)]}
 
 
+def intersection(first, second):
+    """Normalize build123d intersection collections into a native shape."""
+    from build123d import Compound
+    pieces = first.intersect(second)
+    if not pieces:
+        return Compound([])
+    return pieces[0] if len(pieces) == 1 else Compound(pieces)
+
+
 def primitive_plane(name="XY", z=0):
     from build123d import Plane
     if name not in {"XY", "XZ", "YZ"}:
@@ -84,12 +93,27 @@ def semantic_edge(edge, box):
     return edge.geom_type.name + ":" + ":".join(side)
 
 
+def face_outlines(face):
+    """Derived native planar loops for viewport tools; holes retain separate loops."""
+    from build123d import GeomType
+    loops=[]
+    for wire in face.wires():
+        points=[]
+        for edge in wire.order_edges():
+            count=1 if edge.geom_type==GeomType.LINE else max(12,min(96,int(edge.length/1.5)))
+            samples=[vector(edge.position_at(i/count)) for i in range(count+1)]
+            points.extend(samples if not points else samples[1:])
+        if points:loops.append(points)
+    return loops
+
+
 def mesh_data(shape, tolerance=.08):
     """Per-face vertex ranges retain semantic picking and sharp normal boundaries."""
     from build123d import GeomType
+    from .operations import face_signatures
     positions, indices, faces, edge_points = [], [], [], []
     bb = shape.bounding_box()
-    for face in shape.faces():
+    for face, face_signature in zip(shape.faces(), face_signatures(shape)):
         vertices, triangles = face.tessellate(tolerance, .15)
         offset, start = len(positions), len(indices)
         positions.extend(vector(v) for v in vertices)
@@ -99,9 +123,10 @@ def mesh_data(shape, tolerance=.08):
             normal = vector(face.normal_at())
         except Exception:
             normal = [0., 0., 0.]
-        faces.append({"id": f"face_{len(faces)}", "triangle_start": start, "triangle_count": len(triangles),
+        faces.append({"id": f"face_{len(faces)}", "name": f"Face {len(faces)+1}", "triangle_start": start, "triangle_count": len(triangles),
                       "area": float(face.area), "center": center, "normal": normal, "type": face.geom_type.name,
-                      "bounds": bounds(face)})
+                      "bounds": bounds(face), "signature": face_signature, "edge_signatures":[semantic_edge(edge,bb) for edge in face.edges()],
+                      **({"outlines":face_outlines(face)} if face.geom_type.name=="PLANE" else {})})
     edge_info = []
     for edge in shape.edges():
         count = 1 if edge.geom_type == GeomType.LINE else max(12, min(96, int(edge.length / 1.5)))
@@ -109,17 +134,27 @@ def mesh_data(shape, tolerance=.08):
         samples = [vector(edge.position_at(i / count)) for i in range(count + 1)]
         for a, b in zip(samples, samples[1:]):
             edge_points.extend([a, b])
-        edge_info.append({"signature": semantic_edge(edge, bb), "type": edge.geom_type.name,
-                          "length": float(edge.length), "center": vector(edge.center()), "segment_start": segment_start, "segment_count": count})
+        edge_info.append({"id":f"edge_{len(edge_info)}","name":f"Edge {len(edge_info)+1}","signature": semantic_edge(edge, bb), "type": edge.geom_type.name,
+                          "length": float(edge.length), "center": vector(edge.center()), "start": samples[0], "end": samples[-1], "midpoint": vector(edge.position_at(.5)), "tangent": vector(edge.tangent_at(0)), "end_tangent": vector(edge.tangent_at(1)), "samples": samples, "segment_start": segment_start, "segment_count": count})
     pos = np.asarray(positions, dtype="<f4").reshape(-1, 3)
     ind = np.asarray(indices, dtype="<u4").reshape(-1, 3)
     lines = np.asarray(edge_points, dtype="<f4").reshape(-1, 3)
     header = struct.pack("<4sIIII", b"RCAD", 1, len(pos), len(ind) * 3, len(lines))
     return {"buffer": header + pos.tobytes() + ind.tobytes() + lines.tobytes(),
-            "faces": faces, "edges": edge_info, "triangles": len(ind), "vertices": len(pos)}
+            "faces": faces, "edges": edge_info, "triangles": len(ind), "vertices": len(pos), "points": [vector(v) for v in shape.vertices()]}
 
 
 class Evaluator:
+    def solve_sketch_preview(self, payload, feature_id):
+        """Solve only the requested sketch; do not build or modify downstream solids."""
+        from .sketches import solve_sketch
+        document = Document.model_validate(payload)
+        feature = document.features.get(feature_id)
+        if not feature or feature.type != "sketch":
+            raise CadError("invalid_selection", "Choose a sketch to preview.")
+        values = evaluate_parameters(document)
+        return {"sketch": solve_sketch(feature, values), "parameter_values": values}
+
     def __init__(self):
         # Importing the native kernel here keeps server and persistence startup independent.
         import build123d
@@ -127,6 +162,9 @@ class Evaluator:
         self.mesh_cache = {}
         self.shapes = {}
         self.timings = {}
+        self.operation_decisions = {}
+        self.operation_displays = {}
+        self.profile_display_cache = {}
         self.maximum_cache = 300
 
     def evaluate(self, payload, rollback=None, tessellation=.08):
@@ -136,7 +174,9 @@ class Evaluator:
         values = evaluate_parameters(document)
         output, evaluating, completed, profiles, profile_keys, bindings, sketches = {}, set(), {}, {}, {}, {}, {}
         timings = {}
-        cutoff = set(document.feature_order[:document.feature_order.index(rollback) + 1]) if rollback else None
+        operation_decisions = {}
+        operation_displays = {}
+        cutoff = set() if rollback=="origin" else set(document.feature_order[:document.feature_order.index(rollback) + 1]) if rollback else None
 
         def resolve_component(identifier):
             if identifier in completed:
@@ -147,7 +187,7 @@ class Evaluator:
                 raise CadError("missing_reference", "A referenced component no longer exists.", component=identifier)
             evaluating.add(identifier)
             component, shape, body_key = document.components[identifier], None, "empty"
-            if component.kind == "assembly":
+            if component.kind == "assembly" and identifier != "root":
                 evaluating.remove(identifier)
                 completed[identifier] = (None, "assembly")
                 return None, "assembly"
@@ -155,8 +195,18 @@ class Evaluator:
                 feature = document.features[feature_id]
                 if feature.suppressed or (cutoff is not None and feature_id not in cutoff):
                     continue
+                if component.kind == "assembly":
+                    if feature.type != "sketch":
+                        raise CadError("invalid_owner", "Only design sketches may belong to the root assembly.")
+                    # Root sketches are independent construction objects, never an
+                    # accumulating physical body or an implicit planar component.
+                    shape, body_key = None, "empty"
                 q = {key: values[value] for key, value in feature.parameters.items()}
                 extras = {}
+                operation_context = None
+                if feature.type == "operation":
+                    from .operations import prepare
+                    operation_context, extras = prepare(feature, document, values, shape, body_key, resolve_component, profiles, profile_keys)
                 if feature.type in {"boolean", "mirror"}:
                     source = feature.references.get("component")
                     source_shape, source_key = resolve_component(source)
@@ -179,7 +229,10 @@ class Evaluator:
                         result, sketch_info, binding = None, None, None
                         operation = feature.options.get("operation", "new" if shape is None else "add")
                         tool = None
-                        if feature.type in {"box", "rectangle"}:
+                        if feature.type == "operation":
+                            from .operations import execute
+                            result = execute(feature, q, shape, operation_context)
+                        elif feature.type in {"box", "rectangle"}:
                             if min(q["length"], q["width"]) <= 1e-5:
                                 raise CadError("invalid_dimension", "Length and width must be positive.")
                             if feature.type == "box":
@@ -216,11 +269,21 @@ class Evaluator:
                                 closed = [w for w in wires if w.is_closed]
                                 if len(closed) == len(wires):
                                     ordered = sorted(closed, key=lambda w: Face(w).area, reverse=True)
-                                    tool = Face(ordered[0], ordered[1:])
+                                    faces = [Face(w) for w in ordered]
+                                    parents = []
+                                    for i,w in enumerate(ordered):
+                                        enclosing=[j for j in range(i) if faces[j].is_inside(w.vertices()[0].center())]
+                                        parents.append(enclosing[-1] if enclosing else None)
+                                    def depth(i):
+                                        return 0 if parents[i] is None else 1+depth(parents[i])
+                                    regions=[Face(w,[ordered[j] for j in range(len(ordered)) if parents[j]==i and depth(j)%2==1]) for i,w in enumerate(ordered) if depth(i)%2==0]
+                                    from build123d import Compound
+                                    tool = regions[0] if len(regions)==1 else Compound(regions)
                                 else:
                                     from build123d import Compound
                                     tool = Compound(edges)
-                                plane = primitive_plane(feature.options.get("plane", "XY"))
+                                from .sketches import sketch_plane
+                                plane = sketch_plane(feature.options)
                                 tool = plane.location * tool
                         elif feature.type == "extrude":
                             profile = profiles[feature.references["profile"]]
@@ -282,7 +345,7 @@ class Evaluator:
                                 raise CadError("missing_solid", "Boolean operations need an existing target solid.")
                             offset = feature.options.get("offset", [0, 0, 0])
                             tool = source_shape.translate(tuple(float(v) for v in offset))
-                            result = shape.cut(tool) if mode == "cut" else shape.intersect(tool) if mode == "intersect" else shape.fuse(tool)
+                            result = shape.cut(tool) if mode == "cut" else intersection(shape, tool) if mode == "intersect" else shape.fuse(tool)
                             tool = None
                         elif feature.type == "mirror":
                             plane = {"XY": Plane.XY, "YZ": Plane.YZ, "XZ": Plane.XZ}.get(feature.options.get("plane", "YZ"))
@@ -304,7 +367,7 @@ class Evaluator:
                         if tool is not None:
                             if feature.type in {"rectangle", "circle", "sketch"}:
                                 if shape is not None and not shape.solids() and shape.faces() and tool.faces() and operation in {"add", "cut", "intersect"}:
-                                    result = shape.cut(tool) if operation == "cut" else shape.intersect(tool) if operation == "intersect" else shape.fuse(tool)
+                                    result = shape.cut(tool) if operation == "cut" else intersection(shape, tool) if operation == "intersect" else shape.fuse(tool)
                                     if len(result.faces()) != 1 or not result.is_valid:
                                         raise CadError("planar_region", "A planar physical part needs one connected valid region. Create separate components for disconnected cut pieces.", feature_id=feature.id)
                                 else:
@@ -314,7 +377,7 @@ class Evaluator:
                             elif operation == "cut":
                                 result = shape.cut(tool)
                             elif operation == "intersect":
-                                result = shape.intersect(tool)
+                                result = intersection(shape, tool)
                             else:
                                 result = shape.fuse(tool)
                         if result is None and feature.type != "sketch":
@@ -322,20 +385,28 @@ class Evaluator:
                         if result is not None:
                             solids = result.solids()
                             if len(solids) > 1:
-                                raise CadError("separate_components_required", "This operation would create disconnected bodies. Create separate components or use a component pattern instead.", feature_id=feature.id, solid_count=len(solids))
-                            if feature.type not in {"rectangle", "circle", "sketch"} and len(solids) == 0:
+                                raise CadError("separate_components_required", "This operation would create disconnected bodies. Create separate components or use a component pattern instead.", feature_id=feature.id, solid_count=len(solids), auto_decision=operation_context.get("decision") if operation_context else None)
+                            planar_operation = feature.type == "operation" and feature.options.get("motion") in {"none","mirror","pattern"} and feature.options.get("profile") != "body"
+                            if planar_operation and len(result.faces())!=1:
+                                raise CadError("planar_region","A planar component must remain one connected region. Use a new component for a separate profile.",feature_id=feature.id)
+                            if feature.type not in {"rectangle", "circle", "sketch"} and not planar_operation and len(solids) == 0:
                                 raise CadError("empty_solid", "This operation leaves no solid material. Change its extent or operation.", feature_id=feature.id)
                             if not result.is_valid:
                                 raise CadError("invalid_solid", "The operation creates invalid geometry. Reduce the dimension or revise its supporting features.", feature_id=feature.id)
                             if solids and result.volume <= 1e-7:
                                 raise CadError("empty_solid", "The operation removes the entire part.", feature_id=feature.id)
                         self.shape_cache[key] = (result, sketch_info, binding)
-                    if feature.type in {"rectangle", "circle", "sketch"}:
+                        if operation_context and operation_context.get("decision"): self.operation_decisions[key]=operation_context["decision"]
+                        if operation_context and operation_context.get("display"): self.operation_displays[key]=operation_context["display"]
+                    if feature.type in {"rectangle", "circle", "sketch"} or (feature.type == "operation" and feature.options.get("motion") in {"none","mirror","pattern"} and feature.options.get("profile") != "body"):
                         profiles[feature.id], profile_keys[feature.id] = result, key
                     if sketch_info:
                         sketches[feature.id] = sketch_info
                     if binding:
                         bindings[feature.id] = binding
+                    if feature.type=="operation" and key in self.operation_decisions:
+                        operation_decisions[feature.id]=self.operation_decisions[key]
+                    if feature.type=="operation" and key in self.operation_displays:operation_displays[feature.id]=self.operation_displays[key]
                     # A construction sketch must not replace an already-built physical body.
                     if feature.type not in {"rectangle", "circle", "sketch"} or shape is None or not shape.solids():
                         shape, body_key = result, key
@@ -350,10 +421,13 @@ class Evaluator:
                 timings[feature.id] = {"elapsed_ms": elapsed, "last_compute_ms": self.timings.get(key, elapsed), "cached": cached,
                                        "expensive": self.timings.get(key, elapsed) >= 500}
             evaluating.remove(identifier)
+            if component.kind == "assembly":
+                shape, body_key = None, "assembly"
             completed[identifier] = (shape, body_key)
             return shape, body_key
 
         self.shapes = {}
+        resolve_component("root")
         for identifier, component in document.components.items():
             if component.kind == "assembly":
                 continue
@@ -373,10 +447,10 @@ class Evaluator:
                 self.mesh_cache[mesh_key] = mesh_data(display_shape, tessellation)
             mesh = self.mesh_cache[mesh_key]
             solids = shape.solids()
-            output[identifier] = {"status": "valid" if solids else "planar" if shape.faces() else "open_profile", "bounds": envelope,
+            output[identifier] = {"status": "valid" if solids else "planar" if shape.faces() else "open_profile", "bounds": envelope, "center":vector(shape.center()),
                 "stock_thickness_mm": thickness, "thickness_preview": bool(preview),
                 "volume": float(shape.volume) if solids else None, "area": float(shape.area), "solid_count": len(solids),
-                "face_count": len(shape.faces()), "edge_count": len(shape.edges()), "faces": [dict(face) for face in mesh["faces"]], "edges": mesh["edges"],
+                "face_count": len(shape.faces()), "edge_count": len(shape.edges()), "faces": [dict(face) for face in mesh["faces"]], "edges": mesh["edges"], "vertices": mesh["points"], "vertex_info":[{"id":f"vertex_{i}","name":f"Vertex {i+1}","point":point} for i,point in enumerate(mesh["points"])],
                 "triangles": mesh["triangles"], "mesh": mesh["buffer"], "geometry_key": mesh_key}
             # A generating dimension is only offered for a unique planar top face.
             top = [f for f in output[identifier]["faces"] if f["type"] == "PLANE" and f["normal"][2] > .999 and abs(f["center"][2] - output[identifier]["bounds"]["max"][2]) < 1e-5]
@@ -401,9 +475,22 @@ class Evaluator:
         if len(self.shape_cache) > self.maximum_cache:
             keep = list(self.shape_cache)[-self.maximum_cache:]
             self.shape_cache = {k: self.shape_cache[k] for k in keep}
+            self.operation_decisions = {k:v for k,v in self.operation_decisions.items() if k in self.shape_cache}
+            self.operation_displays = {k:v for k,v in self.operation_displays.items() if k in self.shape_cache}
         if len(self.mesh_cache) > 100:
             self.mesh_cache = {k: self.mesh_cache[k] for k in list(self.mesh_cache)[-100:]}
-        return {"components": output, "timings": timings, "bindings": bindings, "sketches": sketches, "values": values}
+        profile_info={}
+        for identifier,profile in profiles.items():
+            faces=profile.faces() if profile is not None else []
+            if faces:
+                key=profile_keys[identifier]
+                if key not in self.profile_display_cache:
+                    self.profile_display_cache[key]={"status":"closed","region_count":len(faces),"center":vector(faces[0].center()),"normal":vector(faces[0].normal_at()),"outlines":[loop for face in faces for loop in face_outlines(face)]}
+                profile_info[identifier]=self.profile_display_cache[key]
+            else: profile_info[identifier]={"status":"open"}
+        if len(self.profile_display_cache)>self.maximum_cache:
+            self.profile_display_cache={k:self.profile_display_cache[k] for k in list(self.profile_display_cache)[-self.maximum_cache:]}
+        return {"components": output, "timings": timings, "bindings": bindings, "sketches": sketches, "profiles":profile_info, "values": values,"operation_decisions":operation_decisions,"operation_displays":operation_displays}
 
     def measure(self, payload, first, second, matrices):
         self.evaluate(payload)
@@ -416,8 +503,8 @@ class Evaluator:
             transform = gp_Trsf()
             transform.SetValues(*[float(value) for row in np.asarray(matrix).reshape(4, 4)[:3] for value in row])
             shapes.append(self.shapes[identifier].moved(Location(transform)))
-        intersection = shapes[0].intersect(shapes[1])
-        return {"distance": float(shapes[0].distance_to(shapes[1])), "intersection_volume": float(intersection.volume) if intersection else 0.,
+        overlap = intersection(shapes[0], shapes[1])
+        return {"distance": float(shapes[0].distance_to(shapes[1])), "intersection_volume": float(overlap.volume) if overlap else 0.,
                 "units": "mm", "method": "OCCT minimum distance and solid intersection; static placement only"}
 
     def export(self, payload, selections, destination, tolerance=.03, angular=.1):

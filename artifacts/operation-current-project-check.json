@@ -1,0 +1,13 @@
+{
+  "before": {
+    "document_id": "doc_6e91bded2b8e",
+    "revision": 84,
+    "feature_count": 13
+  },
+  "after": {
+    "document_id": "doc_6e91bded2b8e",
+    "revision": 84,
+    "feature_count": 13,
+    "unified_schema_available": true
+  }
+}

@@ -38,13 +38,13 @@ def build_recipe(document, actor, recipe):
         pin_d = root("Alignment pin diameter", 6, "Fit")
         clearance = root("Diametral clearance", .3, "Fit")
         socket = root("Alignment socket diameter", f"{pin_d} + {clearance}", "Fit")
-        plate, plate_instance = create_component(document, actor, "Mounting plate", color="#a8b9ce")
+        plate, plate_instance = create_component(document, actor, "Mounting plate", color="#689ac5")
         feature(plate.id, "box", "Plate stock", {"length": ref(length), "width": ref(width), "height": ref(thickness)})
         feature(plate.id, "fillet", "Standard outer corners", {"radius": ref(radius)}, selector={"group": "vertical"})
         feature(plate.id, "holes", "Four mounting holes", {"diameter": ref(hole), "x": f"-{length}/2 + {offset}", "y": f"-{width}/2 + {offset}",
             "count_x": 2, "count_y": 2, "spacing_x": f"{length} - 2*{offset}", "spacing_y": f"{width} - 2*{offset}"})
         feature(plate.id, "holes", "Alignment sockets", {"diameter": ref(socket), "x": f"-{length}/4", "count_x": 2, "spacing_x": f"{length}/2"})
-        pin, pin_instance = create_component(document, actor, "Alignment pin", color="#79bcad", placement={"x": f"-{length}/4"})
+        pin, pin_instance = create_component(document, actor, "Alignment pin", color="#c5aa68", placement={"x": f"-{length}/4"})
         feature(pin.id, "cylinder", "Pin shoulder", {"diameter": 10, "height": 2, "z": -2})
         feature(pin.id, "cylinder", "Pin shank", {"diameter": ref(pin_d), "height": 12})
         create_instance(document, actor, pin.id, "Alignment pin · second", placement={"x": f"{length}/4"})
@@ -67,14 +67,14 @@ def build_recipe(document, actor, recipe):
         peg_d = root("Master locating peg diameter", 8, "Fit")
         peg_socket = root("Master socket diameter", f"{peg_d} + {clearance}", "Fit")
 
-        base, _ = create_component(document, actor, "Tooling base", color="#8799b6")
+        base, _ = create_component(document, actor, "Tooling base", color="#657487")
         feature(base.id, "box", "Base plate", {"length": f"{form_length}+10 mm", "width": f"{form_length}+10 mm", "height": ref(base_thickness)})
         for side in (-1, 1):
             for end in (-1, 1):
                 feature(base.id, "cylinder", f"Alignment post {side:+d}/{end:+d}", {"diameter": ref(pin_d), "height": 4,
                     "x": f"{side}*({form_length}/2-7 mm)", "y": f"{end}*({form_length}/2-7 mm)", "z": ref(base_thickness)})
         feature(base.id, "cylinder", "Master locating socket", {"diameter": ref(peg_socket), "height": 3.1, "z": f"{base_thickness}-3 mm"}, operation="cut")
-        for side, label, color in [(-1, "Left removable form", "#adc2c8"), (1, "Right removable form", "#80b2a9")]:
+        for side, label, color in [(-1, "Left removable form", "#689ac5"), (1, "Right removable form", "#70a997")]:
             part, _ = create_component(document, actor, label, color=color)
             feature(part.id, "box", "Form half stock", {"length": f"{form_length}/2", "width": ref(form_length), "height": ref(form_height),
                 "x": f"{side}*({form_length}/4+{gap}/2)", "z": ref(base_thickness)})
@@ -82,7 +82,7 @@ def build_recipe(document, actor, recipe):
                 "z": f"{base_thickness}-1 mm"}, operation="cut")
             feature(part.id, "holes", "Base alignment sockets", {"diameter": ref(socket_d), "x": f"{side}*({form_length}/2-7 mm)",
                 "y": f"-({form_length}/2-7 mm)", "count_y": 2, "spacing_y": f"{form_length}-14 mm"})
-        master, _ = create_component(document, actor, "Removable casting master", color="#c8a77d")
+        master, _ = create_component(document, actor, "Removable casting master", color="#c5aa68")
         feature(master.id, "cylinder", "Master locating peg", {"diameter": ref(peg_d), "height": 3, "z": f"{base_thickness}-3 mm"})
         feature(master.id, "cylinder", "Concrete shape master", {"diameter": ref(casting_d), "height": ref(casting_h), "z": ref(base_thickness)})
         fit("Form / base alignment", pin_d, socket_d)

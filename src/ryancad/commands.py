@@ -9,7 +9,15 @@ from .errors import CadError
 from .model import Actor, Component, Document, Feature, Fit, Instance, Parameter, Tolerance, uid
 from .parameters import bind_expression, evaluate
 
-PALETTE = ["#a8b8cf", "#78b8ad", "#bd9a70", "#9693c4", "#8fb4c8", "#c48f93"]
+PALETTE = ["#689ac5", "#70a997", "#c18e70", "#9c8fbe", "#c5aa68", "#b77d8e", "#acbcc9", "#657487"]
+
+
+def references_component(value, component):
+    if isinstance(value, dict):
+        return value.get("component") == component or any(references_component(v, component) for v in value.values())
+    if isinstance(value, list):
+        return any(references_component(v, component) for v in value)
+    return False
 
 FEATURE_FIELDS = {
     "box": {"length": ("length", 40), "width": ("length", 30), "height": ("length", 10),
@@ -78,7 +86,10 @@ def create_component(document, actor, name, kind="solid", parent="root", color=N
         raise CadError("invalid_kind", "A component is solid, planar, or an assembly.")
     if len(document.components) >= 250:
         raise CadError("document_limit", "This release supports at most 250 component definitions.")
-    component = Component(id=uid("part" if kind != "assembly" else "asm"), name=str(name)[:120] or "Part", kind=kind,
+    base=str(name).strip()[:110] or "Part"
+    label=base;index=2;names={c.name.strip().casefold() for c in document.components.values() if c.id!='root'}
+    while label.casefold() in names:label=f"{base} {index}";index+=1
+    component = Component(id=uid("part" if kind != "assembly" else "asm"), name=label, kind=kind,
         color=color or PALETTE[(len(document.components) - 1) % len(PALETTE)], created_by=actor.id, modified_by=actor.id)
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", component.color):
         raise CadError("invalid_color", "Use a six-digit hexadecimal color.")
@@ -121,6 +132,9 @@ def create_feature(document, actor, owner, feature_type, values=None, options=No
 
 def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dict, list[str], str]:
     """Mutate an isolated candidate; evaluator/persistence decide whether it can commit."""
+    if name == "operation.create":
+        from .operations import create_operation
+        return create_operation(document, actor, args)
     if name == "document.rename":
         document.name = str(args.get("name", "Untitled design"))[:180]
         return {}, [], f"Rename design to {document.name}"
@@ -129,13 +143,36 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
             raise CadError("unsupported_unit", "Display units are mm or in.")
         document.display_units = args["units"]
         return {}, [], f"Display dimensions in {args['units']}"
+    if name.startswith("group."):
+        from .groups import group_command
+        return group_command(document,actor,name,args)
     if name == "component.create":
         component, instance = create_component(document, actor, args.get("name", "Part"), args.get("kind", "solid"),
             args.get("parent", "root"), args.get("color"), args.get("placement"))
         return {"component_id": component.id, "instance_id": instance.id}, [component.id, instance.id], f"Create {component.name}"
+    if name == "toolbody.create":
+        label=str(args.get("name") or "Tool body").strip() or "Tool body"
+        base=label;index=2
+        while any(c.name==label for c in document.components.values()):label=f"{base} {index}";index+=1
+        component,instance=create_component(document,actor,label,"solid")
+        component.purpose="tool"
+        return {"component_id":component.id,"instance_id":instance.id,"occurrence_id":instance.id},[component.id,instance.id],f"Create tool body · {label}"
+    if name == "document.normalize_names":
+        seen=set();changed=[]
+        for c in document.components.values():
+            if c.id=='root':continue
+            base=c.name.strip()[:110] or 'Component';label=base;index=2
+            while label.casefold() in seen:label=f'{base} {index}';index+=1
+            seen.add(label.casefold())
+            if label!=c.name:c.name=label;c.modified_by=actor.id;changed.append(c.id)
+        return {'renamed':len(changed)},changed,'Make component names unique'
     if name == "component.rename":
         component = require(document.components, args["id"], "component")
-        component.name = str(args["name"])[:120]
+        label=str(args["name"]).strip()[:120]
+        if not label:raise CadError("invalid_name","Give the component a name.")
+        if label!=component.name and any(c.id not in {component.id,'root'} and c.name.strip().casefold()==label.casefold() for c in document.components.values()):
+            raise CadError("duplicate_name","That component name is already in use. Choose a unique name.")
+        component.name = label
         component.modified_by = actor.id
         if "color" in args:
             if not re.fullmatch(r"#[0-9a-fA-F]{6}", args["color"]):
@@ -164,7 +201,7 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
             raise CadError("component_not_empty", "Move this assembly's child instances before deleting it.")
         local_parameters = {p.id for p in document.parameters.values() if p.owner == component.id}
         users = [f.id for f in document.features.values() if f.owner != component.id and
-                 (f.references.get("component") == component.id or any(p in local_parameters for p in f.parameters.values()))]
+                 (references_component(f.references, component.id) or f.references.get("profile") in component.feature_ids or any(p in local_parameters for p in f.parameters.values()))]
         users += [p.id for p in document.parameters.values() if p.owner != component.id and dependencies(p.expression) & local_parameters]
         users += [i.id for i in document.instances.values() if any(p in local_parameters for p in i.placement.values())]
         if users:
@@ -205,6 +242,11 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
             raise CadError("unsupported_operation", "Make individual physical parts independent.")
         duplicate = original.model_copy(deep=True)
         duplicate.id, duplicate.name = uid("part"), args.get("name", original.name + " independent")
+        base=duplicate.name.strip()[:110] or 'Component';label=base;index=2
+        names={c.name.strip().casefold() for c in document.components.values() if c.id!='root'}
+        while label.casefold() in names:label=f'{base} {index}';index+=1
+        duplicate.name=label
+
         duplicate.source_definition = original.id
         duplicate.created_by = duplicate.modified_by = actor.id
         mapping = {}
@@ -247,8 +289,13 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
             else:
                 instance.pattern[field] = parameter(document, actor, instance.parent, f"{instance.name} pattern · {field}", value, kind, "Component patterns")
         return {"instance_id": instance.id}, [instance.id], f"{mode.title()} component pattern · {instance.name}"
+    if name == "instance.move":
+        from .movement import move_component
+        return move_component(document, actor, args)
     if name == "instance.transform":
         instance = require(document.instances, args["id"], "instance")
+        from .placements import bake_rotation
+        bake_rotation(document, actor, instance)
         for field in ("x", "y", "z", "rx", "ry", "rz"):
             if field not in args:
                 continue
@@ -259,7 +306,7 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
             else:
                 instance.placement[field] = parameter(document, actor, instance.parent, f"{instance.name} · {field.upper()}", value,
                     "angle" if field.startswith("r") else "length", "Placement")
-        return {}, [instance.id], f"Place {instance.name} precisely"
+        return {}, [instance.id], f"Move Component · {instance.name}"
     if name == "instance.reparent":
         instance = require(document.instances, args["id"], "instance")
         parent = require(document.components, args["parent"], "assembly")
@@ -403,14 +450,24 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
 
 
 COMMANDS = {
+    "document.normalize_names": "Make legacy duplicate component names unique in one undoable action.",
+    "toolbody.create": "Create an empty reusable solid tool body in its own local workbench, excluded from assembly counts and exports.",
+    "group.reparent": "Move an occurrence to a parent group occurrence (empty parent means design root), preserving world placement and remapping references. Rejects cycles and shared/pattern structure edits.",
+    "group.insert": "Create an empty solid component or assembly under a parent occurrence (empty parent means design root).",
+    "operation.create": "Create a unified origin/profile/motion/result recipe with exact model/world-origin references, target-projected travel or full finite paths, parameter-backed inputs and native validation. Corner previews include actual perpendicular changed-material sections. Use previews before committing.",
     "component.stock": "Set parameter-backed planar stock thickness and optional display-only thickness preview; no extra physical part or authoritative solid.",
     "component.create": "Create a solid/planar part or assembly. Separate physical parts always get components.",
+    "group.create": "Group 1–200 sibling occurrence IDs in an assembly without moving them. Name and occurrences are required inputs. Native occurrence references follow the new paths.",
+    "group.add": "Add sibling occurrences to group=assembly occurrence ID, preserving their world placements; rotated/transformed groups rebase placement into new local parameters.",
+    "group.copy": "Copy a group occurrence and its nested group structure. Physical part definitions stay linked; membership and placement are independently editable. offset defaults to [30,0,0] in parent coordinates.",
+    "group.ungroup": "Dissolve one group occurrence while preserving child world placements and updating occurrence references. Undo restores the group; old unplaced definitions/parameters are retained for existing users.",
     "component.duplicate": "Create a linked instance using an exact placement; no body copies.",
     "component.pattern": "Create or edit a parameterized linear/circular linked-part pattern around the owning assembly origin.",
     "component.independent": "Make a selected part instance independent, retaining provenance.",
     "component.rename": "Rename a component or change its display color.",
     "component.delete": "Delete an unreferenced component and its owned features/parameters; undo remains available.",
     "instance.transform": "Set exact x/y/z and rx/ry/rz values or parameter references.",
+    "instance.move": "Preview/commit component movement. id=source instance, occurrence=flattened occurrence ID. method=reference (infer point/direction/projected motion from optional origin, target, direction and values.distance), axes (parent-frame x/y/z distances and rx/ry/rz increments), or rotate (direction line and values.angle). Reference-local mm points={occurrence,point:[x,y,z]}; direction={occurrence,start:[x,y,z],end:[x,y,z]} or {axis:X|Y|Z} for an exact global axis. Origin defaults to component origin. An exact distance overrides target-based travel; clear distance to restore alignment. rotate uses the line's actual location and a live angle parameter. Optional reverse flips direction/axis. Legacy point/direction/projected methods remain accepted. Preview before commit.",
     "instance.visibility": "Change display visibility without changing manufactured quantities.",
     "instance.suppress": "Suppress or restore a manufactured instance explicitly.",
     "instance.reparent": "Move a placed instance into an assembly, preserving its explicit local transform.",
@@ -426,7 +483,7 @@ COMMANDS = {
     "feature.suppress": "Suppress or restore a feature, validating dependent geometry.",
     "feature.rename": "Rename a construction feature.",
     "feature.repair": "Repair a failed topology selection with an explicit semantic selector.",
-    "sketch.create": "Create a plane-attached sketch of points, lines, circles or circular arcs.",
+    "sketch.create": "Create a design-root construction sketch of points, lines, circles or circular arcs; optional world frame freezes a picked plane. Creates no physical part by default. Legacy physical ownership remains supported.",
     "sketch.constraint": "Add an explicit dimensional/geometric constraint through PlaneGCS.",
     "sketch.update": "Edit a sketch's geometry and constraints atomically, preserving surviving entity/parameter identities.",
     "sketch.remove_constraint": "Remove a sketch constraint by ID.",

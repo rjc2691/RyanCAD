@@ -20,63 +20,7 @@ from .storage import ProjectStore
 from .worker import GeometryWorker
 
 
-def local_matrix(instance, values):
-    q = {field: values[value] for field, value in instance.placement.items()}
-    rx, ry, rz = [math.radians(q.get(key, 0)) for key in ("rx", "ry", "rz")]
-    a, b, c = math.cos(rx), math.cos(ry), math.cos(rz)
-    d, e, f = math.sin(rx), math.sin(ry), math.sin(rz)
-    x = np.array([[1, 0, 0], [0, a, -d], [0, d, a]])
-    y = np.array([[b, 0, e], [0, 1, 0], [-e, 0, b]])
-    z = np.array([[c, -f, 0], [f, c, 0], [0, 0, 1]])
-    matrix = np.eye(4)
-    matrix[:3, :3] = x @ y @ z
-    matrix[:3, 3] = [q.get(key, 0) for key in ("x", "y", "z")]
-    return matrix
-
-
-def flatten_instances(document, values):
-    rows = []
-
-    def walk(parent, matrix, path, stack, visible=True, suppressed=False):
-        if parent in stack:
-            raise CadError("ownership_cycle", "Assembly placement creates an ownership cycle.", cycle=stack + [parent])
-        for instance in document.instances.values():
-            if instance.parent != parent:
-                continue
-            if instance.definition not in document.components:
-                raise CadError("missing_component", "An instance refers to a missing component.", instance=instance.id)
-            definition = document.components[instance.definition]
-            count = int(values[instance.pattern["count"]]) if instance.pattern_mode else 1
-            if count > 200 or len(rows) + count > 5000:
-                raise CadError("pattern_limit", "Use at most 200 copies per component pattern and 5,000 assembly occurrences.")
-            for index in range(count):
-                if index in instance.omitted_indices:
-                    continue
-                placement = matrix @ pattern_delta(instance, values, index) @ local_matrix(instance, values)
-                member_id = instance.id if index == 0 else f"{instance.id}~{index}"
-                occurrence_id = f"{path}/{member_id}" if path else member_id
-                record = {**instance.model_dump(), "source_id": instance.id, "id": occurrence_id, "matrix": placement.tolist(),
-                          "pattern_index": index, "visible": visible and instance.visible, "suppressed": suppressed or instance.suppressed, "kind": definition.kind, "color": definition.color}
-                rows.append(record)
-                if definition.kind == "assembly":
-                    walk(definition.id, placement, occurrence_id, stack + [parent], record["visible"], record["suppressed"])
-    walk("root", np.eye(4), "", [])
-    return rows
-
-
-def pattern_delta(instance, values, index):
-    delta = np.eye(4)
-    if not instance.pattern_mode or index == 0:
-        return delta
-    axis = "XYZ".index(instance.pattern_axis)
-    if instance.pattern_mode == "linear":
-        delta[axis, 3] = values[instance.pattern["spacing"]] * index
-    else:
-        angle = math.radians(values[instance.pattern["angle"]] * index)
-        a, b = (axis + 1) % 3, (axis + 2) % 3
-        delta[a, a] = delta[b, b] = math.cos(angle)
-        delta[a, b], delta[b, a] = -math.sin(angle), math.sin(angle)
-    return delta
+from .placements import local_matrix, flatten_instances, pattern_delta
 
 
 def validate_document(document):
@@ -105,6 +49,10 @@ def validate_document(document):
             raise CadError("invalid_identity", "An instance ID does not match its document key.")
         if instance.parent not in document.components or document.components[instance.parent].kind != "assembly":
             raise CadError("invalid_owner", "Every instance must belong to an assembly.")
+        definition=document.components.get(instance.definition)
+        if definition and definition.purpose=="tool":
+            if definition.kind!="solid" or instance.parent!="root" or instance.pattern_mode or sum(i.definition==instance.definition for i in document.instances.values())!=1:
+                raise CadError("tool_library","A tool body has one private local workbench. Reuse it through Tool Profile references instead of placing or grouping copies.")
         if any(p not in document.parameters for p in list(instance.placement.values()) + list(instance.pattern.values())):
             raise CadError("missing_parameter", "An instance placement refers to a missing parameter.")
     visited, visiting = set(), set()
@@ -223,7 +171,7 @@ class CadService:
         actor = actor or Actor()
         if len([j for j in self.jobs.values() if j["status"] in {"queued", "running", "waiting"}]) >= 16:
             raise CadError("queue_full", "The operation queue is full. Wait or cancel pending work.")
-        if operation in {"command", "preview"}:
+        if operation in {"command", "preview", "sketch_preview"}:
             command = Command.model_validate(payload["command"])
             signature = hashlib.sha256(json.dumps({"name": command.name, "args": command.args}, sort_keys=True).encode()).hexdigest()
             prior = self.store.request(command.request_id, signature)
@@ -259,6 +207,23 @@ class CadService:
             operation = job["operation"]
             if operation in {"command", "preview", "commit_preview"}:
                 job["result"] = self._command(actor, preview=operation == "preview", preview_token=payload.get("token"), job_id=job["id"], **{k: v for k, v in payload.items() if k != "token"})
+            elif operation == "sketch_preview":
+                command = payload["command"]
+                if command.name not in {"sketch.create", "sketch.update"}:
+                    raise CadError("invalid_request", "A sketch preview requires sketch.create or sketch.update.")
+                with self.write_lock:
+                    self._permission(actor)
+                    if job["status"] == "cancelled":
+                        raise CadError("cancelled", "This sketch preview was cancelled.")
+                    if command.expected_revision != self.document.revision:
+                        raise CadError("stale_revision", "The design changed since this sketch was prepared. Reopen it and try again.", expected=command.expected_revision, current=self.document.revision)
+                    candidate = self.document.model_copy(deep=True)
+                    result, _, _ = reduce(candidate, actor, command.name, command.args)
+                    validate_document(candidate)
+                    solved = self.geometry.call("solve_sketch_preview", payload=candidate.model_dump(mode="json"), feature_id=result["feature_id"])
+                    feature = candidate.features[result["feature_id"]]
+                    constraint_values = [solved["parameter_values"].get(feature.parameters.get(c.get("parameter_key", ""))) for c in feature.options["constraints"]]
+                    job["result"] = {"base_revision": self.document.revision, "feature_id": result["feature_id"], "constraint_values": constraint_values, **solved}
             elif operation == "rebuild":
                 with self.write_lock:
                     self.evaluation = self.geometry.call("evaluate", payload=self.document.model_dump(mode="json"))
@@ -266,7 +231,7 @@ class CadService:
             elif operation == "history":
                 with self.write_lock:
                     feature_id = payload["feature_id"]
-                    if feature_id not in self.document.features:
+                    if feature_id != "origin" and feature_id not in self.document.features:
                         raise CadError("missing_feature", "This history feature no longer exists.")
                     key = f"{self.document.revision}:{feature_id}"
                     data = self.history_cache.get(key)
@@ -305,7 +270,7 @@ class CadService:
             self.event("job_failed", job_id=job["id"], error=job["error"])
         finally:
             job["finished_at"] = now()
-            if job["status"] != "complete" or job["operation"] == "preview":
+            if job["status"] != "complete" or job["operation"] in {"preview", "sketch_preview"}:
                 command = payload.get("command")
                 if command:
                     self.requests.pop(command.request_id, None)
@@ -386,7 +351,10 @@ class CadService:
                 except CadError as exc:
                     # Only initial creation can choose new ownership. Regeneration never
                     # silently changes the physical part count of an existing feature.
-                    if exc.code != "separate_components_required" or command.name != "feature.create" or command.args.get("type") not in {"box", "cylinder", "extrude"} or command.args.get("options", {}).get("operation", "add") != "add":
+                    constructor=command.name=="feature.create" and command.args.get("type") in {"box","cylinder","extrude"} and command.args.get("options",{}).get("operation","add")=="add"
+                    auto_add=command.args.get("result")=="auto" and (exc.details.get("auto_decision") or {}).get("mode")=="add"
+                    unified=command.name=="operation.create" and (command.args.get("result")=="add" or auto_add) and command.args.get("profile") not in {"body","fillet","chamfer"}
+                    if exc.code != "separate_components_required" or not (constructor or unified):
                         raise
                     feature = candidate.features[result["feature_id"]]
                     previous = candidate.components[feature.owner]
@@ -395,6 +363,9 @@ class CadService:
                     component.feature_ids.append(feature.id)
                     feature.owner = component.id
                     feature.options["operation"] = "new"
+                    if unified:
+                        feature.options["result"]="new";feature.references["target_occurrence"]=None
+                        previous.kind=self.document.components[previous.id].kind
                     for identifier in feature.parameters.values():
                         if identifier not in self.document.parameters:
                             candidate.parameters[identifier].owner = component.id
@@ -408,6 +379,12 @@ class CadService:
                 self.current_actor = None
             if generation != self.geometry.generation or (job_id and self.jobs[job_id]["status"] == "cancelled"):
                 raise CadError("cancelled", "The operation was cancelled before commit.")
+            decision=evaluated.get("operation_decisions",{}).get(result.get("feature_id"))
+            for identifier,choice in evaluated.get("operation_decisions",{}).items():
+                feature=candidate.features[identifier]
+                if feature.options.get("result")=="auto":
+                    feature.options["result"]=choice["mode"]
+                    feature.options["auto_selection"]=choice
             for identifier, binding in evaluated.get("bindings", {}).items():
                 candidate.features[identifier].options["selector"] = binding
             candidate.revision = self.document.revision + 1
@@ -420,7 +397,7 @@ class CadService:
                 self.previews = dict(list(self.previews.items())[-20:])
                 return {"preview_token": token, "base_revision": self.document.revision, "description": description,
                         "changes": result, "affected": affected, "components": self._public_geometry(evaluated),
-                        "parameter_values": evaluated["values"], "validation": "passed", "committed": False}
+                        "parameter_values": evaluated["values"], "feature_values": {field:evaluated["values"][p] for field,p in candidate.features[result["feature_id"]].parameters.items()} if result.get("feature_id") else {}, "occurrences": flatten_instances(candidate, evaluated["values"]), "operation_decision":decision, "operation_display":evaluated.get("operation_displays",{}).get(result.get("feature_id")), "preview_elapsed_ms":(time.perf_counter()-started)*1000,"validation": "passed", "committed": False}
             self._permission(actor)
             action = Action(revision=candidate.revision, actor=actor, command=command.name, description=description,
                             affected=affected, group_id=command.group_id, duration_ms=(time.perf_counter() - started) * 1000,
@@ -450,14 +427,14 @@ class CadService:
                 values = evaluate(document)
             occurrences = flatten_instances(document, values)
             parameter_graph = graph(document, values)
-            physical = [i for i in occurrences if i["kind"] != "assembly" and not i["suppressed"]]
+            physical = [i for i in occurrences if i["kind"] != "assembly" and i.get("purpose")!="tool" and not i["suppressed"]]
             summary = {"instances": len(physical), "definitions": len({i["definition"] for i in physical}),
                        "volume_mm3": sum(evaluation["components"].get(i["definition"], {}).get("volume") or 0 for i in physical),
                        "area_mm2": sum(evaluation["components"].get(i["definition"], {}).get("area") or 0 for i in physical)}
             undo, redo = self.store.stacks()
             return {"document": document.model_dump(mode="json"), "geometry": self._public_geometry(evaluation),
                     "parameter_graph": parameter_graph["parameters"], "fits": parameter_graph["fits"], "occurrences": occurrences,
-                    "summary": summary, "timings": evaluation.get("timings", {}), "sketches": evaluation.get("sketches", {}),
+                    "summary": summary, "timings": evaluation.get("timings", {}), "sketches": evaluation.get("sketches", {}), "profiles": evaluation.get("profiles", {}),
                     "actions": self.store.actions(), "checkpoints": self.store.checkpoints(), "can_undo": bool(undo), "can_redo": bool(redo),
                     "save_status": "snapshot_warning" if (self.store.error or self.store.snapshot_error) else "saved", "save_error": self.store.error or self.store.snapshot_error,
                     "worker_status": self.geometry.status, "sequence": self.sequence,
@@ -471,7 +448,7 @@ class CadService:
             if payload.get("expected_revision") != self.document.revision:
                 raise CadError("stale_revision", "Refresh the design before exporting the current revision.")
             document = self.document.model_dump(mode="json")
-            occurrences = [i for i in flatten_instances(self.document, evaluate(self.document)) if i["kind"] != "assembly" and not i["suppressed"]]
+            occurrences = [i for i in flatten_instances(self.document, evaluate(self.document)) if i["kind"] != "assembly" and i.get("purpose")!="tool" and not i["suppressed"]]
             wanted = payload["instance_ids"] if payload.get("instance_ids") is not None else [i["id"] for i in occurrences]
             selected = [i for i in occurrences if i["id"] in wanted]
             if len(selected) != len(set(wanted)) or not selected:

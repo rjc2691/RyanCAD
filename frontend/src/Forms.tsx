@@ -63,6 +63,8 @@ export function ParameterInput({
   state,
   kind = "length",
   help,
+  unitLabel,
+  unitControl,
 }: {
   label: string;
   value: string;
@@ -70,6 +72,13 @@ export function ParameterInput({
   state: State;
   kind?: string;
   help?: string;
+  unitLabel?: string;
+  unitControl?: {
+    label: string;
+    value: string;
+    options: { value: string; label: string; disabled?: boolean }[];
+    onChange: (value: string) => void;
+  };
 }) {
   const references = Object.values(state.document.parameters).filter(
     (p) => p.kind === kind,
@@ -90,6 +99,24 @@ export function ParameterInput({
           onChange={(e) => onChange(e.target.value)}
           spellCheck={false}
         />
+        {unitControl && (
+          <select
+            className="quantity-unit-select"
+            aria-label={unitControl.label}
+            value={unitControl.value}
+            onChange={(e) => unitControl.onChange(e.target.value)}
+          >
+            {unitControl.options.map((option) => (
+              <option
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled}
+              >
+                {option.label}
+              </option>
+            ))}
+          </select>
+        )}
         {reused ? (
           <button
             type="button"
@@ -102,17 +129,18 @@ export function ParameterInput({
           >
             <Link2 size={13} />
           </button>
-        ) : (
+        ) : !unitControl ? (
           <small>
-            {kind === "length"
-              ? "mm"
-              : kind === "angle"
-                ? "°"
-                : kind === "count"
-                  ? "×"
-                  : ""}
+            {unitLabel ??
+              (kind === "length"
+                ? "mm"
+                : kind === "angle"
+                  ? "°"
+                  : kind === "count"
+                    ? "×"
+                    : "")}
           </small>
-        )}
+        ) : null}
         <select
           aria-label={"Reuse parameter for " + label}
           value=""
@@ -191,7 +219,7 @@ const titles: Record<string, string> = {
   component_pattern: "Pattern linked components",
   stock: "Planar stock thickness",
   duplicate: "Repeat a component",
-  transform: "Place component precisely",
+  transform: "Move Component",
   parameter: "Create a shared parameter",
   checkpoint: "Name a checkpoint",
   rename: "Rename design",
@@ -343,6 +371,7 @@ export function ToolDialog({
       else if (kind === "duplicate")
         await run("component.duplicate", {
           id: owner,
+          parent: occurrence?.parent || "root",
           placement: Object.fromEntries(
             ["x", "y", "z"].map((k) => [k, decode(values[k])]),
           ),

@@ -16,26 +16,50 @@ CONSTRAINTS = {"coincident", "horizontal", "vertical", "parallel", "perpendicula
                "angle", "radius", "diameter", "fix", "tangent", "point_on_line", "point_on_circle"}
 
 
+def sketch_plane(options):
+    """A frozen, explicit world frame; projected references are currently snapshots."""
+    from build123d import Plane, Vector
+    frame = options.get("frame")
+    if not frame:
+        from .geometry import primitive_plane
+        return primitive_plane(options.get("plane", "XY"))
+    try:
+        origin, u, normal = (Vector(*frame[k]) for k in ("origin", "u", "normal"))
+        if any(not math.isfinite(x) or abs(x) > 10000 for x in origin):
+            raise ValueError()
+        if abs(u.length - 1) > 1e-6 or abs(normal.length - 1) > 1e-6 or abs(u.dot(normal)) > 1e-6:
+            raise ValueError()
+        return Plane(origin=origin, x_dir=u, z_dir=normal)
+    except (ValueError, TypeError, KeyError, RuntimeError) as exc:
+        raise CadError("invalid_plane", "Sketch frame needs a finite origin and perpendicular unit U/normal vectors.") from exc
+
+
 def edit_sketch(document, actor, command, args):
     from .commands import create_component, parameter, require
     if command == "sketch.create":
+        name = str(args.get("name", "Sketch")).strip()
+        if not name or len(name)>120:
+            raise CadError("invalid_name", "Sketch names must contain 1–120 characters.")
         entities = args.get("entities", [])
         if not 1 <= len(entities) <= 200:
             raise CadError("sketch_limit", "A sketch contains 1–200 entities in this release.")
-        owner = args.get("owner")
+        owner = args.get("owner", "root")
         created = {}
         if not owner:
             component, instance = create_component(document, actor, args.get("name", "Sketch part"), "planar")
             owner = component.id
             created = {"component_id": owner, "instance_id": instance.id}
         component = require(document.components, owner, "component")
-        if component.kind == "assembly":
-            raise CadError("invalid_owner", "Sketches belong to physical part components.")
+        if component.kind == "assembly" and owner != "root":
+            raise CadError("invalid_owner", "Sketches belong to the design root or a legacy physical part.")
         plane = args.get("plane", "XY")
         if plane not in {"XY", "XZ", "YZ"}:
             raise CadError("invalid_plane", "Choose XY, XZ or YZ.")
-        feature = Feature(id=uid("ft"), owner=owner, type="sketch", name=args.get("name", "Sketch"),
+        feature = Feature(id=uid("ft"), owner=owner, type="sketch", name=name,
                           options={"plane": plane, "entities": [], "constraints": []}, created_by=actor.id, modified_by=actor.id)
+        if args.get("frame") is not None:
+            feature.options["frame"] = args["frame"]
+        sketch_plane(feature.options)
         identifiers = set()
         for index, entity in enumerate(entities):
             kind, identifier = entity.get("type"), str(entity.get("id", f"e{index + 1}"))
@@ -56,6 +80,11 @@ def edit_sketch(document, actor, command, args):
     if feature.type != "sketch":
         raise CadError("invalid_selection", "Choose a general sketch feature.")
     if command == "sketch.update":
+        if "name" in args:
+            name = str(args["name"]).strip()
+            if not name or len(name)>120:
+                raise CadError("invalid_name", "Sketch names must contain 1–120 characters.")
+            feature.name = name
         from .parameters import evaluate
         original_values = evaluate(document)
         entities = args.get("entities", [])
@@ -95,8 +124,19 @@ def edit_sketch(document, actor, command, args):
                     p = document.parameters[identifier]
                     from .parameters import bind_expression
                     supplied_value = supplied.get("value", 1)
-                    if not isinstance(supplied_value, (int, float)) or abs(supplied_value - original_values[identifier]) > 1e-10:
-                        p.expression, p.modified_by = bind_expression(supplied_value, document, feature.owner), actor.id
+                    if isinstance(supplied_value, dict):
+                        identifier = parameter(document, actor, feature.owner, f"{feature.name} · {prior['type']}", supplied_value,
+                                               "angle" if prior["type"] == "angle" else "length", "Sketch constraints")
+                    elif not isinstance(supplied_value, (int, float)) or abs(supplied_value - original_values[identifier]) > 1e-10:
+                        # A reused parameter is shared design intent. Editing this dimension
+                        # must not silently rewrite the shared source for every consumer.
+                        shared = list(existing_parameters.values()).count(identifier) > 1 or any(
+                            f.id != feature.id and identifier in f.parameters.values() for f in document.features.values())
+                        if p.category != "Sketch constraints" or shared:
+                            identifier = parameter(document, actor, feature.owner, f"{feature.name} · {prior['type']}", supplied_value,
+                                                   "angle" if prior["type"] == "angle" else "length", "Sketch constraints")
+                        else:
+                            p.expression, p.modified_by = bind_expression(supplied_value, document, feature.owner), actor.id
                     feature.parameters[key] = identifier
                 feature.options["constraints"].append(prior)
             else:
@@ -173,6 +213,8 @@ def solve_sketch(feature, values):
     for constraint in feature.options["constraints"]:
         kind, a, b = constraint["type"], constraint["a"], constraint["b"]
         value = values[feature.parameters[constraint["parameter_key"]]] if "parameter_key" in constraint else None
+        if kind in {"distance", "radius", "diameter"} and value <= 1e-8:
+            raise CadError("invalid_dimension", "Sketch lengths and radii must be positive.", constraint=constraint["id"])
         try:
             if kind == "coincident":
                 tag = solver.coincident(point(a), point(b))

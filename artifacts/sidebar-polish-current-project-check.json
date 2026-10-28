@@ -1,0 +1,16 @@
+{
+  "before_revision": 157,
+  "renamed": [
+    {
+      "from": "Boxy",
+      "to": "Boxy 2"
+    }
+  ],
+  "after_revision": 158,
+  "geometry_intent_unchanged": true,
+  "allowed_changes": [
+    "one component name",
+    "author attribution",
+    "revision metadata"
+  ]
+}

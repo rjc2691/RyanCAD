@@ -1,6 +1,6 @@
 # RyanCAD product request
 
-**Revision 2 — October 23, 2026. Implementation authorized by the owner's subsequent request to create this product.**
+**Revision 19 — October 27, 2026. Implementation authorized; includes contextual information, unified operations, and the functional workspace layout.**
 
 ## 1. Mission and authorization
 
@@ -9,6 +9,22 @@ Build a precise, beautiful, information-centered CAD application for functional 
 The owner has approved implementation. Build Phase 1 in the milestones defined in the roadmap. Do not silently remove essential requirements when a technical choice proves difficult. The [implementation record](IMPLEMENTATION_STATUS.md) tracks evidence and remaining release gates without changing these requirements.
 
 The initial real-world target is a multi-part 3D-printed tool for making a silicone mold that will subsequently form small concrete objects. Close-fitting removable parts, shared dimensions, alignment features, and clearances must therefore work in Phase 1. Windows and the owner's MacBook Pro are equal targets. The project is for personal use now, with future distribution options kept open.
+
+### Operation reference clarity
+
+Tool Origin, Tool Profile and Tool Path must remain visually identifiable throughout setup. Give each a consistent role color distinct from retained selection and hover, and mirror those cues in its panel section. Display the real profile boundaries/body and path relationship; derived normal paths must look different from selected/parallel edge paths. A native finishing section may be identified schematically without claiming an exact swept-cutter representation.
+
+Put travel inputs in an **Extent along path** subsection immediately under Tool Path references. Offer parallel **Distance** and **Percent of path** choices; percentages refer to a finite selected edge/chain and remain linked to its regenerated length. Implicit normals have no total length. Keep diameter/radius fields in Tool Profile; do not draw operation input boxes over the viewport. In every section, group source/mode controls, named reference and count/status together in the same order. Profile and motion choices belong in their relevant sections, with no redundant header launch strip or separate world-origin action. Exact zero coordinates remain available. Hovering a selected-reference name must use the same viewport highlight as hovering the entity directly, without changing selection, previews or history. Faces, edges and vertices need readable per-component labels such as Face 4 and Edge 13. These labels describe the current geometry revision; durable modeling references must remain separately guarded.
+
+The operation form places Origin Type, Tool Profile Shape and Tool Path Type above the colored reference boxes. Reference point offset labels U/V/N offsets below the origin reference. Tool Effect Type uses a dropdown. Extent along path stays visually inside Tool Path with no independent divider. The fixed footer contains Feature Name, then Apply operation / Cancel / preview status on one row. Avoid a redundant active-component header and generic commit/keyboard prose.
+
+Move Component (G; grid toggle on Shift+G) must be a toolbar action beside Tool Operation and a side-panel workflow with live movement previews and Apply/Cancel. Use exact, parameter-backed placement in an explicitly identified frame; nested assembly transforms and linked-instance scope must be truthful. Enter confirms and Escape cancels. Retain undo/autosave/attribution and never save an unconfirmed movement. The panel must offer Reference movement (default), XYZ distances/rotation increments, and true Rotation about a selected axis line and angle. Reference movement must infer point-to-point, projected alignment, or signed directional travel from the chosen origin, target, direction, and optional exact distance. Points on the active occurrence set origin; points elsewhere set target; edges set direction. Whole-component clicks choose the moved component. Explicit reference-pick controls override inference for edge endpoints/midpoints; every reference, exact distance, and active component can be cleared. Exact distance overrides target-based travel, and removing it restores inferred alignment. Rotation must respect the selected line's actual position and retain an editable angle parameter after Apply. Display source, target, line/axis, actual travel/rotation, and any remaining gap. Keep result measurements visible while scrolling. Point picks are exact snapshots, not implicit persistent mates. The world XYZ orientation cue must follow the camera and sit above the view options in the viewport's upper right. Enlarge it by 50% and make its X/Y/Z axes selectable as global direction references, also available in the movement panel. Expose exact edge midpoint snapping, including native curved-edge halfway points. Prepopulate Movement distance from inferred travel without converting automatic reference-driven motion into an exact override until edited. Match origin/target/direction panel styling, icons and pick/clear affordances to the viewport role colors.
+
+### Native path extent and profile accuracy
+
+Expose world origin as a selectable operation reference point, including the corner-indicator center and panel picks. Tool Path must have an independent target-point reference. Target extents project onto straight travel directions, finite sweep paths, or helical axes and regenerate from native references. No distance/percentage and no target means the full selected finite path; implicit infinite directions require explicit distance/target. Face picks made while choosing a path expand to the face's exact native boundary edges, preserving component/profile intent and normal connectivity checks. Do not infer topology by visual proximity.
+
+Fillet/chamfer profiles must show the actual changed corner cross-sectional area on a perpendicular plane, derived from before/after native geometry; do not draw a square surrogate. Show the section's native area and added/removed effect. Full-edge finishing remains available on edge groups. Target-limited finishing must be exact on a single straight edge with a planar cap; explain unsupported curved/multiple-edge partial extents rather than approximating them or silently finishing full edges.
 
 ## 2. Product ambition
 
@@ -57,6 +73,16 @@ Expose nominal dimensions, tolerance ranges, and fit/clearance requirements dire
 
 For a pin and socket, label whether clearance is radial/per-side or diametral/total. Maintain an explicit shared relationship and show nominal and simple worst-case fit results when sufficient inputs exist. Do not invent a universal printer clearance or present a dimensional check as a guarantee of physical fit.
 
+### Unified viewport operation requirement
+
+Material operations use one **Tool / T** workspace: **Tool Origin · Tool Profile · Tool Path · Tool Effect**. Every aspect remains revisitable. Extrusion, hole, round/bevel, sweep, revolve, planar raised detail and body Boolean are starting configurations within this process. Users must be able to change direction without canceling or opening a different creation dialog.
+
+Use viewport selections for origins, faces, vertices, support planes, paths, axes and targets. Geometry picks should update the relevant draft role from any scroll position: faces replace profiles/supports, edges replace paths, and vertices provide exact anchors. Preserve explicit dimensions, manual result overrides, locked origins and target ownership. Offer Auto Add/Remove from actual target/tool overlap, with an understandable decision display; freeze the accepted result during later regeneration. Keep old previews visibly stale while new work completes, reduce input-to-display latency without reducing geometry accuracy, and never allow an old candidate to apply. Exact coordinates and parameter-backed offsets refine these choices. Edge launch suggests corner finishing or a custom perpendicular section; face launch suggests whole-face travel or an explicitly placed hole. Vertex, component, planar-profile and empty-space launches have sensible defaults. Keep the target distinct from tool/reference selections.
+
+The dock must leave the model visible, with automatic native previews and dimensional inputs beside geometry. Apply commits the exact current visible validated candidate as one authored feature/action with automatic parameters and autosave. Enter confirms the current valid candidate from any workflow focus; one Escape cancels the entire operation, including picking/drawing. Implicit, selected and parallel path references must be visually distinct. Signed travel and Boolean result are independent, so choosing Remove cannot silently invert a negative distance. Cancel makes no document edit. The same interaction handles planar fabrication with no artificial thickness.
+
+[UNIFIED_OPERATIONS.md](UNIFIED_OPERATIONS.md) specifies launch flows, current implementation limits, API recipes and extension points. Advanced paths, richer inline constraints, tool libraries and wrapped emboss extend this workspace rather than multiplying creation dialogs.
+
 ## 6. External-agent operation
 
 RyanCAD includes an MCP server for external agents. It includes **no built-in chatbot, model-provider integration, or chat panel**.
@@ -93,9 +119,21 @@ Proposed workspace:
 - Feature timeline with authorship/activity overlay, rollback cursor, expensive-operation badges, and separate undo controls.
 - Compact external-agent activity controls; no chat panel.
 
+Do not put a statistics strip below the viewport. Put physical-instance and unique-definition counts in Design structure. Put material volume and surface/profile area in the inspector, scoped to the selected part or placed assembly; with no selection show quantity-aware design totals. Put saved revision and Undo/Redo in the bottom history/activity timeline.
+
+Use factual labels, measurements, actions, and status. No slogans, promotional or motivational copy, decorative health claims, or generic placeholder design intent. Show Notes only when the document contains actual notes. Empty states should identify the state and offer direct actions.
+
 Keep component size, volume or planar area, surface area where applicable, count, units, and health easy to see. Assembly statistics distinguish quantities from unique definitions. Hide/show is a display choice and must not silently change the bill of parts or export selection.
 
 Every metric identifies its scope, units, revision, and freshness. Mass and cost require explicit material/process assumptions. Prepare for assembly cost-change analysis, but defer the material/cost library to Phase 2.
+
+### Contextual information selection
+
+The viewport must actively help the user understand the geometry being hovered or selected. Prefer small dimension lines beside actual boundaries—such as a part's span and thickness—over large cards covering the model. Choose the visual form that communicates the fact with the least clutter; not every useful fact requires a dimension line.
+
+Create a service that generates measurement/information candidates, scores their usefulness, and chooses a readable set. Its mathematical policy should account for current interest, recent interactions, similar competing features, novelty/redundancy, view legibility, occlusion, available space, and display stability. Start with a transparent weighted model and leave providers, signals, weights, and layout independently extensible. This is a core product capability, rather than a growing set of per-tool display conditions.
+
+Preserve access to complete information and prepare manual pin/dismiss/show-more overrides. Ranking must never alter dimensions, merge parameter intent, fabricate measurements, or change the model. Phase 1 establishes the service and useful spatial annotations; later phases expand to fits, tolerances, fabrication properties, and task-aware analysis. See [contextual information design](CONTEXTUAL_INFORMATION.md) for the current implementation, limits, and development path.
 
 ## 9. Proposed Phase 1 baseline
 
@@ -144,3 +182,40 @@ Phase 2 adds SVG and related fabrication interchange as needed, plus kerf-aware 
 **Phase 3:** joints and kinematics, motion/clearance studies, specialist analysis integrations, advanced modeling where demanded, and optional collaboration/extensions. Force-based dynamics and structural validation remain distinct investments.
 
 Phase 1 is complete when a user can create and revise the multi-part mold manually or through an observable external agent, trace its parameter dependencies, inspect fit specifications, recover edits, and export the pieces on both Windows and macOS.
+
+## Operation presentation requirements — October 24 follow-up
+
+- Tool Origin, Tool Profile, Tool Path and Tool Effect are persistent vertical sections in one compact scrolling form, with fixed validation and Apply/Cancel controls. Users never need stage buttons to access another aspect. Numeric values retain units and reusable parameters.
+- Inspector and tool operation panel share the same responsive width; opening or closing the tool must preserve viewport bounds and camera framing.
+- The edited component stays opaque and identifiable in its display color. Inactive components are transparent during preparation (initially 20% surface opacity), remain pickable, and return to normal after the operation closes. Selection uses retained orange styling; hover must be visually distinct in color, weight and vertex shape, and identify the exact click target. Definition ownership determines focus, including linked instances, independently of the selected reference.
+- Selecting edges/faces updates overlays without reconstructing the native mesh. Preview replacement is atomic, with the previous solid candidate retained while assets load. Do not fade the target or draw competing source/candidate surfaces. Pending/invalid preview status is explicit and cannot be committed.
+
+- The active component is locked for the lifetime of a tool draft. To change it, cancel the operation, activate the intended component, and restart. Viewport/tree/timeline picks during setup update references only; neither explicit controls nor inference may retarget the draft. New-component drafts do not bind a target when geometry is picked.
+
+## Grouped selections and shared tool motion — October 24
+
+Shift-click adds/removes individual faces/edges before and during a tool operation. Multiple connected edges form a real native sweep path, ordered by connectivity, with branches/gaps rejected. Multiple planar faces or closed sketches on coplanar/parallel planes form a profile group; spacing and plane height survive shared travel. Groups expose counts/removal controls and remain one parametric feature/action. Active-component locking, transparent context and exact preview/commit remain in force. Limits and the connected-result ownership rule are explicit in the unified workflow specification.
+
+- Hover and retained selection must remain distinguishable even on the same entity. Hover uses a cyan/pale target cue and pointer label; selected geometry stays orange. Section-specific selection feedback belongs within Tool Origin/Profile/Path/Effect rather than above the form.
+
+
+## Dedicated design sketch workspace — October 26 update
+
+Sketch is a first-class toolbar operation (E), using the existing side panel and main viewport. No modal/full-viewport sketch construction editor remains. Start on a world plane or picked planar component face; automatically align an orthographic camera, show a legible adaptive grid/U/V axes, retain component references, and restore the previous camera and display setup on finish/cancel. Plane picking may temporarily orbit the model. The same workspace creates an ad hoc profile while a material operation is suspended; finishing saves a design sketch, attaches it to the pending tool and resumes its preview, while cancelling preserves the original tool configuration.
+
+New sketches belong to the design root, are independent from physical components and appear in a separate Sketches list. Creating a construction sketch must not inflate part counts, material totals or STL exports. Legacy component-owned sketches remain readable/editable; no destructive ownership migration is implicit. Saved design sketches have stable feature/parameter IDs and drive downstream geometry.
+
+The initial drawing set includes connected lines, rectangles, circles, center/start/end counterclockwise arcs, points and copied projections. Support exact U/V entry, editable coordinates/radii, configurable grid snapping, endpoint/midpoint/origin snapping, horizontal/vertical alignment, construction geometry, local undo, explicit Finish/Cancel and native constraint validation. Components remain visible and referenceable during drawing. Initial projections are clearly identified independent construction copies; curved references use sampled line segments. Initial picked planes are explicit frozen world frames, not associative attachments. Native constraints solve at Finish; continuous live solving, associative projection/attachment, direct dimension manipulation and trim/offset are follow-up design work, not implied capabilities.
+
+
+## Selectable component groups and direct toolbar — October 27 update
+
+Group Components is a direct top-bar operation. Group existing components without joining bodies or moving them; support adding members to existing groups, aggregate selection/highlighting, G movement/rotation, copy and undoable ungrouping. Double-clicking a closed group in the viewport or tree opens its immediate children for normal part/feature editing; outside parts are muted and a clear Done action exits. Group copies have independent container structure/placements with linked physical part definitions. Keep stable component/feature identities and repair occurrence paths transactionally when organization changes.
+
+Remove the All tools dropdown and its shape/motion shortcuts duplicated by the universal Tool. Put remaining distinct workflows directly in the top bar, including component arrays, stock, parameter creation, fits, measurement and checkpoints. Preserve Sketch and universal Tool entry points. Keep full accessible names/tooltips and a compact, usable layout.
+
+## Design collections and history presentation — October 27, 2026
+
+Organize each design into Components (manufactured assembly tree and counts), 2D Sketches (flat design-level list) and 3D Tool Bodies (flat reusable tool library). Tool bodies are built and edited with the same parametric engine in a private workbench within the main viewport. Their editing coordinates are not manufacturing placements; they are excluded from assembly counts and exports and are positioned through Tool Origin when used. Save the reusable tool definitions with the design and protect existing references when removing one.
+
+Feature history must support a unified design timeline or aligned parallel lanes per component definition. Preserve each feature's global horizontal position with gaps in other lanes. Lane hiding merges its events into the top root lane; restoring/unifying must never lose or reorder events. Bound expanded height, provide vertical scrolling and retain component names during horizontal scrolling. Provide Previous/Next feature controls, including the empty origin state, using the existing non-destructive history inspection and expensive-compute safeguards.

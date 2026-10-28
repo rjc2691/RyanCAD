@@ -2798,30 +2798,6 @@ export default function App() {
             </button>
           </div>
         )}
-        {!state?.summary.instances &&
-          !busy &&
-          !sketch &&
-          !savedSketchObjects.length && (
-            <div className="empty-workspace">
-              <h1>No components</h1>
-              <div>
-                <button
-                  className="button primary"
-                  onClick={() => chooseTool("box")}
-                >
-                  <Plus size={16} />
-                  Create a part
-                </button>
-                <button
-                  className="button secondary"
-                  onClick={() => loadRecipe("mold")}
-                >
-                  Load mold example
-                  <ArrowRight size={15} />
-                </button>
-              </div>
-            </div>
-          )}
         {busy && (
           <div className="job-card">
             <LoaderCircle className="spin" size={17} />

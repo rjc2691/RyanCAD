@@ -724,8 +724,7 @@ svg {
   background: #1a2531;
 }
 .left-panel-bottom {
-  margin-top: auto;
-  padding: 15px 15px 0;
+  padding: 15px 15px 10px;
 }
 .status-orb {
   display: inline-block;
@@ -4814,7 +4813,7 @@ svg {
 .timeline-heading-right {gap:10px;}
 .timeline-panel > header {flex-wrap:wrap;min-height:36px;height:auto;gap:4px 12px;}
 
-.design-utilities {margin-top:10px;padding:6px 18px;border-top:1px solid var(--line);}
+.design-utilities {margin-top:auto;padding:6px 18px;border-top:1px solid var(--line);}
 .design-utility-link {display:flex;align-items:center;gap:8px;width:100%;text-align:left;font-size:10px;color:#8da1b6;padding:8px 0;}
 .design-utility-link small {margin-left:auto;}
 .feature-history-scroll:not(.parallel-history) .history-lane-grid {grid-auto-rows:88px;padding-bottom:0;}

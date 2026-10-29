@@ -1,5 +1,9 @@
 # RyanCAD product request
 
+## Editing existing history features — October 29, 2026
+
+Double-click a feature event to reopen it for editing in the right panel. Preview edits by rebuilding that feature and every later operation, while retaining its identity, component and position in the history. Apply updates the existing feature as an undoable authored transaction; Cancel/Escape leaves saved intent unchanged. Enter confirms only the current validated preview. Later-feature failures must be reported and block committing. Sketch events reopen the sketch workflow. Keep timeline stepping available separately for inspecting build stages. Existing operation dimensions and supported material/direction settings are editable initially; preserve original profile and frozen reference geometry rather than recreating cross-component bindings.
+
 ## Current interaction policy — October 28, 2026
 
 References to other components and the world origin are one-time construction aids. Accepted operations retain fixed local placement and copied external geometry, not a live relationship to the picked source. Sketch-local dimension constraints remain; projected component geometry is copied. Ordinary dimensions are local numeric values. Named parameters are optional values deliberately created in the Parameters window, with live name suggestions in numeric fields and subtle provenance on viewport dimensions. These decisions supersede earlier requirements to make every dimension a named parameter or maintain cross-component geometric links. See [Simple design intent](SIMPLE_DESIGN_INTENT.md) for behavior and migration.

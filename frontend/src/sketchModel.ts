@@ -128,6 +128,7 @@ export function frameFromSelection(
   selection: Selection | null,
   state: State,
 ): SketchFrame | null {
+  if(selection?.worldPlane)return worldSketchFrame(selection.worldPlane);
   if (selection?.face?.type !== "PLANE") return null;
   const f = operationFrame(initialOperation(selection, state), state);
   return {
@@ -345,6 +346,26 @@ export function snapSketchPoint(
   }
   return result.map((x) => Math.round(x * 1e6) / 1e6) as SketchPoint;
 }
+/** A new segment closes an outline if its ends already share a non-collinear path. */
+function closesLineOutline(d:SketchDraft,a:SketchPoint,b:SketchPoint){
+  const near=(p:SketchPoint,q:SketchPoint)=>Math.hypot(p[0]-q[0],p[1]-q[1])<1e-6;
+  const length=Math.hypot(b[0]-a[0],b[1]-a[1]);
+  const edges=d.entities.filter(e=>['line','arc'].includes(e.type)&&!!e.construction===!!d.construction).map(e=>entityPoints(e));
+  const queue:{point:SketchPoint;bent:boolean}[]=[{point:a,bent:false}],seen:typeof queue=[];
+  while(queue.length){
+    const current=queue.shift()!;
+    if(seen.some(s=>near(s.point,current.point)))continue;
+    seen.push(current);
+    if(near(current.point,b))return current.bent;
+    for(const ps of edges){
+      const first=ps[0],last=ps.at(-1)!;if(!first||near(first,last))continue;
+      if(!near(current.point,first)&&!near(current.point,last))continue;
+      const bent=current.bent||ps.some(p=>Math.abs((p[0]-a[0])*(b[1]-a[1])-(p[1]-a[1])*(b[0]-a[0]))/length>1e-6);
+      queue.push({point:near(current.point,first)?last:first,bent});
+    }
+  }
+  return false;
+}
 export function sketchClick(
   d: SketchDraft,
   p: SketchPoint,
@@ -395,13 +416,16 @@ export function sketchClick(
   const a = d.pending[0];
   if (Math.hypot(p[0] - a[0], p[1] - a[1]) < 1e-6)
     return { ...d, message: "Choose a different point." };
-  if (d.tool === "line")
+  if (d.tool === "line") {
+    const closed=closesLineOutline(d,a,p);
     return {
       ...addEntities(d, [
         { type: "line", x1: a[0], y1: a[1], x2: p[0], y2: p[1] },
       ]),
-      pending: [p],
+      pending: closed?[]:[p],
+      cursor:closed?null:p,
     };
+  }
   if (d.tool === "rectangle") {
     if (Math.abs(p[0] - a[0]) < 1e-6 || Math.abs(p[1] - a[1]) < 1e-6)
       return { ...d, message: "Rectangle width and height must be nonzero." };

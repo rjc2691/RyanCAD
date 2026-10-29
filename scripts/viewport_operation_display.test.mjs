@@ -4,42 +4,69 @@ import * as THREE from '../frontend/node_modules/three/build/three.module.js';
 import {syncOperationAppearance,disposePreview,operationDisplayContext,SELECTION_COLOR,COMPONENT_SELECTION_COLOR} from '../frontend/src/viewportOperationDisplay.ts';
 import {defaultAppearance} from '../frontend/src/experiments.ts';
 
-test('experimental shading removes only active component edge styling and restores it when disabled',()=>{
+test('experimental pulses replace only active component edge styling and restores it when disabled',()=>{
  const {parts,props}=fixture();props.operationDraft=undefined;props.selected={occurrence:'target',definition:'p'};
  const active=parts.children[0],other=parts.children[1],outline=new THREE.Object3D(),selectedEdge=new THREE.Object3D();
  outline.userData.wholeOutline=true;active.userData.selectionLayer.add(outline,selectedEdge);
  syncOperationAppearance(parts,null,props);assert.equal(active.userData.wire.material.color.getHexString(),'f3a64f');
  props.activeAppearance={...defaultAppearance(),enabled:true};syncOperationAppearance(parts,null,props);
  assert.equal(active.userData.wire.material.color.getHexString(),'182330');assert.equal(other.userData.wire.material.color.getHexString(),'182330');
- assert.equal(active.userData.surface.material.userData.activeAppearance.cadActiveMode.value,1);assert.equal(other.userData.surface.material.userData.activeAppearance,undefined);
+ assert(active.userData.edgePulseLayer.visible);assert.equal(other.userData.edgePulseLayer,undefined);
  assert(!outline.visible);assert(selectedEdge.visible);
  props.activeAppearance.enabled=false;syncOperationAppearance(parts,null,props);
- assert.equal(active.userData.wire.material.color.getHexString(),'f3a64f');assert(outline.visible);assert.equal(active.userData.surface.material.userData.activeAppearance.cadActiveMode.value,0);
+ assert.equal(active.userData.wire.material.color.getHexString(),'f3a64f');assert(outline.visible);assert.equal(active.userData.edgePulseLayer.visible,false);
 });
 
-test('native operation candidates receive experimental shading with neutral edges',()=>{
- const {parts,props}=fixture(),display=candidate();props.activeAppearance={...defaultAppearance(),enabled:true,style:'rim-glow'};
+test('native operation candidates receive animated edge pulses with neutral source edges',()=>{
+ const {parts,props}=fixture(),display=candidate();props.activeAppearance={...defaultAppearance(),enabled:true};
  syncOperationAppearance(parts,display,props);
- const mesh=display.root.children[0].children[0];assert.equal(mesh.material.userData.activeAppearance.cadActiveMode.value,2);assert.equal(mesh.material.opacity,1);assert.equal(mesh.material.transparent,false);
+ const mesh=display.root.children[0].children[0];assert(display.root.children[0].userData.edgePulseLayer.visible);assert.equal(display.root.children[0].userData.edgePulseLayer.children[1].material.uniforms.cadPulseCount.value,3);assert.equal(mesh.material.opacity,1);assert.equal(mesh.material.transparent,false);
+});
+
+test('pulse previews dispose owned line buffers while keeping shared native assets single-owned',()=>{
+ const {parts,props}=fixture(),display=candidate();props.activeAppearance={...defaultAppearance(),enabled:true};syncOperationAppearance(parts,display,props);
+ let nativeDisposed=0,overlaysDisposed=0;display.assets.get('p').edges.addEventListener('dispose',()=>nativeDisposed++);
+ for(const group of display.root.children)for(const stroke of group.userData.edgePulseLayer.children)stroke.geometry.addEventListener('dispose',()=>overlaysDisposed++);
+ disposePreview(display);assert.equal(nativeDisposed,1);assert.equal(overlaysDisposed,4);
 });
 
 function fixture() {
   const parts=new THREE.Group();
   const occurrences=[{id:'target',definition:'p',color:'#aaccee'},{id:'linked',definition:'p',color:'#aaccee'},{id:'context',definition:'q',color:'#ccaa88'}];
   for(const occurrence of occurrences) {
-    const group=new THREE.Group(),surface=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial()),wire=new THREE.LineSegments(new THREE.BufferGeometry(),new THREE.LineBasicMaterial()),selectionLayer=new THREE.Group();
+    const group=new THREE.Group(),surface=new THREE.Mesh(new THREE.BoxGeometry(),new THREE.MeshStandardMaterial()),wire=new THREE.LineSegments(new THREE.EdgesGeometry(surface.geometry),new THREE.LineBasicMaterial()),selectionLayer=new THREE.Group();
     group.userData={occurrence,surface,wire,selectionLayer};group.add(surface,wire,selectionLayer);parts.add(group);
   }
   const props={geometry:{p:{geometry_key:'old'},q:{geometry_key:'context'}},occurrences,selected:{occurrence:'target',definition:'p'},operationDraft:{target:{definition:'p'},profile:'fillet',result:'auto'},section:false};
   return {parts,props};
 }
 function candidate() {
-  const root=new THREE.Group(),assets=new Map([['p',{geometry:new THREE.BoxGeometry(),edges:new THREE.BufferGeometry()}]]);
+  const root=new THREE.Group(),assets=new Map([['p',{geometry:new THREE.BoxGeometry(),edges:new THREE.EdgesGeometry(new THREE.BoxGeometry())}]]);
   for(const id of ['target','linked']) {
     const group=new THREE.Group();group.userData.occurrence={id,definition:'p',color:'#aaccee'};group.add(new THREE.Mesh(assets.get('p').geometry,new THREE.MeshStandardMaterial()));root.add(group);
   }
   return {token:'preview',context:'part:p',root,assets,components:{p:{geometry_key:'new'}},section:false};
 }
+test('historical feature previews replace the edited body, keep it opaque, and dim other components',()=>{
+ const {parts,props}=fixture(),display=candidate();props.operationDraft=undefined;props.featureEditTarget={occurrence:'target',definition:'p'};display.context='edit:p';
+ syncOperationAppearance(parts,display,props);
+ assert.equal(parts.children[0].userData.surface.material.colorWrite,false);
+ assert.equal(parts.children[0].userData.surface.material.opacity,1);
+ assert.equal(parts.children[2].userData.surface.material.opacity,.2);
+ assert(display.root.children[0].visible);
+ props.featureEditTarget=null;syncOperationAppearance(parts,null,props);
+ assert.equal(parts.children[0].userData.surface.material.colorWrite,true);
+ assert.equal(parts.children[2].userData.surface.material.opacity,1);
+});
+test('suppressing a historical seed hides its old solid even when the candidate has no replacement mesh',()=>{
+ const {parts,props}=fixture(),display=candidate();props.operationDraft=undefined;props.featureEditTarget={occurrence:'target',definition:'p'};display.context='edit:p';display.root.clear();display.components.p={status:'draft'};
+ syncOperationAppearance(parts,display,props);
+ assert.equal(parts.children[0].userData.surface.material.colorWrite,false);
+ assert.equal(parts.children[0].userData.wire.visible,false);
+ assert.equal(parts.children[1].userData.surface.material.colorWrite,false);
+ assert.equal(parts.children[2].userData.surface.material.colorWrite,true);
+ syncOperationAppearance(parts,null,props);assert.equal(parts.children[0].userData.surface.material.colorWrite,true);
+});
 test('operation focus follows the edited definition, including linked instances, rather than the last picked reference',()=>{
   const {parts,props}=fixture();props.selected={occurrence:'context',definition:'q'};syncOperationAppearance(parts,null,props);
   for(const group of parts.children){const {surface,occurrence}=group.userData;const inactive=occurrence.definition==='q';assert.equal(surface.material.opacity,inactive?.2:1);assert.equal(surface.material.transparent,inactive);assert.equal(surface.material.depthWrite,!inactive);assert(surface.material.color.equals(new THREE.Color(occurrence.color)));}

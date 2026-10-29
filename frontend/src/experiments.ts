@@ -1,25 +1,27 @@
 export const EXPERIMENT_STORAGE_KEY = "ryancad-experiments-v1";
 export const ACTIVE_APPEARANCE_ID = "active-component-appearance";
-export const ACTIVE_APPEARANCE_STYLES = [
-  { id: "soft-glow", name: "Soft glow" },
-  { id: "rim-glow", name: "Rim glow" },
-  { id: "height-gradient", name: "Height gradient" },
-] as const;
+export const SIDEBAR_TOOLBAR_LAYOUT_ID = "sidebar-toolbar-layout";
 export interface ActiveAppearance {
   enabled: boolean;
-  style: (typeof ACTIVE_APPEARANCE_STYLES)[number]["id"];
   strength: number;
   tint: string;
+  speed: number;
+  pulses: number;
 }
 export interface Experiments {
   version: 1;
   "active-component-appearance": ActiveAppearance;
+  "sidebar-toolbar-layout": {
+    enabled: boolean;
+    mode?: "between" | "inset-buttons";
+  };
 }
 export const defaultAppearance = (): ActiveAppearance => ({
   enabled: false,
-  style: "soft-glow",
-  strength: 0.65,
-  tint: "#f3b879",
+  strength: 0.8,
+  tint: "#79bfff",
+  speed: 0.16,
+  pulses: 3,
 });
 export function normalizeExperiments(raw: unknown): Experiments {
   const defaults = defaultAppearance(),
@@ -27,12 +29,26 @@ export function normalizeExperiments(raw: unknown): Experiments {
       (raw as any)?.version === 1 ? (raw as any)[ACTIVE_APPEARANCE_ID] : null;
   return {
     version: 1,
+    [SIDEBAR_TOOLBAR_LAYOUT_ID]: {
+      mode:
+        (raw as any)?.[SIDEBAR_TOOLBAR_LAYOUT_ID]?.mode === "inset-buttons"
+          ? "inset-buttons"
+          : "between",
+      enabled:
+        (raw as any)?.version === 1 &&
+        (raw as any)?.[SIDEBAR_TOOLBAR_LAYOUT_ID]?.enabled === true,
+    },
     [ACTIVE_APPEARANCE_ID]: {
       enabled:
         typeof value?.enabled === "boolean" ? value.enabled : defaults.enabled,
-      style: ACTIVE_APPEARANCE_STYLES.some((s) => s.id === value?.style)
-        ? value.style
-        : defaults.style,
+      speed:
+        typeof value?.speed === "number" && Number.isFinite(value.speed)
+          ? Math.max(0.02, Math.min(1, value.speed))
+          : defaults.speed,
+      pulses:
+        typeof value?.pulses === "number" && Number.isFinite(value.pulses)
+          ? Math.max(1, Math.min(6, Math.round(value.pulses)))
+          : defaults.pulses,
       strength:
         typeof value?.strength === "number" && Number.isFinite(value.strength)
           ? Math.max(0.1, Math.min(1, value.strength))

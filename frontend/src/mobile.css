@@ -24,7 +24,7 @@
   .file-actions {gap:3px;}
   .file-actions .button {width:36px;min-height:44px;padding:8px;gap:0;}
   .file-actions .button > span,.file-actions .button > svg:last-child {display:none;}
-  .file-action-menu {position:fixed;right:8px;top:calc(52px + env(safe-area-inset-top, 0px));}
+  .file-action-menu {position:fixed;left:8px;top:calc(52px + env(safe-area-inset-top, 0px));}
   #root > .app-shell {
     min-width: 0;
     min-height: 0;

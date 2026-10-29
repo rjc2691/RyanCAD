@@ -13,6 +13,22 @@ test('connected line chains snap to endpoints and midpoints before the configura
  assert.deepEqual(d.pending,[[10,0]]);assert.deepEqual(snapSketchPoint(d,[5.1,.1],.3),[5,0]);
  assert.deepEqual(snapSketchPoint({...d,pending:[],snap:.25},[3.31,1.11],.01),[3.25,1]);
 });
+
+test('closing a snapped outline ends the chain; the next click starts another without an extra segment',()=>{
+ let d={...startSketch(state),gridSnapEnabled:false};
+ for(const p of [[0,0],[10,0],[10,10],[.05,.04]])d=sketchClick(d,p,.1);
+ assert.equal(d.entities.length,3);assert.deepEqual([d.entities[2].x2,d.entities[2].y2],[0,0]);
+ assert.deepEqual(d.pending,[]);assert.equal(d.cursor,null);assert.equal(d.tool,'line');
+ d=sketchClick(d,[30,30],0);assert.equal(d.entities.length,3);assert.deepEqual(d.pending,[[30,30]]);
+});
+
+test('closing an existing open outline ends drawing but unrelated endpoints and flat retracing do not',()=>{
+ const initial={...startSketch(state),snap:0,entities:[{id:'a',type:'line',x1:0,y1:0,x2:10,y2:0},{id:'b',type:'line',x1:10,y1:0,x2:10,y2:10}]};
+ let d=sketchClick(initial,[10,10],0);d=sketchClick(d,[0,0],0);assert.deepEqual(d.pending,[]);
+ d=sketchClick({...initial,pending:[[10,10]]},[20,0],0);assert.deepEqual(d.pending,[[20,0]]);
+ d=sketchClick({...initial,pending:[[10,0]]},[0,0],0);assert.deepEqual(d.pending,[[0,0]]);
+ d=sketchClick({...initial,pending:[[10,10]],construction:true},[0,0],0);assert.deepEqual(d.pending,[[0,0]],'construction cannot close ordinary geometry');
+});
 test('circle and center arc use exact radii and degree angles',()=>{
  let d={...startSketch(state),tool:'circle'};d=sketchClick(d,[2,3],0);d=sketchClick(d,[5,7],0);assert.equal(d.entities[0].radius,5);
  d={...d,tool:'arc'};d=sketchClick(d,[0,0],0);d=sketchClick(d,[10,0],0);d=sketchClick(d,[0,10],0);assert.equal(d.entities[1].end_angle,90);assert.equal(d.entities[1].radius,10);assert.equal(entityPoints(d.entities[1]).length,65);

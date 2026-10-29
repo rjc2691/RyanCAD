@@ -1,3 +1,4 @@
+import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
 import {
   Check,
   Circle,
@@ -50,8 +51,10 @@ export default function SketchToolbar({
       {tools.map((t) => (
         <button
           key={t.id}
+          {...shortcutAttributes("sketch_"+t.id)}
           className={`tool-button ${draft.tool === t.id ? "active" : ""}`}
           aria-label={`Sketch ${t.label}`}
+
           aria-pressed={draft.tool === t.id}
           title={`${t.label} · ${t.key}`}
           disabled={disabled}
@@ -59,7 +62,7 @@ export default function SketchToolbar({
         >
           <t.icon size={18} />
           <span>{t.label}</span>
-          <kbd>{t.key}</kbd>
+          <kbd>{shortcutLabel("sketch_"+t.id)}</kbd>
         </button>
       ))}
       <div className="tool-divider" />
@@ -68,9 +71,11 @@ export default function SketchToolbar({
         disabled={disabled}
         onClick={onUndo}
         title="Undo sketch edit · Ctrl Z"
+        aria-keyshortcuts="Control+z Meta+z"
       >
         <Undo2 size={18} />
         <span>Undo</span>
+        <kbd>Ctrl/⌘+Z</kbd>
       </button>
       <div className="toolbar-spacer" />
       <button
@@ -78,18 +83,22 @@ export default function SketchToolbar({
         disabled={disabled || !draft.entities.length}
         onClick={onFinish}
         title="Finish sketch · Enter"
+        aria-keyshortcuts="Enter"
       >
         <Check size={18} />
         <span>Finish sketch</span>
+        <kbd>Enter</kbd>
       </button>
       <button
         className="tool-button"
         disabled={busy}
         onClick={onCancel}
         title="Cancel sketch · Esc"
+        aria-keyshortcuts="Escape"
       >
         <X size={18} />
         <span>Cancel sketch</span>
+        <kbd>Esc</kbd>
       </button>
     </>
   );

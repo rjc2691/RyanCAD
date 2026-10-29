@@ -52,7 +52,7 @@ try{
  await page.locator('.component-select').nth(1).waitFor();
  await page.locator('.component-select').first().tap();
  await page.getByRole('button',{name:'Export',exact:true}).tap();
- await page.getByRole('menuitem',{name:/STL components/}).tap();
+ await page.getByRole('menuitem',{name:/STL file/}).tap();
  await page.getByRole('dialog').waitFor();
  await page.screenshot({path:output+'/phone-export.png'});
  await page.getByRole('button',{name:'Close dialog'}).tap();

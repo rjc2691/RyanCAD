@@ -1,4 +1,7 @@
+import {shortcutLabel} from './toolbarShortcuts';
 import type {ActiveAppearance} from "./experiments";
+import {updateEdgePulseTime} from './activeAppearance';
+import {createWorldPlanes,styleWorldPlanes,worldPlaneAxes,type WorldPlane} from './worldPlanes';
 import MeasureGuide,{type MeasureGuideHandle} from "./MeasureGuide";
 import type {MeasurePoint} from "./measureModel";
 import SectionGuide,{type SectionGuideHandle} from "./SectionGuide";
@@ -60,6 +63,8 @@ import type {
 } from "./operations/operationModel";
 import {
   COMPONENT_SELECTION_COLOR,
+  HOVER_COLOR,
+  SELECTION_COLOR,
   disposePreview,
   viewportDisplayContext,
   syncOperationAppearance,
@@ -67,6 +72,8 @@ import {
 } from "./viewportOperationDisplay";
 
 interface Props {
+  onWorldPlane?:(plane:WorldPlane)=>void;
+  selectedWorldPlane?:WorldPlane;
   measurePoints?: MeasurePoint[] | null;
   onWorldAxis?: (axis: WorldAxis) => void;
   editingGroup?: string;
@@ -89,6 +96,7 @@ interface Props {
   operationFrame?: OperationFrame;
   operationDraft?: OperationDraft;
   placementTarget?: Selection | null;
+  featureEditTarget?: Selection | null;
   movementGuide?: MovementGuideData | null;
   orientationRef?: React.RefObject<{
     update: (camera: THREE.Camera) => void;
@@ -199,6 +207,8 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     };
   }, []);
   const [hovered, setHovered] = useState<Selection | null>(null);
+  const [hoveredSketch,setHoveredSketch]=useState<string|null>(null);
+  const [hoveredWorldPlane,setHoveredWorldPlane]=useState<WorldPlane|null>(null);
   const [hoveredAxis, setHoveredAxis] = useState<WorldAxis | null>(null);
   const hoveredAxisRef = useRef<WorldAxis | null>(null);
   hoveredAxisRef.current = hoveredAxis;
@@ -275,7 +285,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           new THREE.LineBasicMaterial({
             color:
               props.selectedSketch === d.feature?.id
-                ? "#2455a4"
+                ? SELECTION_COLOR
                 : e.construction
                   ? "#be9be9"
                   : "#f3ce77",
@@ -290,9 +300,14 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           line.material as THREE.LineBasicMaterial
         ).color.getHex();
         group.add(line);
+        if(props.selectedSketch===d.feature?.id&&points.length>1){
+          const segments=points.slice(1).flatMap((p,i)=>[...points[i].toArray(),...p.toArray()]);
+          const selectedStroke=wideLines(segments,SELECTION_COLOR,3.5,[]);selectedStroke.material.depthTest=false;selectedStroke.renderOrder=13;group.add(selectedStroke);
+        }
       }
     }
     return () => {
+      s.clearHover?.();
       s.scene.remove(group);
       if (s.sketchObjects === group) s.sketchObjects = null;
       disposeOverlay(group);
@@ -641,30 +656,25 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     gm.opacity = 0.23;
     scene.add(grid);
     const axes = new THREE.Group();
-    for (const [direction, color] of [
-      [new THREE.Vector3(1, 0, 0), "#a85f65"],
-      [new THREE.Vector3(0, 1, 0), "#77a88a"],
-      [new THREE.Vector3(0, 0, 1), "#659ac7"],
-    ] as const) {
-      const points = [
-        new THREE.Vector3(),
-        direction.clone().multiplyScalar(500),
-      ];
-      const line = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(points),
-        new THREE.LineBasicMaterial({
-          color,
-          transparent: true,
-          opacity: 0.23,
-        }),
-      );
-      line.userData.worldAxis = (["X", "Y", "Z"] as const)[
-        axes.children.length
-      ];
-      line.userData.baseColor = color;
-      axes.add(line);
+    for (const [index,[direction,color]] of ([
+      [new THREE.Vector3(1,0,0),'#d87b81'],
+      [new THREE.Vector3(0,1,0),'#8bc79f'],
+      [new THREE.Vector3(0,0,1),'#80baf0'],
+    ] as const).entries()) {
+      for(const sign of [1,-1]){
+        const endpoint=direction.clone().multiplyScalar(500*sign),axis=(['X','Y','Z'] as const)[index];
+        const pickLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),endpoint]),new THREE.LineBasicMaterial({visible:false}));
+        pickLine.userData.worldAxis=axis;pickLine.userData.axisPick=true;
+        const stroke=wideLines([0,0,0,...endpoint.toArray()],color,sign>0?2:1.1,[]);
+        stroke.material.opacity=sign>0?.85:.27;stroke.material.depthTest=true;stroke.renderOrder=1;
+        stroke.userData.worldAxis=axis;stroke.userData.baseColor=color;stroke.userData.axisSign=sign;
+        axes.add(pickLine,stroke);
+      }
     }
     scene.add(axes);
+    const worldPlanes=createWorldPlanes();scene.add(worldPlanes);
+    let planeHover:WorldPlane|null=null;
+    const showPlaneHover=(plane:WorldPlane|null)=>{if(planeHover!==plane){planeHover=plane;setHoveredWorldPlane(plane);}};
     const parts = new THREE.Group();
     scene.add(parts);
     const previewGroup = new THREE.Group();
@@ -823,13 +833,19 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         if (midpoint) hoverLayer.add(midpoint);
       }
     };
+    const sketchHoverLayer=new THREE.Group();scene.add(sketchHoverLayer);
+    let sketchHoverId:string|null=null;
     const showSketchHover = (id: string | null) => {
+      if(id===sketchHoverId)return;
+      sketchHoverId=id;setHoveredSketch(id);disposeOverlay(sketchHoverLayer);
+      if(!id)return;
       for (const line of sceneRef.current?.sketchObjects?.children || []) {
-        (line.material as THREE.LineBasicMaterial).color.set(
-          id && line.userData.sketchId === id
-            ? "#ffc477"
-            : line.userData.baseColor,
-        );
+        if(line.userData.sketchId!==id)continue;
+        const positions=(line as THREE.Line).geometry.getAttribute('position'),segments:number[]=[];
+        for(let i=1;i<positions.count;i++)for(const j of [i-1,i])segments.push(positions.getX(j),positions.getY(j),positions.getZ(j));
+        for(const [color,width,order] of [[HOVER_COLOR,2.5,15]] as const){
+          const stroke=wideLines(segments,color,width,[]);stroke.material.depthTest=false;stroke.renderOrder=order;sketchHoverLayer.add(stroke);
+        }
       }
     };
     const clearHover = () => {
@@ -837,6 +853,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       setHoveredAxis(null);
       showHover(null, "viewport");
       showSketchHover(null);
+      showPlaneHover(null);
     };
     const pickSketch = (event: MouseEvent): string | null => {
       const current = propsRef.current,
@@ -860,7 +877,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       objects.updateMatrixWorld(true);
       return (
         raycaster
-          .intersectObjects(objects.children, false)
+          .intersectObjects(objects.children.filter((o:any)=>o.userData.sketchId), false)
           .find((hit) => hit.object.userData.sketchId)?.object.userData
           .sketchId || null
       );
@@ -896,7 +913,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       const tolerance =
         ((camera.top - camera.bottom) / camera.zoom / rect.height) * 6;
       raycaster.params.Line.threshold = tolerance;
-      const hits = raycaster.intersectObjects(axes.children, false);
+      const hits = raycaster.intersectObjects(axes.children.filter(o=>o.userData.axisPick), false);
       const hit = hits.find((h) => {
         const endpoint = new THREE.Vector3()
           .fromBufferAttribute(
@@ -921,6 +938,25 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         .find((h) => !current.section || sectionKeeps(h.point,current.sectionPlane));
       if (surface && surface.distance < hit.distance - tolerance) return null;
       return hit.object.userData.worldAxis as WorldAxis;
+    };
+    const pickWorldPlane=(event:MouseEvent):WorldPlane|null=>{
+      if(!worldPlanes.visible)return null;
+      camera.updateMatrixWorld();worldPlanes.updateMatrixWorld(true);parts.updateMatrixWorld(true);
+      const r=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2);raycaster.setFromCamera(pointer,camera);
+      const marker=raycaster.intersectObjects(worldPlanes.children.map(g=>g.children[0]),false).find(h=>Math.abs(raycaster.ray.direction.dot(h.object.userData.normal))>.08);
+      const surfaces=parts.children.flatMap(g=>g.children.filter(o=>(o.type==='Mesh'||o.type==='LineSegments')&&!o.userData.overlay));
+      raycaster.params.Line.threshold=(camera.top-camera.bottom)/camera.zoom/r.height*5;
+      const occluder=raycaster.intersectObjects(surfaces,false).find(h=>!propsRef.current.section||sectionKeeps(h.point,propsRef.current.sectionPlane));
+      if(propsRef.current.sketchPlanePicking&&occluder)return null;
+      if(marker&&(!occluder||occluder.distance>marker.distance+.001))return marker.object.userData.worldPlane;
+      if(!propsRef.current.sketchPlanePicking)return null;
+      const candidates=worldPlanes.children.flatMap(group=>{
+        const plane=group.userData.worldPlane as WorldPlane,{u,v}=worldPlaneAxes(plane),normal=new THREE.Vector3().crossVectors(u,v),point=new THREE.Vector3();
+        if(Math.abs(raycaster.ray.direction.dot(normal))<.08||!raycaster.ray.intersectPlane(new THREE.Plane(normal,0),point))return [];
+        const a=point.dot(u),b=point.dot(v);if(a<=1e-6||b<=1e-6)return [];
+        return [{plane,score:Math.min(a,b)/Math.max(a,b),distance:raycaster.ray.origin.distanceTo(point)}];
+      });
+      candidates.sort((a,b)=>b.score-a.score||a.distance-b.distance);return candidates[0]?.plane||null;
     };
     const pick = (event: MouseEvent): Selection | null => {
       camera.updateMatrixWorld();
@@ -1159,7 +1195,9 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         clearHover();
         return;
       }
+      const plane=pickWorldPlane(event);if(plane){propsRef.current.onWorldPlane?.(plane);clearHover();return;}
       propsRef.current.onSelect(pick(event), event.shiftKey);
+
     };
     const pointermove = (event: PointerEvent) => {
       if (
@@ -1201,7 +1239,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       pointerleave();
     };
     const doubleclick = (event: MouseEvent) => {
-      if (pickSketch(event)) return;
+      if (pickSketch(event)||pickWorldPlane(event)) return;
       if (
         !propsRef.current.operationDraft &&
         !propsRef.current.placementTarget &&
@@ -1245,17 +1283,25 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     observer.observe(host);
     let frame = 0;
     const render = () => {
+      updateEdgePulseTime(performance.now()/1000);
       frame = requestAnimationFrame(render);
       controls.update();
+      const current=propsRef.current;
+      worldPlanes.visible=!!current.onWorldPlane&&(!current.sketch||!!current.sketchPlanePicking)&&!current.operationDraft&&!current.placementTarget&&!current.featureEditTarget&&!current.measurePoints&&(current.grid||!!current.sketchPlanePicking);
+      worldPlanes.scale.setScalar((camera.top-camera.bottom)/camera.zoom/Math.max(1,state.height));
+      if(!worldPlanes.visible)showPlaneHover(null);
+      styleWorldPlanes(worldPlanes,planeHover,current.selectedWorldPlane,!!current.sketchPlanePicking,Math.max(state.width,state.height)*24);
       if (lastPointer) {
         const event = lastPointer;
         const sketchId = pickSketch(event);
         showSketchHover(sketchId);
         const axis = sketchId ? null : pickWorldAxis(event);
         setHoveredAxis(axis);
+        const plane=sketchId||axis?null:pickWorldPlane(event);showPlaneHover(plane);
         const picked =
           sketchId ||
           axis ||
+          plane ||
           (propsRef.current.sketch &&
             propsRef.current.sketch.tool !== "project" &&
             !propsRef.current.sketchPlanePicking) ||
@@ -1274,7 +1320,8 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
             : picked,
           "viewport",
         );
-        if (axis || sketchId) renderer.domElement.style.cursor = "pointer";
+        if (axis || sketchId || plane) renderer.domElement.style.cursor = "pointer";
+        else if(!picked)renderer.domElement.style.cursor="";
       }
       const selectedAxis =
         propsRef.current.movementGuide?.worldAxis ||
@@ -1283,6 +1330,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           ? propsRef.current.operationDraft?.direction
           : null);
       for (const child of axes.children) {
+        if(child.userData.axisPick)continue;
         const material = (child as THREE.Line)
           .material as THREE.LineBasicMaterial;
         const hovered = child.userData.worldAxis === hoveredAxisRef.current;
@@ -1294,7 +1342,8 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
               ? OPERATION_COLORS.path
               : child.userData.baseColor,
         );
-        material.opacity = hovered || selected ? 1 : 0.4;
+        material.opacity = hovered || selected ? 1 : child.userData.axisSign>0?.85:.27;
+        (material as any).linewidth=hovered||selected?3:child.userData.axisSign>0?2:1.1;
       }
       const external =
         (propsRef.current.operationDraft || propsRef.current.placementTarget || propsRef.current.measurePoints) &&
@@ -1336,6 +1385,9 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       cancelAnimationFrame(frame);
       observer.disconnect();
       disposeOverlay(hoverLayer);
+      disposeOverlay(sketchHoverLayer);
+      disposeOverlay(worldPlanes);
+      disposeOverlay(axes);
       clearProfileRole();
       disposePreview(displayedPreview.current);
       displayedPreview.current = null;
@@ -1667,7 +1719,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     // Cancellation and a change of owner invalidate the display context. Ordinary
     // edits keep the last solid candidate visible while its replacement loads.
     if (
-      (!props.operationDraft && !props.placementTarget) ||
+      (!props.operationDraft && !props.placementTarget && !props.featureEditTarget) ||
       !props.operationPreview ||
       (old && previousProfile.current !== props.operationDraft?.profile) ||
       (old && old.context !== displayContext)
@@ -1699,7 +1751,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     if (
       !s ||
       !report ||
-      (!props.operationDraft && !props.placementTarget) ||
+      (!props.operationDraft && !props.placementTarget && !props.featureEditTarget) ||
       report.stale
     )
       return;
@@ -1752,7 +1804,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         const current = propsRef.current;
         if (
           cancelled ||
-          (!current.operationDraft && !current.placementTarget) ||
+          (!current.operationDraft && !current.placementTarget && !current.featureEditTarget) ||
           current.operationPreview?.preview_token !== next.token ||
           viewportDisplayContext(current) !== next.context
         ) {
@@ -1869,10 +1921,10 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         ref={container}
         aria-label="Interactive CAD viewport"
         data-hover-source={
-          hovered ? (hoverFromPanel ? "panel" : "viewport") : undefined
+          hoveredSketch||hoveredWorldPlane?'viewport':hovered ? (hoverFromPanel ? "panel" : "viewport") : undefined
         }
         data-hover-kind={
-          hovered?.vertex
+          hoveredWorldPlane?'plane':hoveredSketch?'sketch':hovered?.vertex
             ? "vertex"
             : hovered?.edge
               ? "edge"
@@ -1886,12 +1938,12 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         className="viewport-hover-target"
         role="tooltip"
         aria-label="Click target"
-        hidden={(!hovered && !hoveredAxis) || hoverFromPanel}
-        data-kind={hovered?.vertex ? "vertex" : hovered?.edge ? "edge" : "face"}
+        hidden={(!hovered && !hoveredAxis && !hoveredSketch && !hoveredWorldPlane) || hoverFromPanel}
+        data-kind={hoveredWorldPlane?'plane':hoveredSketch?'sketch':hovered?.vertex ? "vertex" : hovered?.edge ? "edge" : "face"}
       >
         <strong>
           <i />
-          {hoveredAxis ? (
+          {hoveredWorldPlane ? `World ${hoveredWorldPlane} plane` : hoveredSketch ? `Sketch · ${props.sketchObjects?.find(d=>d.feature?.id===hoveredSketch)?.feature?.name||'2D sketch'}` : hoveredAxis ? (
             `World ${hoveredAxis} axis`
           ) : (
             <>
@@ -1923,7 +1975,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
             </span>
           )}
         <small>
-          {hoveredAxis
+          {hoveredWorldPlane ? props.sketchPlanePicking?'Click to use this sketch plane':`Click to select plane · ${shortcutLabel('sketch')} starts a sketch` : hoveredSketch ? props.operationDraft?'Use as Tool Profile':'Click to select sketch' : hoveredAxis
             ? "Use as reference direction / Tool Path"
             : props.placementTarget
               ? "Pick points for origin/target or an edge for direction"
@@ -1987,7 +2039,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         pick={props.pickSlot}
       />
       {previewDisplayError &&
-        (props.operationDraft || props.placementTarget) && (
+        (props.operationDraft || props.placementTarget || props.featureEditTarget) && (
           <div className="operation-stale-note" role="alert">
             {previewDisplayError}
           </div>
@@ -1998,7 +2050,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         </div>
       )}
       {props.measurePoints && <MeasureGuide ref={measureGuide} points={props.measurePoints} units={props.units||'mm'}/>}
-      {!props.sketch && !props.operationDraft && !props.placementTarget && !props.measurePoints && (
+      {!props.sketch && !props.operationDraft && !props.placementTarget && !props.featureEditTarget && !props.measurePoints && (
         <MeasurementOverlay
           ref={measurementRef}
           geometry={props.geometry}

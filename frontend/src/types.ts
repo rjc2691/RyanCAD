@@ -87,6 +87,7 @@ export interface Geometry {
   geometry_key?: string;
 }
 export interface Selection {
+  worldPlane?: 'XY'|'XZ'|'YZ';
   worldOrigin?: boolean;
   geometryKey?: string;
   /** Homogeneous Shift-click selection, primary item first. */

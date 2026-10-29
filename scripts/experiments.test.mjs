@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../frontend/node_modules/three/build/three.module.js';
 import {normalizeExperiments,defaultAppearance,loadExperiments,saveExperiments,EXPERIMENT_STORAGE_KEY} from '../frontend/src/experiments.ts';
-import {applyActiveAppearance} from '../frontend/src/activeAppearance.ts';
+import {syncActiveEdgePulse,edgePulseProgress,updateEdgePulseTime} from '../frontend/src/activeAppearance.ts';
 test('experimental settings have stable IDs, default off, validate persisted values and tolerate unavailable storage',()=>{
+ assert.deepEqual(normalizeExperiments(null)['sidebar-toolbar-layout'],{enabled:false,mode:'between'});
+ assert.deepEqual(normalizeExperiments({version:1,'sidebar-toolbar-layout':{enabled:true,mode:'between'}})['sidebar-toolbar-layout'],{enabled:true,mode:'between'});
+ assert.deepEqual(normalizeExperiments({version:1,'sidebar-toolbar-layout':{enabled:'yes'}})['sidebar-toolbar-layout'],{enabled:false,mode:'between'});
  assert.deepEqual(normalizeExperiments(null)['active-component-appearance'],defaultAppearance());
  assert.deepEqual(normalizeExperiments({version:99})['active-component-appearance'],defaultAppearance());
  const original=globalThis.localStorage;
@@ -18,16 +21,28 @@ test('experimental settings have stable IDs, default off, validate persisted val
  const invalid=normalizeExperiments({version:1,'active-component-appearance':{enabled:'yes',style:'retired',strength:NaN,tint:'url(unsafe)'}});
  assert.deepEqual(invalid['active-component-appearance'],defaultAppearance());
 });
-test('shading uses live uniforms without replacing geometry or the standard material and can be disabled',()=>{
- const geometry=new THREE.BoxGeometry(10,20,30),material=new THREE.MeshStandardMaterial(),mesh=new THREE.Mesh(geometry,material);
- applyActiveAppearance(mesh,true,defaultAppearance());assert.equal(material.userData.activeAppearance,undefined);
- const settings={...defaultAppearance(),enabled:true};applyActiveAppearance(mesh,true,settings);
- const shader={uniforms:{},vertexShader:THREE.ShaderLib.standard.vertexShader,fragmentShader:THREE.ShaderLib.standard.fragmentShader};material.onBeforeCompile(shader,{});
- assert(shader.fragmentShader.includes('totalEmissiveRadiance += cadActiveTint'));
- assert(shader.vertexShader.includes('vCadActiveHeight = position.z'));
- const uniforms=material.userData.activeAppearance;assert.equal(shader.uniforms.cadActiveMode,uniforms.cadActiveMode);assert.equal(uniforms.cadActiveMode.value,1);
- applyActiveAppearance(mesh,true,{...settings,style:'height-gradient',strength:.9});assert.equal(uniforms.cadActiveMode.value,3);assert.equal(uniforms.cadActiveStrength.value,.9);
- applyActiveAppearance(mesh,false,settings);assert.equal(uniforms.cadActiveMode.value,0);
- assert.equal(mesh.geometry,geometry);assert.equal(mesh.material,material);assert.equal(uniforms.cadActiveSpanZ.value,30);
- geometry.dispose();material.dispose();
+test('edge pulse coordinates use distance along each complete native edge',()=>{
+ const positions=[0,0,0,1,0,0,1,0,0,10,0,0,0,0,0,0,4,0];
+ const p=edgePulseProgress(positions,[{segment_start:0,segment_count:2},{segment_start:2,segment_count:1}]);
+ assert(Math.abs(p.start[1]-.1)<1e-6);assert(Math.abs(p.end[0]-.1)<1e-6);assert.equal(p.end[1],1);assert.equal(p.start[2],0);assert.equal(p.end[2],1);
+});
+
+test('pulse settings migrate old surface styles and validate animation controls',()=>{
+ const old=normalizeExperiments({version:1,'active-component-appearance':{enabled:true,style:'rim-glow',tint:'#aa55ff',strength:.7}})['active-component-appearance'];
+ assert.equal(old.enabled,true);assert.equal(old.tint,'#aa55ff');assert.equal(old.speed,.16);assert.equal(old.pulses,3);assert(!('style' in old));
+ const invalid=normalizeExperiments({version:1,'active-component-appearance':{speed:-2,pulses:99}})['active-component-appearance'];assert.equal(invalid.speed,.02);assert.equal(invalid.pulses,6);
+});
+
+test('edge animation owns its buffers, shares a clock and changes uniforms without rebuilding',()=>{
+ const source=new THREE.EdgesGeometry(new THREE.BoxGeometry(10,20,30)),group=new THREE.Group(),other=new THREE.Group();
+ syncActiveEdgePulse(group,source,[],true,defaultAppearance());assert.equal(group.userData.edgePulseLayer,undefined);
+ const settings={...defaultAppearance(),enabled:true};syncActiveEdgePulse(group,source,[],true,settings);syncActiveEdgePulse(other,source,[],true,settings);
+ const pulse=group.userData.edgePulseLayer,stroke=pulse.children[1],material=stroke.material;
+ assert.equal(pulse.children.length,2);assert.notEqual(stroke.geometry,source);assert(material.depthTest);assert(!material.depthWrite);
+ assert.equal(material.uniforms.cadPulseTime,other.userData.edgePulseLayer.children[1].material.uniforms.cadPulseTime);
+ updateEdgePulseTime(12);assert.equal(material.uniforms.cadPulseTime.value,12);
+ const clip=[new THREE.Plane(new THREE.Vector3(0,0,1),-2)];syncActiveEdgePulse(group,source,[],true,{...settings,speed:.4,pulses:5,tint:'#aa55ff'},clip);
+ assert.equal(group.userData.edgePulseLayer,pulse);assert.equal(stroke.material,material);assert.equal(material.uniforms.cadPulseSpeed.value,.4);assert.equal(material.uniforms.cadPulseCount.value,5);assert.equal(material.color.getHexString(),'aa55ff');assert.equal(material.clippingPlanes,clip);
+ syncActiveEdgePulse(group,source,[],false,settings);assert.equal(pulse.visible,false);
+ syncActiveEdgePulse(group,source,[],true,{...settings,enabled:false});assert.equal(pulse.visible,false);
 });

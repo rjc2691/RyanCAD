@@ -1,5 +1,6 @@
 import { forwardRef, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
+import { ProfileLabelPlacement } from "./profileLabelPlacement";
 import {
   isFinish,
   type OperationDraft,
@@ -20,6 +21,7 @@ export default forwardRef<
   const latest = useRef(props);
   latest.current = props;
   const svg = useRef<SVGSVGElement>(null);
+  const profileLabelPlacement = useRef(new ProfileLabelPlacement());
   useImperativeHandle(
     ref,
     () => ({
@@ -166,24 +168,21 @@ export default forwardRef<
             : "",
         );
         const profileLabel = guide("profile-label");
-        const labelPoint = loops
-          .flat()
-          .map(project)
-          .reduce<{ x: number; y: number; distance: number } | null>(
-            (best, p) => {
-              const distance = Math.hypot(p.x - origin.x, p.y - origin.y);
-              return !best || distance > best.distance
-                ? { ...p, distance }
-                : best;
-            },
-            null,
-          );
-        if (
-          labelPoint &&
-          labelPoint.distance > 80 &&
-          d.profile !== "body" &&
-          true
-        ) {
+        const profileSelection = d.profileReference?.selection;
+        const labelPoint = profileLabelPlacement.current.update(
+          d.profile === "body"
+            ? []
+            : loops.flat().map((v) => {
+                const p = project(v);
+                return {
+                  ...p,
+                  distance: Math.hypot(p.x - origin.x, p.y - origin.y),
+                  local: v.clone().sub(f.origin).toArray(),
+                };
+              }),
+          `${d.profile}:${d.plane}:${d.target?.occurrence}:${d.sketch}:${profileSelection?.occurrence}:${profileSelection?.face?.id}:${profileSelection?.edge?.id}`,
+        );
+        if (labelPoint && d.profile !== "body" && true) {
           profileLabel.setAttribute("x", String(labelPoint.x + 9));
           profileLabel.setAttribute("y", String(labelPoint.y - 12));
           profileLabel.textContent = isFinish(d)

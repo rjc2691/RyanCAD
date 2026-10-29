@@ -16,8 +16,8 @@ try{
  await page.getByRole('heading',{name:'3D graphics unavailable',exact:true}).waitFor();
  await page.waitForFunction(()=>document.querySelector('.design-tree-name')?.textContent==='Untitled design');
  assert.equal(await page.locator('.canvas-host canvas').count(),0);
- await page.getByRole('button',{name:'Project menu',exact:true}).click();
- assert(await page.getByRole('button',{name:'Reference designs',exact:false}).isVisible());
+ await page.getByRole('button',{name:'Import',exact:true}).click();
+ assert(await page.getByRole('menuitem',{name:/Reference designs/}).isVisible());
  await page.screenshot({path:'artifacts/webgl-unavailable.png'});
  assert.deepEqual(errors,[],'Missing WebGL must not throw an uncaught error or unmount the app');
  const normal=await browser.newPage();await normal.goto(process.env.RYANCAD_UI_URL||'http://127.0.0.1:8898');

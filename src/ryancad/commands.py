@@ -143,6 +143,9 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
     if name == "operation.create":
         from .operations import create_operation
         return create_operation(document, actor, args)
+    if name == "feature.update":
+        from .feature_edits import update_feature
+        return update_feature(document, actor, args)
     if name == "document.rename":
         document.name = str(args.get("name", "Untitled design"))[:180]
         return {}, [], f"Rename design to {document.name}"
@@ -497,7 +500,8 @@ COMMANDS = {
     "parameter.offset": "Apply an exact typed offset to an existing generating dimension; the resulting value remains parameter-backed.",
     "parameter.independent": "Detach one feature dimension into a new independent input.",
     "parameter.delete": "Delete an unused parameter; referenced dimensions are protected.",
-    "feature.create": "Add a supported feature; dimensions become named parameters automatically.",
+    "feature.create": "Add a supported feature with private dimensions or explicit named parameter references.",
+    "feature.update": "Edit a historical feature in place. id, optional name, values (existing dimension fields), options (operation: result/reverse/extent; legacy: operation), suppressed. Retains feature identity, order, original profile and frozen references; validates the entire downstream rebuild. Named values are reused or detached, never overwritten. Preview before commit.",
     "feature.suppress": "Suppress or restore a feature, validating dependent geometry.",
     "feature.rename": "Rename a construction feature.",
     "feature.repair": "Repair a failed topology selection with an explicit semantic selector.",

@@ -55,16 +55,16 @@ function outline(
   clip: THREE.Plane[],
   face = false,
 ) {
-  if (role === "selected") {
-    const line = wideLines(positions, SELECTION_COLOR, face ? 2.5 : 3.5, clip);
-    if (face) line.renderOrder = 5;
+  if (role === "hover") {
+    const line = wideLines(positions, HOVER_COLOR, face ? 2.5 : 3.5, clip);
+    line.renderOrder = 11;
     return line;
   }
   const group = new THREE.Group();
   group.userData.overlay = true;
   for (const [color, width, order] of [
     ["#0a121d", face ? 8 : 12, 8],
-    [HOVER_COLOR, face ? 4.5 : 8, 9],
+    [SELECTION_COLOR, face ? 4.5 : 8, 9],
     ["#edfcff", face ? 1 : 2, 10],
   ] as const) {
     const line = wideLines(positions, color, width, clip);
@@ -89,9 +89,9 @@ function vertexMap(role: "selected" | "hover") {
         r = Math.hypot(u, v),
         d = Math.abs(u) + Math.abs(v),
         i = (y * 32 + x) * 4;
-      if (role === "hover" ? r > 0.94 : d > 0.94) continue;
+      if (role === "selected" ? r > 0.94 : d > 0.94) continue;
       const fill =
-        role === "hover"
+        role === "selected"
           ? r < 0.2
             ? [237, 252, 255]
             : r > 0.5 && r < 0.8
@@ -126,7 +126,7 @@ export function highlight(
     const material = new THREE.PointsMaterial({
       color: "#ffffff",
       map: vertexMap(role),
-      size: role === "hover" ? 19 : 12,
+      size: role === "selected" ? 19 : 12,
       sizeAttenuation: false,
       depthTest: false,
       depthWrite: false,
@@ -181,7 +181,7 @@ export function highlight(
     const material = new THREE.MeshBasicMaterial({
       color: role === "hover" ? HOVER_COLOR : SELECTION_COLOR,
       transparent: true,
-      opacity: role === "hover" ? 0.23 : 0.3,
+      opacity: role === "selected" ? 0.23 : 0.3,
       side: THREE.DoubleSide,
       depthWrite: false,
       polygonOffset: true,

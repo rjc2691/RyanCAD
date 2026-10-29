@@ -13,8 +13,8 @@ try{
   await page.goto(process.env.RYANCAD_UI_URL || 'http://127.0.0.1:8898');
   await page.waitForFunction(()=>document.querySelector('.design-tree-name')?.textContent==='Untitled design');
   const original=await page.evaluate(()=>sessionStorage.getItem('ryancad-active-design'));
-  await page.getByRole('button',{name:'Project menu'}).click();
-  await page.getByRole('button',{name:/Reference designs/}).click();
+  await page.getByRole('button',{name:'Import',exact:true}).click();
+  await page.getByRole('menuitem',{name:/Reference designs/}).click();
   await page.getByRole('button',{name:new RegExp(label)}).click();
   await page.waitForFunction(name=>document.querySelector('.error-card')||document.querySelector('.design-tree-name')?.textContent===name,expected,{timeout:60000});
   assert.equal(await page.locator('.error-card').count(),0,await page.locator('.error-card').allTextContents());

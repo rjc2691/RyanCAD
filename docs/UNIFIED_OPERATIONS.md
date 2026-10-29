@@ -1,22 +1,22 @@
 # One tool, a continuous modeling workspace
 
-**October 26, 2026 — implemented development workflow.** This document records the owner's unified-operation direction, its current behavior, and the next steps. It supplements the [product request](PRODUCT_REQUEST.md), [user guide](USER_GUIDE.md), and [API contract](API.md).
+**October 29, 2026 — implemented development workflow.** This document records the owner's unified-operation direction, its current behavior, and the next steps. It supplements the [product request](PRODUCT_REQUEST.md), [user guide](USER_GUIDE.md), and [API contract](API.md).
 
 ## The interaction contract
 
 Press **T**, or click **Tool**, with geometry selected or with no selection. A dock replaces the right inspector, leaving the model visible and navigable. The dock and inspector have the same width at each supported window size, so switching between them does not resize the viewport. It contains four persistent sections in one scrolling form:
 
-1. **Tool Origin:** where the operation is anchored, either exact world coordinates or a reference plus exact offsets.
+1. **Tool Effect:** whether to create, add, remove, or keep an intersection.
 2. **Tool Profile:** the section, face, existing sketch, corner treatment, or solid tool.
 3. **Tool Path:** how that profile becomes geometry, including no motion.
-4. **Tool Effect:** the target and whether to create, add, remove, or keep an intersection.
+4. **Tool Origin:** the picked or implicit reference that anchors the operation.
 
-All four sections remain mounted. Scroll between them without changing stages or losing entered values. The dock initially scrolls to the most relevant section: Tool Profile for edge/primitive starts, Tool Path for face/sketch starts. Each section places its type selector above the colored reference box, which groups the named reference, count/status and removable selections. **Tool Origin** always uses an implicit or picked reference; **Reference point offset** labels the U/V/N fields after the reference box. Exact placement uses the viewport world-origin reference plus offsets; there is no origin-type switch or panel world-origin shortcut. **Tool Profile Shape** and **Tool Path Type** use dropdowns above their reference boxes. **Tool Effect Type** is a dropdown for Auto/New/Add/Remove/Intersect; native finishing shows its fixed Refine edge effect. Derived references use the same card position. Exact dimensions and other options follow the group. There is no header preset strip: rectangle/circle/drawn sections live in Tool Profile; extrusion/sweep/rotation/repeat choices live in Tool Path. The fixed footer holds Feature Name above one horizontal row: Apply operation, Cancel, then preview status (“Preview validated · ready to apply” when ready). The duplicated active-component header and generic commit/keyboard footer prose are removed. Path Direction is subordinate to Tool Path with no separating horizontal rule. Compact numeric fields retain units and parameter reuse; Tool Profile uses a shape selector. A finishing edge is specified once under Tool Path; Tool Origin explains its implicit anchor. Round, bevel, hole, extrusion, sweep, revolve, and body Boolean are suggested configurations of this workspace. The target stays locked and separate from whatever geometry is currently being picked. Cancel first to activate a different component.
+All four sections remain mounted. Scroll between them without changing stages or losing entered values. The dock initially scrolls to the most relevant section: Tool Profile for edge/primitive starts, Tool Path for face/sketch starts. Each section places its type selector above the colored reference box, which groups the named reference, count/status and removable selections. **Tool Origin** always uses an implicit or picked reference and follows Tool Path in the panel. Origin offset inputs are omitted from this basic layout; existing stored placements remain unchanged. There is no origin-type switch or panel world-origin shortcut. **Tool Profile Shape** and **Tool Path Type** use dropdowns above their reference boxes. **Tool Effect Type** is a dropdown for Auto/New/Add/Remove/Intersect; native finishing shows its fixed Refine edge effect. Derived references use the same card position. Exact dimensions and other options follow the group. There is no header preset strip: rectangle/circle/drawn sections live in Tool Profile; extrusion/sweep/rotation/repeat choices live in Tool Path. The fixed footer holds Feature Name above one horizontal row: Apply operation, Cancel, then preview status (“Preview validated · ready to apply” when ready). The duplicated active-component header and generic commit/keyboard footer prose are removed. Path Direction is subordinate to Tool Path with no separating horizontal rule. Compact numeric fields retain units and parameter reuse; Tool Profile uses a shape selector. A finishing edge is specified once under Tool Path; Tool Origin explains its implicit anchor. Round, bevel, hole, extrusion, sweep, revolve, and body Boolean are suggested configurations of this workspace. The target stays locked and separate from whatever geometry is currently being picked. Cancel first to activate a different component.
 
 ```mermaid
 flowchart TD
     ENTRY[Selection + T, or Tool button] --> DRAFT[One unapplied operation]
-    DRAFT <--> O[Tool Origin / reference / exact offsets]
+    DRAFT <--> O[Tool Origin / picked or implicit reference]
     DRAFT <--> P[Tool Profile / plane / inline section]
     DRAFT <--> M[Tool Path / axis / rotation / no motion]
     DRAFT <--> R[Tool Effect / target / Boolean intent]
@@ -50,7 +50,7 @@ Selection suggests likely intent; it does not authorize silently changing a diff
 - T uses the **whole face** as a section and its normal as the suggested travel direction. It starts at Tool Path with a positive extrusion. The face's center is a suggested section anchor, so the original section is preserved.
 - Change the travel distance directly below the target-point reference under Tool Path. Choose Remove/Add/Intersect for the Boolean result, or New for a separately owned part. These choices do not flip travel. With the default outward face normal, a negative distance cuts inward; a positive distance travels outward. Reverse reference direction explicitly negates that reference, independently of the distance sign.
 - Choose **Circle** in Tool Profile, then **Hole setup** to use a circular section, subtraction, and two-sided through-all extent. The next viewport click places its center on the shown support plane. This placement step is explicit; a face selection alone does not imply a desired hole center.
-- The click snaps to 1 mm U/V coordinates on that plane. Tool Origin displays the exact offsets, which can be replaced with units, expressions, or reused parameters. Diameter is editable in Tool Profile. For a blind hole choose a travel distance instead of through-all.
+- The click snaps to 1 mm U/V coordinates on that plane. This placement is retained internally; the simplified Tool Origin section does not expose offset fields. Diameter is editable in Tool Profile. For a blind hole choose a travel distance instead of through-all.
 - For raised detail, choose Circle or Draw profile on the support face, straight travel with a shallow positive distance in Tool Path, and Add material in Tool Effect. This remains a planar raised feature, not wrapped embossing on curved surfaces. This is a planar raised feature, not wrapped embossing on curved surfaces.
 - Choose **Draw profile** for an inline section on that plane, or pick another closed sketch. Change Tool Path to a picked path, rotation, combined helical travel, or no motion. The initial face-normal suggestion remains replaceable.
 - To round an edge after a face launch, select Round/Bevel under Tool Profile and pick the desired target edge. It remains the same operation workspace.
@@ -80,7 +80,7 @@ Selection suggests likely intent; it does not authorize silently changing a diff
 ### An existing sketch or reference path is the starting intent
 
 - Select its planar component, or choose **Existing sketch** under Tool Profile. The list identifies profiles by component and placed instance. The sketch's plane is implicit, including rotated instances.
-- Reposition its center with an origin/reference offset when desired; preserve the sketch's solved shape and orientation.
+- Choose an origin reference to reposition its center when desired; preserve the sketch's solved shape and orientation.
 - Pick a design edge under Tool Path to sweep. The complete path is translated so its start passes through the chosen operation origin. This supports a path parallel to the reference without requiring the origin to lie on the original edge.
 - For rotation, use World X/Y/Z and an axis point, or a selected straight edge. Revolution is bounded to 360°. Combined rotation and axial travel uses a helix, with positive rise and 0.1–3,600° rotation. Profile placement relative to the axis determines radius.
 

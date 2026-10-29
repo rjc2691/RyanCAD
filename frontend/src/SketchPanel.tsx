@@ -486,8 +486,8 @@ export default forwardRef<
                 <strong>Sketch plane reference</strong>
                 <small>
                   {planePicking
-                    ? "Pick a planar face in the viewport"
-                    : "Pick planar face"}
+                    ? "Pick a world plane or planar face in the viewport"
+                    : "Pick world plane or planar face"}
                 </small>
               </span>
             </button>

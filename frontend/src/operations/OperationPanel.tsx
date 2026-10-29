@@ -706,112 +706,6 @@ export default forwardRef<
         </section>
         <section
           className="operation-section"
-          data-tool-section="origin"
-          aria-labelledby="tool-origin-title"
-        >
-          <h3 id="tool-origin-title">Tool Origin</h3>
-          <div
-            className="operation-reference-control"
-            data-reference-role="origin"
-          >
-            {isFinish(draft) ? (
-              <>
-                <div className="operation-reference-derived">
-                  <strong>From Tool Path</strong>
-                  <small>
-                    {draft.pathReference?.label || "Pick an edge in Tool Path"}
-                  </small>
-                </div>
-                <p className="operation-reference-status">
-                  Origin follows the start of the selected path.
-                </p>
-              </>
-            ) : draft.profile === "body" &&
-              draft.keepBodyPlacement &&
-              draft.motion !== "mirror" ? (
-              <>
-                <div className="operation-reference-derived">
-                  <strong>From Tool Profile body</strong>
-                  <small>
-                    {draft.profileReference?.label ||
-                      "Pick a body in Tool Profile"}
-                  </small>
-                </div>
-                <p className="operation-reference-status">
-                  Uses the body's placed location and orientation.
-                </p>
-                <button
-                  className="text-button"
-                  onClick={() => patch({ keepBodyPlacement: false })}
-                >
-                  Anchor the body at an origin
-                </button>
-              </>
-            ) : (
-              <>
-                {slotButton("origin", "Tool Origin reference", draft.reference)}
-                {selectionFeedback("origin") || (
-                  <p className="operation-reference-status">
-                    Origin follows this reference and its offsets.
-                  </p>
-                )}
-              </>
-            )}
-          </div>
-          {!isFinish(draft) &&
-            !(
-              draft.profile === "body" &&
-              draft.keepBodyPlacement &&
-              draft.motion !== "mirror"
-            ) && (
-              <>
-                {draft.reference?.selection.edge && (
-                  <label className="field">
-                    <span>Point on edge</span>
-                    <select
-                      value={draft.reference.anchor}
-                      onChange={(e) =>
-                        patch({
-                          reference: {
-                            ...draft.reference!,
-                            anchor: e.target.value as any,
-                          },
-                        })
-                      }
-                    >
-                      <option value="start">Start vertex</option>
-                      <option value="mid">Exact midpoint</option>
-                      <option value="end">End vertex</option>
-                    </select>
-                  </label>
-                )}
-                <div
-                  className="operation-reference-offset"
-                  role="group"
-                  aria-label="Reference point offset"
-                >
-                  <span className="operation-field-label">
-                    Reference point offset
-                  </span>
-                  <div className="operation-quantity-grid">
-                    {quantity("offset_u", "Along U")}
-                    {quantity("offset_v", "Along V")}
-                    {quantity("offset_n", "Normal offset")}
-                  </div>
-                </div>
-                <label className="checkbox">
-                  <input
-                    type="checkbox"
-                    checked={!!draft.originPinned}
-                    onChange={(e) => patch({ originPinned: e.target.checked })}
-                  />
-                  Keep this origin when replacing faces or paths
-                </label>
-              </>
-            )}
-        </section>
-        <section
-          className="operation-section"
           data-tool-section="profile"
           aria-labelledby="tool-profile-title"
         >
@@ -1458,6 +1352,98 @@ export default forwardRef<
               )}
             </>
           )}
+        </section>
+        <section
+          className="operation-section"
+          data-tool-section="origin"
+          aria-labelledby="tool-origin-title"
+        >
+          <h3 id="tool-origin-title">Tool Origin</h3>
+          <div
+            className="operation-reference-control"
+            data-reference-role="origin"
+          >
+            {isFinish(draft) ? (
+              <>
+                <div className="operation-reference-derived">
+                  <strong>From Tool Path</strong>
+                  <small>
+                    {draft.pathReference?.label || "Pick an edge in Tool Path"}
+                  </small>
+                </div>
+                <p className="operation-reference-status">
+                  Origin follows the start of the selected path.
+                </p>
+              </>
+            ) : draft.profile === "body" &&
+              draft.keepBodyPlacement &&
+              draft.motion !== "mirror" ? (
+              <>
+                <div className="operation-reference-derived">
+                  <strong>From Tool Profile body</strong>
+                  <small>
+                    {draft.profileReference?.label ||
+                      "Pick a body in Tool Profile"}
+                  </small>
+                </div>
+                <p className="operation-reference-status">
+                  Uses the body's placed location and orientation.
+                </p>
+                <button
+                  className="text-button"
+                  onClick={() => patch({ keepBodyPlacement: false })}
+                >
+                  Anchor the body at an origin
+                </button>
+              </>
+            ) : (
+              <>
+                {slotButton("origin", "Tool Origin reference", draft.reference)}
+                {selectionFeedback("origin") || (
+                  <p className="operation-reference-status">
+                    Origin is placed from this reference.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+          {!isFinish(draft) &&
+            !(
+              draft.profile === "body" &&
+              draft.keepBodyPlacement &&
+              draft.motion !== "mirror"
+            ) && (
+              <>
+                {draft.reference?.selection.edge && (
+                  <label className="field">
+                    <span>Point on edge</span>
+                    <select
+                      value={draft.reference.anchor}
+                      onChange={(e) =>
+                        patch({
+                          reference: {
+                            ...draft.reference!,
+                            anchor: e.target.value as any,
+                          },
+                        })
+                      }
+                    >
+                      <option value="start">Start vertex</option>
+                      <option value="mid">Exact midpoint</option>
+                      <option value="end">End vertex</option>
+                    </select>
+                  </label>
+                )}
+                <label className="checkbox">
+                  <input
+                    type="checkbox"
+                    checked={!!draft.originPinned}
+                    onChange={(e) => patch({ originPinned: e.target.checked })}
+                  />
+                  Keep this origin when replacing faces or paths
+                </label>
+              </>
+            )}
         </section>
       </div>
       <footer className="operation-footer">

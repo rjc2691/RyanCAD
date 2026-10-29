@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
 import {
   Bug,
   Plus,
@@ -268,6 +269,8 @@ export default function BugReports() {
         ref={button}
         className={`tool-button ${open ? "active" : ""}`}
         aria-label="Bug reports"
+        {...shortcutAttributes('reports')}
+        title="Bug reports · Shift+B"
         aria-expanded={open}
         aria-controls="bug-reports-panel"
         onClick={() => setOpen(!open)}

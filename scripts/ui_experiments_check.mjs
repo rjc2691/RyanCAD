@@ -24,23 +24,23 @@ try{
  await button.click();const panel=page.getByRole('dialog',{name:'Experimental features',exact:true}),enabled=panel.getByRole('switch',{name:'Active component appearance',exact:true}),disclosure=panel.getByRole('button',{name:'Active component appearance settings',exact:true});
  assert.equal(await enabled.getAttribute('aria-checked'),'false');assert.equal(await disclosure.getAttribute('aria-expanded'),'false');assert.equal(await panel.getByRole('checkbox').count(),0);
  await enabled.click();assert.equal(await enabled.textContent(),'On');assert.equal(await disclosure.getAttribute('aria-expanded'),'false','toggle does not expand section');
- await disclosure.click();assert(await panel.getByText('active-component-appearance',{exact:true}).isVisible());let previous=baseline;
- for(const style of ['soft-glow','rim-glow','height-gradient']){
-  await panel.getByLabel('Active component appearance style',{exact:true}).selectOption(style);
-  const image=await pixels();assert.notEqual(image,baseline,style+' must change the rendered surface');assert.notEqual(image,previous,style+' must be distinguishable');previous=image;
-  await page.screenshot({path:'.cache/experiments-ui/'+style+'.png'});
- }
- await disclosure.click();assert.equal(await panel.getByLabel('Active component appearance style',{exact:true}).count(),0);
- await enabled.click();assert.equal(await pixels(),baseline,'Disabling restores the original rendering');
- await enabled.click();await disclosure.click();assert.equal(await panel.getByLabel('Active component appearance style',{exact:true}).inputValue(),'height-gradient');await panel.getByLabel('Active component shading strength',{exact:true}).focus();await page.keyboard.press('End');
- await page.reload();await page.locator('.component-select').first().waitFor();await page.locator('.component-select').first().click();await button.click();
- assert.equal(await enabled.getAttribute('aria-checked'),'true');await disclosure.click();assert.equal(await panel.getByLabel('Active component appearance style',{exact:true}).inputValue(),'height-gradient');assert.equal(Number(await panel.getByLabel('Active component shading strength',{exact:true}).inputValue()),1);
+ await disclosure.click();assert(await panel.getByText('active-component-appearance',{exact:true}).isVisible());assert.equal(await panel.getByLabel('Active component appearance style',{exact:true}).count(),0);
+ const pulseA=await pixels();await page.waitForTimeout(450);const pulseB=await pixels();assert.notEqual(pulseA,baseline);assert.notEqual(pulseA,pulseB,'edge highlights must move while the camera stays still');
+ await page.screenshot({path:'artifacts/active-edge-pulses.png'});
+ await panel.getByLabel('Active component pulse count',{exact:true}).selectOption('5');
+ await panel.getByLabel('Active component pulse speed',{exact:true}).focus();await page.keyboard.press('End');
+ await panel.getByLabel('Active component pulse color',{exact:true}).evaluate(el=>{Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(el,'#b387ff');el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));});
+ await disclosure.click();await enabled.click();assert.equal(await pixels(),baseline,'Disabling restores original pixels exactly');await enabled.click();
+ await page.reload();await page.locator('.component-select').first().waitFor();await page.locator('.component-select').first().click();await button.click();assert.equal(await enabled.getAttribute('aria-checked'),'true');await disclosure.click();
+ assert.equal(await panel.getByLabel('Active component pulse count',{exact:true}).inputValue(),'5');assert.equal(Number(await panel.getByLabel('Active component pulse speed',{exact:true}).inputValue()),1);assert.equal(await panel.getByLabel('Active component pulse color',{exact:true}).inputValue(),'#b387ff');
  await page.getByRole('button',{name:'Close experimental features'}).click();
  await page.getByRole('button',{name:'Tool operation',exact:true}).click();await page.getByLabel('Tool Profile Shape',{exact:true}).selectOption('rectangle');await page.getByLabel('Profile plane',{exact:true}).selectOption('XY');await page.getByLabel('Path distance',{exact:true}).fill('5');await page.getByLabel('Tool Effect Type',{exact:true}).selectOption('new');
  await page.waitForFunction(()=>[...document.querySelectorAll('.operation-panel-host button')].some(b=>b.textContent.trim()==='Apply operation'&&!b.disabled));
+ await page.getByRole('button',{name:'Section view',exact:true}).click();await page.getByLabel('Section position',{exact:true}).fill('2');await pixels();
+ await page.screenshot({path:'artifacts/active-edge-pulses-section-preview.png'});await page.getByRole('button',{name:'Section view',exact:true}).click();
  await page.screenshot({path:'.cache/experiments-ui/preview.png'});
  await page.getByRole('button',{name:'Cancel tool operation',exact:true}).click();assert.equal(await readDocument(),before);
  await page.setViewportSize({width:390,height:844});await button.click();const box=await panel.boundingBox();assert(box.x>=0&&box.x+box.width<=390);await disclosure.click();await panel.getByRole('button',{name:'Reset this experiment'}).click();assert.equal(await enabled.getAttribute('aria-checked'),'false');
  await page.keyboard.press('Escape');assert.equal(await panel.count(),0);assert.equal(await page.locator('.component-select.selected').count(),0);
- assert.deepEqual(errors,[]);console.log('Passed: toolbar position, three distinct GPU styles, exact baseline restoration, persisted settings, valid native preview, unchanged document, reset and phone layout; no shader/JS errors.');
+ assert.deepEqual(errors,[]);console.log('Passed: toolbar position, animated edge pulses, editable color/speed/count, exact baseline restoration, persisted settings, valid native/section preview, unchanged document, reset and phone layout; no shader/JS errors.');
 }catch(e){await page.screenshot({path:'.cache/experiments-ui/failure.png'});throw e;}finally{await browser.close();}

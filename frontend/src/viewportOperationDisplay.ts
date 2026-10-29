@@ -2,12 +2,12 @@ import { displaySelectionMembers } from "./operations/groupedSelection.ts";
 import * as THREE from "three";
 import type { Geometry, Occurrence, Selection } from "./types";
 import type { OperationDraft } from "./operations/operationModel";
-import { applyActiveAppearance } from "./activeAppearance.ts";
+import { syncActiveEdgePulse } from "./activeAppearance.ts";
 import type { ActiveAppearance } from "./experiments.ts";
 
-export const SELECTION_COLOR = "#2455a4";
+export const SELECTION_COLOR = "#8be9ff";
 export const COMPONENT_SELECTION_COLOR = "#f3a64f";
-export const HOVER_COLOR = "#8be9ff";
+export const HOVER_COLOR = "#2455a4";
 
 export type DisplayAsset = {
   geometry: THREE.BufferGeometry;
@@ -32,7 +32,10 @@ export function operationDisplayContext(draft?: OperationDraft) {
 export function disposePreview(display: DisplayedPreview | null) {
   if (!display) return;
   display.root.removeFromParent();
-  display.root.traverse((object: any) => object.material?.dispose());
+  display.root.traverse((object: any) => {
+    object.material?.dispose();
+    if (object.userData.edgePulse) object.geometry?.dispose();
+  });
   for (const asset of display.assets.values()) {
     asset.geometry.dispose();
     asset.edges.dispose();
@@ -43,8 +46,11 @@ export function disposePreview(display: DisplayedPreview | null) {
 export function viewportDisplayContext(props: {
   operationDraft?: OperationDraft;
   placementTarget?: Selection | null;
+  featureEditTarget?: Selection | null;
 }) {
-  return props.placementTarget
+  return props.featureEditTarget
+    ? `edit:${props.featureEditTarget.definition}`
+    : props.placementTarget
     ? `move:${props.placementTarget.occurrence}`
     : operationDisplayContext(props.operationDraft);
 }
@@ -58,6 +64,7 @@ export function syncOperationAppearance(
     selected: Selection | null;
     operationDraft?: OperationDraft;
     placementTarget?: Selection | null;
+    featureEditTarget?: Selection | null;
     section: boolean;
     sectionPlane?: THREE.Plane;
     activeAppearance?: ActiveAppearance;
@@ -68,7 +75,7 @@ export function syncOperationAppearance(
   const draft = props.operationDraft,
     context = viewportDisplayContext(props);
   const shown =
-    display && display.context === context && !!(draft || props.placementTarget)
+    display && display.context === context && !!(draft || props.placementTarget || props.featureEditTarget)
       ? display
       : null;
   const baseOccurrences = new Map(props.occurrences.map((o) => [o.id, o]));
@@ -94,10 +101,17 @@ export function syncOperationAppearance(
     )
       moved.add(o.id);
   }
-  const focus = draft?.target?.definition;
+  const focus = draft?.target?.definition || props.featureEditTarget?.definition;
   const colors = new Map(props.occurrences.map((o) => [o.id, o.color]));
   const replaced = new Set<string>();
   if (shown) {
+    // Suppressing an initial feature can leave a valid empty component. There
+    // is no replacement mesh to load, but its old source must still disappear.
+    for (const group of parts.children) {
+      const o = group.userData.occurrence as Occurrence;
+      if (o && shown.components[o.definition] && !shown.components[o.definition].geometry_key)
+        replaced.add(o.id);
+    }
     const changedClip = shown.section !== props.section;
     shown.section = props.section;
     const clip = props.section
@@ -117,6 +131,7 @@ export function syncOperationAppearance(
         shown.components[o.definition]?.geometry_key;
       if (group.visible) replaced.add(o.id);
       group.traverse((object: any) => {
+        if (object.userData.edgePulse) return;
         const material = object.material;
         if (!material) return;
         if (object.isMesh) {
@@ -125,8 +140,9 @@ export function syncOperationAppearance(
           material.depthWrite = true;
           material.color.set(colors.get(o.id) || o.color || "#92b7c9");
           material.emissive.set("#5c3614");
-          material.emissiveIntensity = 0.12;
-          applyActiveAppearance(object, true, props.activeAppearance);
+          material.emissiveIntensity = props.activeAppearance?.enabled
+            ? 0
+            : 0.12;
         }
         if (object.isLineSegments)
           material.color.set(
@@ -139,6 +155,14 @@ export function syncOperationAppearance(
           material.needsUpdate = true;
         }
       });
+      syncActiveEdgePulse(
+        group,
+        shown.assets.get(o.definition)?.edges,
+        shown.components[o.definition]?.edges,
+        true,
+        props.activeAppearance,
+        clip,
+      );
     }
   }
   for (const group of parts.children) {
@@ -170,7 +194,7 @@ export function syncOperationAppearance(
         o.id.startsWith(props.placementTarget.occurrence + "/"));
     const muted = props.sketch
       ? true
-      : draft
+      : draft || props.featureEditTarget
         ? o.definition !== focus
         : props.placementTarget
           ? !moveFocus
@@ -193,11 +217,17 @@ export function syncOperationAppearance(
         : selected
           ? 0.18
           : 0;
-    applyActiveAppearance(
-      surface,
+    if (props.activeAppearance?.enabled && !muted)
+      material.emissiveIntensity = 0;
+    syncActiveEdgePulse(
+      group,
+      wire.geometry,
+      props.geometry[o.definition]?.edges,
       !muted &&
+        !replaced.has(o.id) &&
         (selected || moveFocus || draft?.target?.definition === o.definition),
       props.activeAppearance,
+      material.clippingPlanes || [],
     );
     wire.visible = !replaced.has(o.id);
     wire.material.color.set(

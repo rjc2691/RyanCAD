@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
 import { Upload, Download, ChevronDown } from "lucide-react";
 import { Modal } from "./Forms";
 import {
@@ -18,6 +19,7 @@ export default function FileActions({
   onImported,
   onError,
   onBusy,
+  onReferences,
 }: {
   state: State | null;
   disabled: boolean;
@@ -26,6 +28,7 @@ export default function FileActions({
   onImported: () => Promise<unknown>;
   onError: (error: any) => void;
   onBusy: (busy: boolean) => void;
+  onReferences: () => void;
 }) {
   const [menu, setMenu] = useState<"import" | "export" | null>(null);
   const [svgExport, setSvgExport] = useState(false),
@@ -71,7 +74,8 @@ export default function FileActions({
         <button
           className="button import-button"
           aria-label="Import"
-          title="Import"
+          {...shortcutAttributes('import')}
+          title="Import · Shift+I"
           aria-expanded={menu === "import"}
           disabled={disabled || working}
           onClick={() => setMenu(menu === "import" ? null : "import")}
@@ -93,14 +97,23 @@ export default function FileActions({
                 onNative();
               }}
             >
-              RyanCAD design <small>.rycad.zip / YAML</small>
+              RyanCAD Design file <small>Editable parametric design</small>
             </button>
             <button role="menuitem" onClick={() => pick("stl")}>
-              STL object{" "}
-              <small>Faceted solid · mm · up to 5,000 triangles</small>
+              STL file <small>Triangulated 3D geometry</small>
             </button>
             <button role="menuitem" onClick={() => pick("svg")}>
-              SVG sketch <small>World XY · curved paths approximated</small>
+              SVG file <small>2D sketch geometry</small>
+            </button>
+            <button
+              role="menuitem"
+              className="reference-designs-import"
+              onClick={() => {
+                setMenu(null);
+                onReferences();
+              }}
+            >
+              Reference designs <small>Editable example designs</small>
             </button>
           </div>
         )}
@@ -109,7 +122,8 @@ export default function FileActions({
         <button
           className="button export-button"
           aria-label="Export"
-          title="Export"
+          {...shortcutAttributes('export')}
+          title="Export · Shift+E"
           aria-expanded={menu === "export"}
           disabled={disabled || working}
           onClick={() => setMenu(menu === "export" ? null : "export")}
@@ -124,6 +138,14 @@ export default function FileActions({
             role="menu"
             aria-label="Export formats"
           >
+            <a
+              role="menuitem"
+              href={designUrl("/api/native")}
+              download
+              onClick={() => setMenu(null)}
+            >
+              RyanCAD Design file <small>Editable parametric design</small>
+            </a>
             <button
               role="menuitem"
               disabled={!state?.summary.instances}
@@ -132,7 +154,7 @@ export default function FileActions({
                 onSTL();
               }}
             >
-              STL components <small>Choose components</small>
+              STL file <small>Triangulated 3D geometry</small>
             </button>
             <button
               role="menuitem"
@@ -143,16 +165,8 @@ export default function FileActions({
                 setSvgExport(true);
               }}
             >
-              SVG sketches <small>Choose sketches</small>
+              SVG file <small>2D sketch geometry</small>
             </button>
-            <a
-              role="menuitem"
-              href={designUrl("/api/native")}
-              download
-              onClick={() => setMenu(null)}
-            >
-              RyanCAD design <small>Editable native snapshot</small>
-            </a>
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { UserRound, Settings, LogIn, UserPlus, Activity } from "lucide-react";
 import { Modal } from "./Forms";
+import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
 export default function AccountMenu({ onAgents }: { onAgents: () => void }) {
   const [open, setOpen] = useState(false),
     [panel, setPanel] = useState<string | null>(null);
@@ -24,9 +25,10 @@ export default function AccountMenu({ onAgents }: { onAgents: () => void }) {
       <button
         className="avatar"
         aria-label="Account menu"
+        {...shortcutAttributes('account')}
         aria-haspopup="menu"
         aria-expanded={open}
-        title="Account menu"
+        title="Account menu · Shift+U"
         onClick={() => setOpen(!open)}
       >
         R

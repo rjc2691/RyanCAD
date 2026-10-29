@@ -1,0 +1,506 @@
+/* Mobile only: reuse the desktop panels and keep drafts mounted when hidden. */
+@media (max-width:380px) {
+  .brand > svg:first-child {display:none;}
+  .brand-container {gap:4px;}
+}
+.mobile-navigation,
+.touch-navigation-hint {
+  display: none;
+}
+
+@media (pointer: coarse) {
+  .desktop-navigation-hint {
+    display: none;
+  }
+  .touch-navigation-hint {
+    display: inline;
+  }
+}
+
+@media (max-width: 999px) {
+  .header-right > .agent-button {display:none;}
+  .header-right .account-menu .avatar {display:grid;width:36px;height:36px;}
+  .account-dropdown > button {min-height:44px;}
+  .file-actions {gap:3px;}
+  .file-actions .button {width:36px;min-height:44px;padding:8px;gap:0;}
+  .file-actions .button > span,.file-actions .button > svg:last-child {display:none;}
+  .file-action-menu {position:fixed;right:8px;top:calc(52px + env(safe-area-inset-top, 0px));}
+  #root > .app-shell {
+    min-width: 0;
+    min-height: 0;
+    width: 100%;
+    height: 100dvh;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-left: env(safe-area-inset-left, 0px);
+    padding-right: env(safe-area-inset-right, 0px);
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 52px 48px minmax(0, 1fr) 0 calc(
+        56px + env(safe-area-inset-bottom, 0px)
+      );
+    grid-template-areas: "header" "tools" "viewport" "mobile-panel" "mobile-nav";
+  }
+  #root > .app-shell:not([data-mobile-pane="viewport"]) {
+    grid-template-rows: 52px 48px minmax(140px, 0.8fr) minmax(0, 1.2fr) calc(
+        56px + env(safe-area-inset-bottom, 0px)
+      );
+  }
+  .mobile-navigation {
+    grid-area: mobile-nav;
+    display: flex;
+    background: #141e28;
+    border-top: 1px solid #354452;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .mobile-navigation button {
+    flex: 1;
+    min-width: 0;
+    min-height: 48px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-size: 11px;
+    color: #96aabc;
+    border-top: 2px solid transparent;
+  }
+  .mobile-navigation button[aria-pressed="true"] {
+    border-top-color: #a4decd;
+    color: #c3eee0;
+    background: #22342f;
+  }
+  #root
+    > .app-shell
+    > :is(
+      .left-panel,
+      .inspector-panel,
+      .operation-panel-host,
+      .operation-panel,
+      .timeline-panel
+    ) {
+    display: none;
+    grid-area: mobile-panel;
+    min-width: 0;
+    min-height: 0;
+    border: 0;
+    border-top: 1px solid #3b4b5a;
+  }
+  #root > .app-shell[data-mobile-pane="design"] > .left-panel,
+  #root
+    > .app-shell[data-mobile-pane="inspector"]
+    > :is(.inspector-panel, .operation-panel-host, .operation-panel),
+  #root > .app-shell[data-mobile-pane="history"] > .timeline-panel {
+    display: flex;
+  }
+
+  .app-header {
+    min-width: 0;
+    padding: 0 10px;
+    gap: 6px;
+  }
+  .brand {
+    width: auto;
+    gap: 6px;
+    min-height: 44px;
+  }
+  .brand > svg:first-child {
+    width: 25px;
+    height: 25px;
+  }
+  .brand > span {
+    font-size: 14px;
+  }
+  .brand > svg:last-child {
+    margin-left: 0;
+  }
+  .command-search {
+    min-width: 40px;
+    width: 40px;
+    max-width: 40px;
+    min-height: 44px;
+    padding: 10px;
+    justify-content: center;
+  }
+  .command-search > span,
+  .command-search kbd,
+  .header-right .avatar {
+    display: none;
+  }
+  .header-right {
+    gap: 3px;
+  }
+  .save-indicator {
+    font-size: 0;
+    gap: 0;
+    padding: 0 4px;
+  }
+  .save-indicator > span {
+    width: 6px;
+    height: 6px;
+  }
+  .button.agent-button,
+  .button.export-button {
+    width: 40px;
+    min-height: 44px;
+    padding: 10px;
+    gap: 0;
+    justify-content: center;
+  }
+  .agent-button > span,
+  .agent-button small,
+  .export-button > svg:last-child {
+    display: none;
+  }
+  .button.export-button {
+    font-size: 0;
+  }
+  .project-dropdown {
+    top: calc(100% + 4px);
+    width: min(310px, calc(100vw - 24px));
+    max-height: calc(100dvh - 80px);
+  }
+  .tool-strip {
+    padding: 0 8px;
+    gap: 4px;
+    overscroll-behavior-x: contain;
+  }
+  .tool-strip .tool-button {
+    min-height: 44px;
+    font-size: 12px;
+    padding: 8px 10px;
+  }
+  .tool-strip kbd {
+    display: none;
+  }
+  .toolbar-spacer {
+    flex: 0 0 8px;
+  }
+
+  #root
+    .app-shell
+    :is(input, select, textarea):not([type="checkbox"]):not([type="range"]):not(
+      [type="color"]
+    ) {
+    font-size: 16px;
+    min-height: 40px;
+  }
+  .icon-button {
+    min-width: 40px;
+    min-height: 40px;
+  }
+  .panel-title {
+    min-height: 42px;
+    height: 42px;
+    flex-shrink: 0;
+  }
+  .component-select,
+  .sketch-tree-name,
+  .tool-library-row > button:first-child {
+    min-height: 44px;
+    font-size: 13px;
+  }
+  .design-tree-name {
+    font-size: 14px;
+    min-height: 44px;
+  }
+  .design-utility-link,
+  .workspace-tree-button,
+  .create-part {
+    min-height: 44px;
+  }
+  .tree-expand {
+    min-width: 32px;
+    min-height: 44px;
+  }
+  .component-row > .icon-button,
+  .sketch-tree-row > .icon-button {
+    min-width: 36px;
+  }
+  .component-color-mode {
+    width: 40px;
+    height: 40px;
+  }
+  .structure-section {
+    min-height: 46px;
+  }
+  .inspector-scroll {
+    padding: 0 14px;
+  }
+  .inspector-scroll .button,
+  .operation-panel .button,
+  .group-commit button {
+    min-height: 42px;
+  }
+  .operation-header {
+    padding: 6px 12px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .operation-header h2 {
+    font-size: 16px;
+  }
+  .operation-header kbd {
+    display: none;
+  }
+  .operation-introduction {
+    display: none;
+  }
+  .operation-fields {
+    padding: 0 12px;
+  }
+  .operation-pick-slot {
+    min-height: 44px;
+  }
+  .operation-footer {
+    padding: 7px 12px;
+    max-height: 60%;
+    overflow-y: auto;
+  }
+  .operation-commit-row {
+    grid-template-columns: max-content max-content minmax(0, 1fr);
+  }
+  .sketch-panel .sketch-commit,
+  .group-commit {
+    padding: 8px 12px;
+    flex-shrink: 0;
+  }
+  .operation-pick-prompt button {
+    min-width: 32px;
+    min-height: 32px;
+  }
+
+  .viewport-top {
+    left: 10px;
+    top: 8px;
+    right: 8px;
+  }
+  .viewport-context {
+    max-width: calc(100% - 138px);
+  }
+  .viewport-context > .eyebrow,
+  .viewport-context > div:not(.group-edit-banner) {
+    display: none;
+  }
+  .viewport-view-navigation {
+    gap: 0;
+  }
+  .view-orientation svg {
+    width: 96px;
+    height: 89px;
+  }
+  .view-controls {
+    gap: 0;
+  }
+  .view-controls > button:not(.iso-view) {
+    font-size: 10px;
+    padding: 4px;
+    min-height: 36px;
+  }
+  .iso-view {
+    margin-left: 2px;
+    padding: 5px;
+  }
+  .viewport-bottom {
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+  }
+  .navigation-hint {
+    left: 0;
+    bottom: 48px;
+    font-size: 9px;
+    line-height: 1.5;
+    max-width: 100%;
+  }
+  .viewport-options {
+    margin-left: auto;
+    padding: 3px;
+    gap: 1px;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+  .viewport-options > button {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+  }
+  .viewport-options > label {
+    min-height: 36px;
+    padding: 0 2px;
+    gap: 4px;
+  }
+  .viewport-options > span {
+    margin: 0 2px;
+  }
+  .viewport-options input {
+    width: 46px;
+    height: 24px;
+  }
+  .viewport-selection-legend,
+  .panel-reopen {
+    display: none;
+  }
+  .operation-role-key,
+  .operation-path-legend {
+    display: none;
+  }
+  .app-shell:not([data-mobile-pane="viewport"]) .navigation-hint {
+    display: none;
+  }
+  .viewport-selection-summary {
+    left: 8px;
+    top: 8px;
+    max-width: calc(100% - 152px);
+    padding: 6px 8px;
+    gap: 6px;
+  }
+  .viewport-selection-summary b {
+    display: none;
+  }
+  .viewport-selection-summary strong {
+    font-size: 11px;
+  }
+  .error-card,
+  .job-card,
+  .history-banner {
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+  .error-card,
+  .job-card {
+    max-height: calc(100% - 16px);
+    overflow-y: auto;
+  }
+  .sketch-plane-choices {
+    left: 8px;
+    right: 8px;
+    bottom: 82px;
+    padding: 8px;
+    max-width: none;
+  }
+  .sketch-plane-choices button {
+    min-height: 40px;
+  }
+  .tool-workbench-banner {
+    left: 8px;
+    right: 8px;
+    top: 8px;
+  }
+
+  .timeline-panel > header {
+    padding: 0 8px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    min-height: 44px;
+  }
+  .timeline-tabs,
+  .timeline-heading-right {
+    flex-shrink: 0;
+  }
+  .timeline-panel > header button {
+    min-height: 40px;
+  }
+  .timeline-panel .icon-button {
+    min-width: 40px;
+  }
+  .history-lane-label {
+    font-size: 11px;
+  }
+  .timeline-feature > span {
+    font-size: 9px;
+  }
+  .timeline-feature > em {
+    font-size: 8px;
+  }
+  .feature-history-scroll {
+    overscroll-behavior: contain;
+  }
+  .activity-timeline {
+    overflow: auto;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+    padding-top: max(10px, env(safe-area-inset-top));
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
+  }
+  .modal,
+  .modal.wide {
+    width: 100%;
+    max-width: 100%;
+    max-height: 100%;
+    padding: 14px;
+  }
+  .modal > header {
+    margin-bottom: 14px;
+  }
+  .modal > header h2 {
+    font-size: 20px;
+  }
+  .modal .button,
+  .modal .text-button,
+  .project-menu > button,
+  .project-menu > a {
+    min-height: 44px;
+  }
+  .field-grid.three {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .simple-parameter-create {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .simple-parameter-row {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  }
+  .simple-parameter-row > span {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .simple-parameter-row > .button {
+    grid-column: 2;
+    grid-row: 2;
+  }
+  .simple-parameter-row > .icon-button {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+  .workspace-design-open {
+    flex-wrap: wrap;
+    min-height: 44px;
+  }
+  .workspace-design-open small {
+    flex-basis: 100%;
+    padding-left: 24px;
+  }
+}
+
+/* In phone landscape, use the extra width instead of stacking two short panes. */
+@media (max-width:999px) and (orientation:portrait) {
+  #root > .app-shell[data-mobile-pane="history"][data-history-sized=true] {
+    grid-template-columns:minmax(0,1fr);
+    grid-template-rows:52px 48px minmax(120px,1fr) clamp(88px,var(--history-height),calc(100dvh - 276px - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px))) calc(56px + env(safe-area-inset-bottom,0px));
+  }
+}
+@media (max-width: 999px) and (orientation: landscape) {
+  .history-resize-handle {display:none;}
+  #root > .app-shell:not([data-mobile-pane="viewport"]) {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 44%);
+    grid-template-rows: 48px 44px minmax(0, 1fr) calc(
+        48px + env(safe-area-inset-bottom, 0px)
+      );
+    grid-template-areas: "header header" "tools tools" "viewport mobile-panel" "mobile-nav mobile-nav";
+  }
+  .mobile-navigation button {
+    min-height: 44px;
+    flex-direction: row;
+    gap: 7px;
+  }
+  .navigation-hint {
+    display: none;
+  }
+  .view-orientation svg {
+    width: 70px;
+    height: 65px;
+  }
+}

@@ -12,7 +12,17 @@ The environment and production UI are already installed in this workspace:
 .\Start-RyanCAD.ps1
 ```
 
-Open **http://127.0.0.1:8790**. The launcher opens the browser. New default projects load the four-part mold tooling example; existing designs are preserved. Keep the terminal running; Ctrl+C closes the service. The working folder is `runtime/projects/default.rycad/`.
+Open **http://127.0.0.1:8790**. The launcher opens the browser. A new browser workspace starts with a blank design; reference examples are available from the project menu. The normal launcher keeps the terminal open; Ctrl+C closes the service. An existing single-project design stays in `runtime/projects/default.rycad/` and can be copied into a workspace with its history from **Local Workspace → Copy existing server design and history**.
+
+On Windows, RyanCAD also places its icon in the notification area. Look under the **^** arrow if Windows hides it. Right-click the icon to open RyanCAD or quit the server; double-click opens the app. Hover over the icon to see which port that instance uses. Quitting shuts down the local server cleanly for every browser connected to it; saved designs remain on disk.
+
+To start without keeping a terminal window open:
+
+```powershell
+.\Start-RyanCAD.ps1 -Background
+```
+
+The launcher detects an already-used port before starting in the background. Use `-NoBrowser` if you do not want it to open a browser. The icon is Windows-only; `python -m ryancad --no-tray` disables it for automated or headless Windows runs. macOS and Linux retain their existing launch and shutdown behavior.
 
 For a separate project:
 
@@ -20,24 +30,41 @@ For a separate project:
 .venv\Scripts\python.exe -m ryancad --project runtime/projects/my-design.rycad
 ```
 
-Use `--port 8791` when needed. Each process must own a different project folder. Project → New design starts blank within the current recoverable history.
+Use `--port 8791` when needed. Each process must own a different project folder. Click **Local Workspace** in the sidebar, or **Workspace designs** in the RyanCAD menu, to create, switch, rename, delete, and restore independent designs.
 
 On a fresh machine, install Python 3.12/3.13, Node.js 22+, and pnpm 11 (or npm), then run `python scripts/bootstrap.py`. On macOS use `.venv/bin/python` and `bash Start-RyanCAD.command`. PlaneGCS needs a source build on Mac: Apple command-line build tools, CMake, Eigen3 and Boost, with `CMAKE_PREFIX_PATH` pointing to the package prefix. Mac setup/CI is prepared but has not been executed on a Mac here.
 
 After setup the application works offline, with local bundled assets, no cloud service, telemetry, account, embedded model or chat panel.
 
+### Local network access
+
+To open RyanCAD from a phone or another computer on the same network:
+
+```powershell
+.\Start-RyanCAD.ps1 -Lan
+# Optional: -Background -NoBrowser
+```
+
+On macOS, run `bash Start-RyanCAD.command --lan`; on Linux or with the Python CLI, add `--lan` to `python -m ryancad`. Stop the previous instance before restarting it in LAN mode. The server prints **Local network** URLs such as `http://192.168.1.11:8790`; open the Wi-Fi/Ethernet address from the other device. Virtual adapter addresses may also be listed. Background launches record the addresses in the `lan_urls` field of `runtime/connection.json` (or `connection-PORT.json`).
+
+LAN mode listens on IPv4 interfaces and allows the computer's detected private interface addresses through the existing Host/Origin checks. It retains the localhost URL for the local browser, tray and MCP connector. Normal startup without `-Lan`/`--lan` remains limited to localhost. Restart after changing networks or receiving a different DHCP address.
+
+No router port forwarding is needed. Devices must be on a network that permits communication between clients; a guest Wi-Fi network may isolate them. A host firewall can also block inbound connections. Starting RyanCAD does not change firewall settings or require administrator elevation. Each browser still receives its own workspace; use the existing workspace recovery code to open an existing workspace on another device.
+
 ### Public access behind a reverse proxy
 
 Set `RYANCAD_PUBLIC_URL` to the exact public origin, for example `https://cad.example.com`, and restart RyanCAD. The proxy must forward the original `Host` header and browser `Origin` unchanged to `127.0.0.1:8790`, and terminate HTTPS. For a systemd service add `Environment=RYANCAD_PUBLIC_URL=https://cad.example.com` under `[Service]`, then run `sudo systemctl daemon-reload` and `sudo systemctl restart ryancad`. Check `curl http://127.0.0.1:8790/api/health` locally and visit the public URL in a browser. Leave port 8790 private.
 
-Anyone who can reach the public URL can open and edit the same project, including its history. There are no user accounts or per-user projects; use a separate test project and retain backups. HTTPS protects traffic in transit but does not restrict access.
+Browsers on HTTP public origins may not expose `crypto.randomUUID`; RyanCAD falls back to cryptographic random bytes (or server-generated request IDs if browser crypto is unavailable). HTTPS is recommended for remote access.
+
+Each browser profile gets an independent workspace and the same profile retains it across refreshes and server restarts. Private/incognito sessions use separate browser storage. Workspace codes allow an existing workspace to be reopened in another browser. Workspace separation is for convenience, not account authentication or access control.
 
 ## Use it
 
 - Create automatically organized parts; repeat linked instances, make independent copies, group assemblies and set exact placements.
 - Press **T / Tool** for one viewport-driven operation workspace: Tool Origin, Tool Profile, Tool Path, Tool Effect in one scrolling form. Enter applies; Escape cancels the whole draft. Shift-click groups connected path edges and parallel planar profiles; plain viewport picks replace profiles/paths, and Auto suggests Add/Remove from native overlap. Native previews cover extrusions, holes, round/bevel, custom sweeps, revolutions, helices and body Booleans. See [launch walkthroughs](docs/UNIFIED_OPERATIONS.md).
 - Use primitives, existing constrained sketches, planar regions, mirrors, connected geometry repeats and linked part instances.
-- Edit automatically named parameters, reuse standards, trace roots/dependencies/consumers and specify tolerances and fit intervals.
+- Keep ordinary dimensions local, create optional named values in Parameters, and type their names in numeric fields with live suggestions. External geometry picks become one-time snapshots; sketch-local dimensional constraints remain. See [simple design intent](docs/SIMPLE_DESIGN_INTENT.md).
 - Work with planar fabrication profiles, cutouts, stock thickness and display-only thickness previews in the shared workspace.
 - Inspect dimensions and scoped volume/area in the inspector; part counts live in the structure tree and revision/Undo/Redo in the timeline. The viewport is reserved for geometry, selection and annotations.
 - Hover/select geometry for ranked contextual dimension lines. A [portable information service](docs/CONTEXTUAL_INFORMATION.md) balances interest, recent interactions, repetition, readability, and available space.
@@ -55,20 +82,20 @@ Start the app, then configure an MCP client:
   "mcpServers": {
     "ryancad": {
       "command": "C:/path/to/RyanCAD/.venv/Scripts/python.exe",
-      "args": ["-m", "ryancad.mcp_server", "--connection", "C:/path/to/RyanCAD/runtime/connection.json", "--name", "CAD agent"],
+      "args": ["-m", "ryancad.mcp_server", "--connection", "C:/path/to/RyanCAD/runtime/connection.json", "--name", "CAD agent", "--workspace", "YOUR_WORKSPACE_CODE", "--design", "YOUR_DESIGN_ID"],
       "cwd": "C:/path/to/RyanCAD"
     }
   }
 }
 ```
 
-On Mac use `.venv/bin/python`. For a different port use `runtime/connection-PORT.json`. The local capability file supplies the session token. Agents appear in the UI with pause, step and revoke controls. Names identify client-supplied sessions, not verified people.
+On Mac use `.venv/bin/python`. For a different port use `runtime/connection-PORT.json`. The local capability file supplies the session token; the app's **External agents** panel shows a command containing the current workspace code and design ID. The connector stays on that design when another tab switches. Omitting both flags connects to the original single-project service for compatibility. Agents appear in the UI with pause, step and revoke controls. Names identify client-supplied sessions, not verified people.
 
 ## Save and recover
 
-Working folders contain readable `manifest.yaml`, durable `journal.sqlite3` and `exports/`. Every accepted edit commits to SQLite before success. YAML follows after 500 ms quiet time or two seconds of sustained changes. The interface reports write failures and snapshot warnings.
+Each workspace's designs are stored in `runtime/projects/default.rycad.workspaces/` (or alongside the path given by `--project`, with `.workspaces` appended). Back up that entire folder as well as the original project, with the server stopped, or download a native snapshot of each design while it is running. Each design folder contains readable `manifest.yaml`, durable `journal.sqlite3` and any `exports/`. Every accepted edit commits to SQLite before success. YAML follows after 500 ms quiet time or two seconds of sustained changes. The interface reports write failures and snapshot warnings.
 
-Download native snapshot creates a consistent `.rycad.zip` with full history/checkpoints. UI Open a native design copy imports its current editable model into the current project's undo history. Restore a full archive into a new folder with:
+The workspace manager shows a recovery code under **Workspace recovery and switching**. Save it somewhere you can find it: clearing browser data or changing browser profiles removes the local link to the workspace. If you lose it, the server stores the same `recovery_code` in that workspace's `workspace.json` file. Deleted designs stay available under **Deleted designs**. Download native snapshot creates a consistent `.rycad.zip` with full history/checkpoints. **Open a native design copy** creates a separate design; full native archives retain history, while YAML contains the current model only. Restore a full archive into a new standalone folder with:
 
 ```text
 python -m ryancad --restore examples/mold-tooling.rycad.zip --project runtime/projects/restored-mold.rycad
@@ -97,7 +124,7 @@ Product intent remains in [PRODUCT_REQUEST.md](docs/PRODUCT_REQUEST.md), [ARCHIT
 
 `scripts/ui_move_component_check.mjs` exercises Move Component and the camera-following XYZ indicator on an empty isolated project at port 8821. `scripts/view_orientation.test.mjs` and the placement cases in `viewport_operation_display.test.mjs` cover camera projection and source-mesh placement restoration.
 
-`G` opens Move Component; `Shift+G` toggles the viewport grid. Movement offers one inferred reference workflow (points, direction and optional exact distance), XYZ increments, and true axis-and-angle rotation. Each reference and the active component can be cleared or replaced in the panel. See `docs/USER_GUIDE.md` for reference picking and frame semantics. `scripts/movement_model.test.mjs`, `tests/test_movement.py`, and the movement native API case cover exact snapping and movement math/transactions.
+`M` opens Move Component; `G` opens Group; `Shift+G` toggles the viewport grid. Movement offers one inferred reference workflow (points, direction and optional exact distance), XYZ increments, and true axis-and-angle rotation. Each reference and the active component can be cleared or replaced in the panel. See `docs/USER_GUIDE.md` for reference picking and frame semantics. `scripts/movement_model.test.mjs`, `tests/test_movement.py`, and the movement native API case cover exact snapping and movement math/transactions.
 
 Tool Path supports semantic travel targets, full finite travel from blank inputs, and face-boundary path selection. The corner indicator center selects world origin. Corner-finish profiles are native changed-material cross sections; single straight finishes support target-limited travel with planar end caps. `tests/test_operation_targets.py` covers target regeneration, arc length, native sections and partial finish geometry.
 

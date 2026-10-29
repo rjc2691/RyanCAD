@@ -2,6 +2,8 @@ import { displaySelectionMembers } from "./operations/groupedSelection.ts";
 import * as THREE from "three";
 import type { Geometry, Occurrence, Selection } from "./types";
 import type { OperationDraft } from "./operations/operationModel";
+import { applyActiveAppearance } from "./activeAppearance.ts";
+import type { ActiveAppearance } from "./experiments.ts";
 
 export const SELECTION_COLOR = "#2455a4";
 export const COMPONENT_SELECTION_COLOR = "#f3a64f";
@@ -57,6 +59,8 @@ export function syncOperationAppearance(
     operationDraft?: OperationDraft;
     placementTarget?: Selection | null;
     section: boolean;
+    sectionPlane?: THREE.Plane;
+    activeAppearance?: ActiveAppearance;
     sketch?: unknown;
     editingGroup?: string;
   },
@@ -97,7 +101,7 @@ export function syncOperationAppearance(
     const changedClip = shown.section !== props.section;
     shown.section = props.section;
     const clip = props.section
-      ? [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)]
+      ? [props.sectionPlane || new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)]
       : [];
     for (const group of shown.root.children) {
       const o = group.userData.occurrence as Occurrence;
@@ -122,7 +126,14 @@ export function syncOperationAppearance(
           material.color.set(colors.get(o.id) || o.color || "#92b7c9");
           material.emissive.set("#5c3614");
           material.emissiveIntensity = 0.12;
+          applyActiveAppearance(object, true, props.activeAppearance);
         }
+        if (object.isLineSegments)
+          material.color.set(
+            props.activeAppearance?.enabled
+              ? "#182330"
+              : COMPONENT_SELECTION_COLOR,
+          );
         if (changedClip) {
           material.clippingPlanes = clip;
           material.needsUpdate = true;
@@ -182,23 +193,41 @@ export function syncOperationAppearance(
         : selected
           ? 0.18
           : 0;
+    applyActiveAppearance(
+      surface,
+      !muted &&
+        (selected || moveFocus || draft?.target?.definition === o.definition),
+      props.activeAppearance,
+    );
     wire.visible = !replaced.has(o.id);
     wire.material.color.set(
-      selected
-        ? COMPONENT_SELECTION_COLOR
-        : muted
+      props.activeAppearance?.enabled
+        ? muted
           ? "#657583"
-          : draft
-            ? "#bc8d56"
-            : "#182330",
+          : "#182330"
+        : selected
+          ? COMPONENT_SELECTION_COLOR
+          : muted
+            ? "#657583"
+            : draft
+              ? "#bc8d56"
+              : "#182330",
     );
-    wire.material.opacity = selected ? 0.95 : muted ? 0.3 : 0.8;
+    wire.material.opacity = props.activeAppearance?.enabled
+      ? muted
+        ? 0.3
+        : 0.8
+      : selected
+        ? 0.95
+        : muted
+          ? 0.3
+          : 0.8;
     wire.material.depthWrite = false;
     const highlights = group.userData.selectionLayer as THREE.Group | undefined;
     if (highlights)
       for (const child of highlights.children)
         child.visible = child.userData.wholeOutline
-          ? !replaced.has(o.id)
+          ? !replaced.has(o.id) && !props.activeAppearance?.enabled
           : true;
   }
 }

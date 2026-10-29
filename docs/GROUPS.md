@@ -4,7 +4,7 @@ Groups reuse assembly definitions and placed instances. They organize manufactur
 
 ## Human workflow
 
-1. Select components, optionally with Shift, then choose **Group** in the top bar or Ctrl/Cmd+G. The member list also works without prior selection.
+1. Select components, optionally with Shift, then choose **Group** in the top bar or G. The member list also works without prior selection.
 2. Give the group a name, check its members and apply. Viewport clicks toggle whole components/groups while the panel is open. Enter applies; Escape cancels.
 3. Outside group editing, clicking any grouped body selects the immediate closed group. All its physical descendants receive the orange component outline. **G / Move Component** moves or rotates the group through the existing preview/apply/cancel workflow. A point on any descendant may serve as its movement origin.
 4. **Copy group** in the top bar or inspector copies group structure and membership, with a 30 mm parent-X offset. Physical part definitions remain linked. Copied group membership and instance placements are independent.

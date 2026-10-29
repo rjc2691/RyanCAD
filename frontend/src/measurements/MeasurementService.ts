@@ -4,6 +4,7 @@
 export type Vec3 = [number, number, number];
 export type Vec2 = [number, number];
 export interface EdgeMeasure {
+  parameterNames?: string[];
   id: string;
   type: string;
   length: number;
@@ -12,6 +13,7 @@ export interface EdgeMeasure {
   anchor: Vec3;
 }
 export interface FaceMeasure {
+  parameterNames?: string[];
   id: string;
   type: string;
   area: number;
@@ -20,6 +22,7 @@ export interface FaceMeasure {
   bounds: { min: number[]; max: number[]; size: number[] };
 }
 export interface MeasurementPart {
+  namedExtents?: Record<string, string[]>;
   id: string;
   definition: string;
   edges: EdgeMeasure[];
@@ -34,6 +37,7 @@ export interface Focus {
   point?: Vec3;
 }
 export interface Candidate {
+  parameterNames?: string[];
   id: string;
   occurrence: string;
   entity: string;
@@ -129,7 +133,7 @@ export function formatMeasurement(c: Candidate, units: "mm" | "in") {
   const number = value.toLocaleString(undefined, {
     maximumFractionDigits: units === "in" ? 4 : 3,
   });
-  return `${c.kind === "area" ? "a=" : c.kind === "curve" ? "L " : ""}${number} ${units}${c.kind === "area" ? "²" : ""}`;
+  return `${c.parameterNames?.length ? "p: " : ""}${c.kind === "area" ? "a=" : c.kind === "curve" ? "L " : ""}${number} ${units}${c.kind === "area" ? "²" : ""}`;
 }
 
 export const edgeProvider: CandidateProvider = (part) =>
@@ -172,6 +176,7 @@ export const edgeProvider: CandidateProvider = (part) =>
             ? "Edge length"
             : "Curve length (along the curve)",
         confidence: 1,
+        parameterNames: edge.parameterNames,
         onFaces: faces.map((f) => f.id),
       };
     });
@@ -194,6 +199,7 @@ export const extentProvider: CandidateProvider = (part) =>
         b,
         anchor: center(a, b),
         axis,
+        parameterNames: part.namedExtents?.[String(axis)],
         group: `${part.id}:LINE:${normalizedAxis(a, b)}:${value.toPrecision(12)}`,
         qualifier: `Overall ${["X", "Y", "Z"][axis]} extent (component-local frame)`,
         confidence: 1,
@@ -209,6 +215,7 @@ export const areaProvider: CandidateProvider = (part) =>
       occurrence: part.id,
       entity: `face:${face.id}`,
       kind: "area",
+      parameterNames: face.parameterNames,
       value: face.area,
       a: face.center,
       b: face.center,

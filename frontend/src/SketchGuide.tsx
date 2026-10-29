@@ -6,6 +6,7 @@ import {
   useRef,
 } from "react";
 import { sketchMeasurements } from "./sketchMeasurements";
+import { NumericInput } from "./NumericInput";
 import { sketchPlaneBounds } from "./sketchGrid";
 import * as THREE from "three";
 import {
@@ -385,6 +386,7 @@ export default forwardRef<
                 className={`sketch-measurement ${m.constrained ? "constrained" : "reference"}`}
                 aria-label={`${m.constrained ? "Constrained dimension" : "Reference measurement"} ${m.label}`}
               >
+                {m.parameterName && <title>{`Parameter: ${m.parameterName}`}</title>}
                 <path />
                 <text textAnchor="middle">{m.label}</text>
               </g>
@@ -415,7 +417,7 @@ export default forwardRef<
         >
           <label>
             <span className="sketch-dimension-inline-label">Length</span>
-            <input
+            <NumericInput kind="length"
               ref={editorInput}
               aria-label="Viewport dimension length"
               type="text"

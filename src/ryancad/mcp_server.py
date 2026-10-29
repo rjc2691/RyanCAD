@@ -15,9 +15,19 @@ def main():
     parser = argparse.ArgumentParser(description="RyanCAD external-agent MCP connector; start RyanCAD first")
     parser.add_argument("--connection", type=Path, default=Path("runtime/connection.json"))
     parser.add_argument("--name", default="External CAD agent")
+    parser.add_argument("--workspace", help="Browser workspace recovery code; omit to use the legacy single-project session")
+    parser.add_argument("--design", help="Design ID within the selected browser workspace")
     arguments = parser.parse_args()
+    if arguments.design and not arguments.workspace:
+        parser.error("--design requires --workspace")
     config = json.loads(arguments.connection.read_text("utf-8"))
     client = httpx.Client(base_url=config["url"], headers={"Authorization": f"Bearer {config['token']}"}, timeout=30)
+    if arguments.workspace:
+        client.headers["X-RyanCAD-Workspace"] = arguments.workspace
+        workspace = client.get("/api/workspace")
+        workspace.raise_for_status()
+        # Pin the connector for its entire life, even if another tab switches designs.
+        client.headers["X-RyanCAD-Design"] = arguments.design or workspace.json()["active_design"]
     response = client.post("/api/agents", json={"name": arguments.name})
     response.raise_for_status()
     actor = response.json()

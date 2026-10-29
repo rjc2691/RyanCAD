@@ -1,0 +1,44 @@
+import {createRequire} from 'node:module';
+import assert from 'node:assert/strict';
+const {chromium}=createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE_PATH||'playwright');
+const browser=await chromium.launch({channel:'msedge',headless:true});
+const context=await browser.newContext({viewport:{width:1600,height:1050}}),page=await context.newPage(),errors=[];
+page.on('pageerror',e=>errors.push(String(e)));
+const panel=page.getByRole('dialog',{name:'Bug reports',exact:true}),button=page.getByRole('button',{name:'Bug reports',exact:true});
+const read=()=>page.evaluate(()=>fetch('/api/state',{headers:{'X-RyanCAD-Design':sessionStorage.getItem('ryancad-active-design')}}).then(r=>r.json()));
+const reports=()=>page.evaluate(()=>fetch('/api/reports').then(r=>r.json()));
+try{
+ await page.goto('http://127.0.0.1:8898');await page.waitForFunction(()=>document.querySelector('.design-tree-name')?.textContent==='Untitled design');
+ // Disposable test server only: remove feedback left by an interrupted earlier check.
+ await page.evaluate(async()=>{const {reports}=await(await fetch('/api/reports')).json();for(const r of reports)await fetch(`/api/reports/${r.id}?version=${r.version}`,{method:'DELETE'});});
+ const before=JSON.stringify((await read()).document),png=await page.screenshot({clip:{x:0,y:0,width:60,height:40}}),base64=png.toString('base64');
+ const prev=await page.getByRole('button',{name:'Experimental features',exact:true}).boundingBox(),next=await button.boundingBox();assert(next.x>=prev.x+prev.width);
+ await button.click();await panel.getByRole('button',{name:'New report'}).click();
+ await panel.getByLabel('Title',{exact:true}).fill('Test viewport report');await panel.getByLabel('Steps to reproduce',{exact:true}).fill('Select a face.\nPress T.');await panel.getByLabel('Error message',{exact:true}).fill('Example error');await panel.getByLabel('Additional information',{exact:true}).fill('Screenshot attachment test');
+ const env=await panel.getByLabel('Browser / device information',{exact:true}).inputValue();assert(env.includes('User agent:')&&env.includes('Platform (browser reported):'));
+ await panel.getByLabel('Choose screenshot files',{exact:true}).setInputFiles({name:'picked.png',mimeType:'image/png',buffer:png});await panel.getByAltText('picked.png',{exact:true}).waitFor();
+ await panel.evaluate((el,base64)=>{const bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0)),dt=new DataTransfer();dt.items.add(new File([bytes],'pasted.png',{type:'image/png'}));el.dispatchEvent(new ClipboardEvent('paste',{clipboardData:dt,bubbles:true,cancelable:true}));},base64);
+ await panel.getByAltText('pasted.png',{exact:true}).waitFor();
+ await panel.locator('.report-dropzone').evaluate((el,base64)=>{const bytes=Uint8Array.from(atob(base64),c=>c.charCodeAt(0)),dt=new DataTransfer();dt.items.add(new File([bytes],'dropped.png',{type:'image/png'}));el.dispatchEvent(new DragEvent('dragover',{dataTransfer:dt,bubbles:true,cancelable:true}));el.dispatchEvent(new DragEvent('drop',{dataTransfer:dt,bubbles:true,cancelable:true}));},base64);
+ await panel.getByAltText('dropped.png',{exact:true}).waitFor();assert.equal(await panel.locator('.report-image').count(),3);
+ await panel.getByRole('button',{name:'Save report',exact:true}).click();await panel.locator('summary').filter({hasText:'Test viewport report'}).waitFor();
+ await panel.locator('summary').filter({hasText:'Test viewport report'}).click();assert(await panel.getByText('Example error',{exact:true}).isVisible());
+ await page.waitForFunction(()=>[...document.querySelectorAll('.report-record img')].every(i=>i.complete&&i.naturalWidth>0));
+ const first=(await reports()).reports[0];assert.equal(first.screenshots.length,3);assert.equal(first.environment,env);
+ const response=await page.request.get(`http://127.0.0.1:8898/api/reports/${first.id}/images/${first.screenshots[0].id}`);assert.deepEqual(await response.body(),png);
+ const other=await browser.newPage();await other.goto('http://127.0.0.1:8898');await other.getByRole('button',{name:'Bug reports',exact:true}).click();await other.getByRole('dialog',{name:'Bug reports'}).locator('summary').filter({hasText:'Test viewport report'}).waitFor();
+ assert.notEqual((await context.cookies()).find(c=>c.name.startsWith('ryancad_workspace_')).value,(await other.context().cookies()).find(c=>c.name.startsWith('ryancad_workspace_')).value);
+ await panel.getByRole('button',{name:'Edit',exact:true}).click();await panel.getByLabel('Report type',{exact:true}).selectOption('feature');await panel.getByLabel('Title',{exact:true}).fill('Feature request: report test');
+ await panel.getByRole('button',{name:'Remove screenshot pasted.png',exact:true}).click();await panel.getByRole('button',{name:'Save report',exact:true}).click();await panel.locator('summary').filter({hasText:'Feature request: report test'}).waitFor();
+ let updated=(await reports()).reports[0];assert.equal(updated.kind,'feature');assert.equal(updated.version,2);assert.equal(updated.screenshots.length,2);
+ await panel.locator('summary').filter({hasText:'Feature request: report test'}).click();await page.screenshot({path:'artifacts/bug-reports-desktop.png'});
+ await page.getByRole('button',{name:'Close bug reports'}).click();await page.reload();await button.click();await panel.locator('summary').filter({hasText:'Feature request: report test'}).waitFor();
+ await panel.getByRole('button',{name:'New report'}).click();await panel.getByLabel('Title',{exact:true}).fill('Retained draft');await page.getByRole('button',{name:'Close bug reports'}).click();await button.click();assert.equal(await panel.getByLabel('Title',{exact:true}).inputValue(),'Retained draft');
+ await panel.getByLabel('Title',{exact:true}).focus();await page.keyboard.press('t');assert.equal(await page.getByRole('complementary',{name:'Tool operation workspace'}).count(),0);await page.keyboard.press('Escape');assert.equal(await panel.count(),0);
+ await button.click();await panel.getByRole('button',{name:'Discard draft'}).click();
+ await panel.locator('summary').filter({hasText:'Feature request: report test'}).click();await panel.getByRole('button',{name:'Delete',exact:true}).click();await panel.getByRole('button',{name:'Confirm delete',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.report-record').length===0);assert.equal((await reports()).reports.length,0);
+ assert.equal(JSON.stringify((await read()).document),before);
+ await page.getByRole('button',{name:'Close bug reports'}).click();await page.setViewportSize({width:390,height:844});await button.click();await panel.getByRole('button',{name:'New report'}).click();await panel.getByLabel('Title',{exact:true}).fill('Phone report');const bounds=await panel.boundingBox();assert(bounds.x>=0&&bounds.x+bounds.width<=390);
+ await panel.getByRole('button',{name:'Save report',exact:true}).scrollIntoViewIfNeeded();await page.screenshot({path:'artifacts/bug-reports-mobile.png'});
+ assert.deepEqual(errors,[]);console.log('Passed: shared report CRUD, separate workspaces, file/paste/drop screenshots, image retrieval and removal, persistence, environment capture, draft retention, keyboard isolation, unchanged CAD document and mobile bounds.');
+}catch(e){await page.screenshot({path:'.cache/reports-browser/failure.png'});throw e;}finally{await browser.close();}

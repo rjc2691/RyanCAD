@@ -1,6 +1,30 @@
 # Using RyanCAD 0.1
 
+The current rules for references, dimensions and named values are described in [Simple design intent](SIMPLE_DESIGN_INTENT.md). Cross-component picks are copied into accepted operations. Numeric dimensions stay local; the Parameters window lists only deliberately named values. Type letters in a numeric field for matching parameters, use Tab repeatedly to cycle matches, or click a name. Parameter-driven viewport dimensions use a subtle `p:` prefix and a full-name tooltip where the generating dimension is known.
+
+## Phones and narrow screens
+
+To connect a phone to a locally running server, start Windows RyanCAD with `Start-RyanCAD.ps1 -Lan`, or add `--lan` to the Python/macOS launcher, and open the printed Wi-Fi/Ethernet URL from the same network. A phone browser gets its own workspace; use Workspace recovery and switching to reopen the desktop workspace when desired.
+
+Below 1000 pixels wide, the bottom bar opens **View**, **Design**, **Inspector** or **History**. View uses the full modeling area; the other choices share the screen with the viewport. In landscape, the viewport and selected panel sit side by side. Panels scroll independently. Swipe the top tool row sideways to reach additional tools, and swipe the history header to reach its remaining controls. The compact header keeps project, search, agent and STL export actions accessible; tap the three-line button beside RyanCAD for the project menu.
+
+Starting Tool, Move, Group or Sketch opens its existing operation panel. The Inspector tab takes the operation's name while it is active. Switch to View for more drawing space, then return to that tab to continue configuring or apply/cancel. Switching panels preserves the pending operation. Use Design to reach components, sketches, tool bodies and workspace management.
+
+Tap geometry to select it. Outside sketch drawing, drag one finger to orbit; use two fingers to pan and pinch to zoom. In the sketch editor, taps draw or select with the current sketch tool, and two fingers pan/zoom without placing geometry. Standard view buttons and Fit remain available. This first mobile pass reuses existing tools and data; mouse-oriented features such as Shift multi-selection, tree drag reorganization and bounded sketch orbit do not have new touch gestures.
+
 ## The workspace
+
+The **Section view** button in the viewport controls opens a movable display cut. Choose XY, XZ or YZ, drag the slider or enter an exact world-coordinate position in millimeters, and use **Flip cut side** to retain the other half. **Center** places the plane halfway through the displayed collection's bounds along the chosen axis, accounting for component placements and exploded display. The first opening centers automatically. Closing and reopening preserves the last settings during that app session. Sectioning does not edit geometry, exports, history or material statistics; sketch drawing temporarily shows its normal unsectioned view. This is surface clipping, without filled section caps. Use **Plane reference** to copy the plane of a selected planar face or sketch, or click the reference picker and choose one from the viewport/tree. Tilted planes are supported. With a reference, Position becomes an offset along its normal, starting at zero. Escape or Cancel picking leaves the previous cut intact. Clear reference or choose a world plane to return to axis-aligned sectioning. References are snapshots for this view and do not bind the component or sketch. While picking, clipping is temporarily lifted so the source geometry is visible. Finish pending modeling operations before acquiring a section reference.
+
+Use the adjacent **Import** and **Export** dropdowns in the header. Import opens a RyanCAD design, adds an STL component, or creates an SVG sketch. Export offers selected components as STL, selected sketches as SVG, and a native RyanCAD snapshot. Multiple selected sketches download as a ZIP. SVGs use sketch-plane millimeter coordinates; imported curves may be approximated and STL imports are limited to 5,000 facets. See [file import/export](FILE_IMPORT_EXPORT.md) for format coverage and limits. Reference designs remain in the three-line main menu.
+
+On Windows, RyanCAD has a notification-area icon while its local server is running. Right-click it and choose **Open RyanCAD** or **Quit RyanCAD**; double-click also opens the app. Windows may place it under the **^** hidden-icons arrow. Its tooltip shows the server port when several instances are running. Quit stops that local server and all browsers connected to it, while accepted edits stay saved. A remote server, such as an EC2 instance, is a separate process. `Start-RyanCAD.ps1 -Background` starts a hidden local process controlled by this icon; without `-Background`, Ctrl+C in its terminal also stops it.
+
+Click **Local Workspace** at the top of the left sidebar to manage designs. Create a named or untitled design, switch between designs, rename any design, or delete one. Deleted designs remain under **Deleted designs**, where they can be restored; at least one design stays in the workspace. A design has its own parameters, features, revisions, undo/redo, checkpoints and exports. The current design name can also be renamed directly in the tree.
+
+Separate browser profiles receive separate workspaces. Refresh and server restart preserve the workspace, and each open browser tab retains its selected design independently. Under **Workspace recovery and switching**, save the displayed code to reopen that workspace after clearing browser data or in another browser. The code is also recorded in that workspace's `workspace.json` on the server. You can create another workspace there. Switching workspaces changes the browser profile's workspace cookie; reload its other tabs after switching. These codes are convenience identifiers; RyanCAD does not provide user accounts or access control.
+
+An earlier single-project installation is kept intact. On a fresh workspace, **Copy existing server design and history** makes a separate workspace design with the old journal and checkpoints. The original project is not moved or overwritten. Reference designs and native imports likewise open as separate designs; full native snapshots retain history, while YAML imports contain the current model.
 
 The left tree contains physical instances and assembly groups, with total part and unique-definition counts below its heading. Linked parts share a definition and show a count badge. The inspector shows material volume and surface/profile area for one selected part, or quantity-aware totals for the entire design when selection is cleared. Selecting an assembly measures its placed subtree. Hidden parts remain in totals; suppressed instances are excluded. Planar parts report profile area without inventing solid volume, and incomplete geometry is marked explicitly.
 
@@ -23,7 +47,7 @@ Select a component in the tree or a face/edge in the viewport; Shift-click adds/
 
 The world XYZ indicator is in the upper right, above Front/Top/Right/ISO. It follows the actual camera orientation during orbit and named views; it does not change the design. Its units match the design display units.
 
-**Move Component** sits beside Tool. Press **G** to open it; **Shift+G** toggles the grid. The side panel keeps the viewport visible. The selector contains **Reference movement** (default), **XYZ distances and rotation**, and **Rotation**.
+**Move Component** sits beside Tool. Press **M** to open it; **Shift+G** toggles the grid. The side panel keeps the viewport visible. The selector contains **Reference movement** (default), **XYZ distances and rotation**, and **Rotation**.
 
 **Reference movement** combines point-to-point, distance along an edge, and constrained point alignment in one inferred workflow:
 
@@ -87,24 +111,15 @@ The edited component stays solid in its own color; inactive components become tr
 
 Independent constructors create components. Initially disconnected additions disclose separate ownership in preview; later regeneration or a cut that splits one part fails safely. Body tools preserve source parts. Linked-definition edits affect every linked instance. Exact world inputs and reference positions resolve through the chosen target occurrence's placement.
 
-## Parameters and fit intent
+## Named parameters and local dimensions
 
-Click inspector dimensions or open Parameters. Filters distinguish independent roots, shared inputs, a component, favorites and unused inputs. A parameter dialog shows upstream references, root inputs, downstream consumers, formula, scope and tolerances. Preview impact evaluates without committing.
+Open **Parameters** to create a deliberate named value, choose its dimensional type, edit it, or delete an unused one. Ordinary numeric entries remain local dimensions and do not appear in that list. Click a feature dimension in the inspector to change its value or type a named parameter instead. Cross-component fit constraints are disabled.
 
-Use ↗ beside an input to reuse a parameter. Equal numbers entered separately remain independent. Favorite/promote standards; explicitly link or detach feature uses. Referenced parameters cannot be deleted.
+Typing letters in a numeric field shows matching compatible names. Tab completes the first suggestion; further Tabs cycle that matching list. Up/Down navigate, and Enter or clicking chooses a name. Enter used to accept a suggestion does not also apply the operation. Long lists scroll. Names containing spaces can be entered in brackets, such as `[Wall thickness]`. Expressions support units and arithmetic, for example `12 mm`, `0.5 in`, or `[Plate width] - 2 * [Edge offset]`. Renaming a named parameter preserves its explicit consumers.
 
-Expressions support units and arithmetic, for example `12 mm`, `0.5 in`, `[Plate length] - 2 * [Edge offset]`, or `sin(30 deg) * 20 mm`. Names resolve locally first. Use `[Component name::Parameter name]` or a stable ID for ambiguous names. Renaming preserves stored references. Internal lengths are mm and angles degrees; changing display units never rescales geometry. Inputs visibly labeled mm remain mm inputs unless a unit is typed.
+Known parameter-driven viewport dimensions show `p:` beside the evaluated number. Hover reveals the full name. Sketch constraints retain their names after saving and reopening. Measurements whose provenance is unknown remain plain read-only values.
 
-For holes that track plate edges, create shared `Edge offset = 8 mm` and use:
-
-```text
-X position      -[Mounting plate · length]/2 + [Edge offset]
-Y position      -[Mounting plate · width]/2 + [Edge offset]
-Column spacing   [Mounting plate · length] - 2 * [Edge offset]
-Row spacing      [Mounting plate · width] - 2 * [Edge offset]
-```
-
-Tolerance fields are nonnegative deviations below/above nominal in canonical units. Unspecified does not mean zero. Fit relationships name the pin/socket diameter parameters and radial/per-side or diametral/total convention. The fit panel reports nominal difference and worst-case limits only when both tolerances exist. Manufacturing calibration remains a design input.
+Tolerance fields remain available when editing a local length. They are nonnegative deviations below/above the nominal value; unspecified does not mean zero. See [Simple design intent](SIMPLE_DESIGN_INTENT.md) for the current reference and migration rules.
 
 ## Sketches and planar parts
 
@@ -122,7 +137,7 @@ Repeat part creates a linked instance. Component pattern repeats with exact line
 
 Assembly group creates a container. Reparenting preserves the local transform, so world position can change if the new assembly is transformed. Use exact coordinates/rotations; geometry does not rely on free-space dragging.
 
-Hide/show is display only; suppression explicitly changes manufactured quantities/export eligibility. Assembly metrics count linked uses. Measure between parts returns static minimum separation and intersecting solid volume at actual placements, not motion or process simulation.
+Hide/show is display only; suppression explicitly changes manufactured quantities/export eligibility. Assembly metrics count linked uses. The Measure sidebar measures sampled points at actual placements. Static whole-component minimum separation and intersecting solid volume remain available through the backend API, rather than the point-measurement panel.
 
 Booleans use source definitions in local geometry coordinates and do not implicitly consume/suppress their source instances. Mirror creates a separate dependent component. Connected pattern fuses translated copies and must remain one connected solid; Component pattern is for separate manufactured repeats.
 
@@ -179,9 +194,9 @@ Inside a Tool operation, choose Draw profile or press E to suspend it and use ex
 
 ## Group components
 
-Choose **Group** in the top bar (Ctrl/Cmd+G), name the group and check its members in the side panel or click them in the viewport. Enter applies and Escape cancels. Grouping preserves current positions. To populate an existing/legacy assembly, choose **Add to [group]** as Destination and select sibling parts.
+Choose **Group** in the top bar (**G**), name the group and check its members in the side panel or click them in the viewport. Enter applies and Escape cancels. Grouping preserves current positions. To populate an existing/legacy assembly, choose **Add to [group]** as Destination and select sibling parts.
 
-Click a grouped body to select its whole group. **G** moves/rotates it with the standard live movement panel; a descendant body point may be its origin. **Copy group** appears in the toolbar/inspector when a group is selected. Copies have independent membership and placement, but part geometry stays linked. Double-click the group in the viewport or tree to edit its parts, then use **Done** or Escape to exit. Nested groups open one level at a time. **Ungroup** in the inspector preserves part positions and can be undone.
+Click a grouped body to select its whole group. **M** moves/rotates it with the standard live movement panel; a descendant body point may be its origin. **Copy group** appears in the toolbar/inspector when a group is selected. Copies have independent membership and placement, but part geometry stays linked. Double-click the group in the viewport or tree to edit its parts, then use **Done** or Escape to exit. Nested groups open one level at a time. **Ungroup** in the inspector preserves part positions and can be undone.
 
 All tools has been removed. Shape edits use Tool; the remaining distinct workflows are available directly in the top bar. Small windows can scroll the toolbar horizontally. See [GROUPS.md](GROUPS.md) for ownership/copy details and current limits.
 
@@ -219,3 +234,37 @@ Components, 2D Sketches and 3D Tool Bodies use aligned headings and full-width s
 Component definitions, including groups and tool bodies, use unique names (case-insensitive, with surrounding whitespace ignored). Creation and independent copies receive numeric suffixes when needed; duplicate manual renames are rejected. Linked instances keep their shared definition name. The `document.normalize_names` command repairs legacy duplicate definition names in one undoable action without changing reference IDs.
 
 Starting Sketch without a selected planar face first opens the sketch panel in plane-selection state. Pick a planar face in the viewport or choose World XY/XZ/YZ; drawing controls remain inactive until the plane is chosen. The plane reference uses the same colored reference-box styling as tool operations. Selecting a face before starting Sketch or drawing a profile inside a pending operation retains the inferred plane. Escape cancels a sketch that is waiting for its plane.
+
+
+The exploded-view slider spreads physical component instances away from the center of their combined bounding box. At 100% each component center is twice as far from the collection center as in the saved design; 0% restores the normal view. Hidden parts contribute to the overall center so hiding one does not shift the rest. Suppressed and unfinished parts without geometry are excluded. Parts whose centers coincide with the overall center stay in place. This display never changes placements or exports.
+
+Use the bounding-box icon in the viewport controls to show orange bounds and a center cross for selected components; selecting a group shows its visible physical members. These are world-axis-aligned envelopes of each transformed local bounding box and may be conservative for rotated parts.
+
+
+## Account menu preview
+
+Click the R avatar in the upper-right corner for Profile, Account settings, Sign in and Create account placeholders. Account forms are explicitly marked as previews and disabled; they do not collect credentials, authenticate a user or change workspace access. External agents remains functional in this menu and provides the mobile route to the existing Agents panel.
+
+
+Drag the grip along the top edge of Feature history / Activity up or down to resize the panel. Its contents scroll horizontally and vertically when they exceed the available space, with wider visible scrollbar tracks and thumbs. The chosen height stays while switching history modes during the session. Double-click the divider to restore automatic sizing. With the divider focused, Up/Down resize by 20 px (Shift: 50 px), Home minimizes it, and Enter resets it. Portrait mobile history supports the same divider; landscape mobile history fills its side panel.
+
+
+In Agents, use **Copy Codex config** for a ready-to-paste TOML block and the exact configuration-file location. It targets the currently open workspace/design and reads its token from the local connection file. Codex configuration uses TOML, not YAML. The three-line main-menu button is to the right of RyanCAD.
+
+A section plane reference now uses the same colored reference-card styling and pick/clear icons as Tool and Move. In the viewport, a faint violet plane marks the reference; an offset cut outline, dashed normal path, origin/end markers and signed distance label follow the configured offset. The reference plane remains at its copied location while the cut moves. These are display guides and do not alter the design.
+
+The beaker **Experimental features** button immediately after Parameters opens optional browser-local settings. **Active component appearance** (`active-component-appearance`) offers Soft glow, Rim glow and Height gradient, with live strength and tint controls. Enabling it replaces amber whole-component edges with surface shading while preserving blue subfeature selection and hover feedback. It defaults to off; switching off restores the current styling. Settings survive refreshes without changing design files. See [Experimental features](EXPERIMENTAL_FEATURES.md) for mode IDs and lifecycle details.
+
+**Measure** opens a right-side operation panel. Click point A, then point B in the viewport to see their distance, signed ΔX/ΔY/ΔZ and unit direction in design coordinates. Vertices and edge midpoints snap exactly; selecting an edge or face uses the location clicked, with edge length or face area shown as context. The world-origin marker can also supply a point. A labeled line joins the sampled points in the viewport and follows camera changes. Exploded display is reset while measuring so the displayed positions agree with design coordinates.
+
+After a pair is complete, an ordinary click starts a new pair. Shift-click adds points to a chain, or removes an already sampled point at the same location. Chains show consecutive distances and total chain length. Click a point's reference card to replace it, use its × to remove it, or Clear points to start over. Hovering a reference card highlights its source geometry. Done or Escape closes Measure and returns to the inspector with the prior component selection retained. Measurements are temporary; they create no parameters, constraints, history events or saves. Document revisions clear samples to avoid stale measurements. This initial workflow samples 3D component geometry; sketch-entity measurement and whole-body minimum-separation analysis are not part of this panel.
+
+## Bug reports
+
+**Bug reports**, next to Experimental features, opens the server-wide list of bugs and feature requests. Use New report to add a title/date, steps, error message, notes and automatically filled browser/device details. Screenshots can be selected, dropped into the form or pasted while editing. Expand a report to read it or use Edit/Delete. Closing the menu retains an unsaved draft until page refresh; saved reports are shared across workspaces and survive server restarts. See [Bug reports](BUG_REPORTS.md) for storage and attachment limits.
+
+## Browser graphics troubleshooting
+
+RyanCAD's viewport requires WebGL 2 on the browser device, even when the server runs on another computer. If the browser cannot create its graphics context, a **3D graphics unavailable** message replaces the failed viewport startup while workspace/file menus remain accessible. This is a graphics diagnostic, not proof of a LAN or HTTPS problem. The app cannot enable a disabled browser GPU backend.
+
+For Chrome, open `chrome://settings/system`, enable **Use graphics acceleration when available**, then fully quit and reopen Chrome. Inspect `chrome://gpu`, particularly WebGL/WebGL2, Problems Detected and GPU-process errors. If it still fails, update Chrome/macOS and try a Guest profile to isolate profile/extension behavior. Report Chrome/macOS versions and those GPU diagnostics if unresolved. Working Safari or Brave is a practical interim route. Do not disable the browser sandbox or force GPU blocklist overrides as a routine fix. Google's guidance: https://support.google.com/meet/answer/9302964?co=GENIE.Platform%3DDesktop .

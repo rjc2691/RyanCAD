@@ -1,4 +1,5 @@
 export interface Parameter {
+  named?: boolean | null;
   id: string;
   name: string;
   owner: string;
@@ -68,6 +69,7 @@ export interface FaceInfo {
   bounds: { min: number[]; max: number[]; size: number[] };
 }
 export interface Geometry {
+  named_extents?: Record<string, string[]>;
   center?: number[];
   vertices?: number[][];
   vertex_info?: { id: string; name: string; point: number[] }[];

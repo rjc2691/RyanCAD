@@ -117,7 +117,7 @@ def test_planar_cut_and_stock_preview_remain_one_planar_part(evaluator):
     assert output["area"] == pytest.approx(2400 - math.pi * 25)
     assert output["bounds"]["size"][2] == 0
     assert graph(doc, evaluate(doc))["parameters"][stock["parameter_id"]]["use_count"] == 1
-    edit(doc, "feature.create", {"type": "extrude", "owner": owner, "references": {"profile": profile["feature_id"]}, "values": {"distance": {"parameter": stock["parameter_id"]}}})
+    edit(doc, "feature.create", {"type": "extrude", "owner": owner, "references": {"profile": profile["feature_id"]}, "values": {"distance": 3}})
     output = evaluator.evaluate(doc.model_dump(mode="json"))["components"][owner]
     assert not output["thickness_preview"] and output["volume"] == pytest.approx((2400 - math.pi * 25) * 3)
 

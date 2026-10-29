@@ -294,6 +294,12 @@ class CadService:
             if command.expected_revision != self.document.revision:
                 raise CadError("stale_revision", "The design changed since this operation was prepared. Read the current revision and try again.", expected=command.expected_revision, current=self.document.revision)
             candidate = self.document.model_copy(deep=True)
+            # Freeze legacy construction aids at the saved placement BEFORE a
+            # move, source edit or deletion can change the frame they resolve in.
+            from .reference_snapshots import detach_references
+            if any(f.type in {"operation", "boolean", "mirror", "extrude", "revolve"} and not f.options.get("reference_snapshot") for f in candidate.features.values()):
+                baseline = self.geometry.call("evaluate", payload=self.document.model_dump(mode="json"))
+                detach_references(candidate, baseline)
             undo, redo = self.store.stacks()
             checkpoint = None
             if preview_token:
@@ -324,9 +330,13 @@ class CadService:
                 redo = []
                 result, affected, description = {}, list(candidate.features), f"Open native design · {candidate.name}"
             else:
+                from .simple_values import simplify_values
+                simplify_values(candidate)
                 result, affected, description = reduce(candidate, actor, command.name, command.args)
                 undo.append(self.document.revision)
                 redo = []
+            from .simple_values import simplify_values
+            simplify_values(candidate)
             validate_document(candidate)
             from .parameters import dependencies
             changed_parameters = {identifier for identifier, p in candidate.parameters.items() if identifier in self.document.parameters and
@@ -387,6 +397,7 @@ class CadService:
                     feature.options["auto_selection"]=choice
             for identifier, binding in evaluated.get("bindings", {}).items():
                 candidate.features[identifier].options["selector"] = binding
+            detach_references(candidate, evaluated)
             candidate.revision = self.document.revision + 1
             candidate.modified_at = now()
             if preview:

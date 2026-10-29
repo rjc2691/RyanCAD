@@ -69,7 +69,7 @@ def edit_sketch(document, actor, command, args):
             feature.options["entities"].append({"id": identifier, "type": kind, "construction": bool(entity.get("construction", False)), "fixed": bool(entity.get("fixed", False))})
             for field, quantity in ENTITY_FIELDS[kind].items():
                 feature.parameters[f"{identifier}.{field}"] = parameter(document, actor, owner,
-                    f"{feature.name} · {identifier} {field}", entity.get(field, 0), quantity, "Sketch geometry" if entity.get("fixed") else "Sketch seeds")
+                    f"{feature.name} · {identifier} {field}", entity.get("expressions", {}).get(field, entity.get(field, 0)), quantity, "Sketch geometry" if entity.get("fixed") else "Sketch seeds")
         document.features[feature.id] = feature
         component.feature_ids.append(feature.id)
         document.feature_order.append(feature.id)
@@ -105,12 +105,15 @@ def edit_sketch(document, actor, command, args):
                 if old:
                     p = document.parameters[old]
                     from .parameters import bind_expression
-                    supplied_value = entity.get(field, 0)
+                    supplied_value = entity.get("expressions", {}).get(field, entity.get(field, 0))
                     if not isinstance(supplied_value, (int, float)) or abs(supplied_value - original_values[old]) > 1e-10:
-                        p.expression, p.modified_by = bind_expression(supplied_value, document, feature.owner), actor.id
+                        if p.named:
+                            old = parameter(document, actor, feature.owner, f"{feature.name} · {identifier} {field}", supplied_value, quantity, "Sketch geometry")
+                        else:
+                            p.expression, p.modified_by = bind_expression(supplied_value, document, feature.owner), actor.id
                     preserved[key] = old
                 else:
-                    preserved[key] = parameter(document, actor, feature.owner, f"{feature.name} · {identifier} {field}", entity.get(field, 0), quantity, "Sketch geometry")
+                    preserved[key] = parameter(document, actor, feature.owner, f"{feature.name} · {identifier} {field}", entity.get("expressions", {}).get(field, entity.get(field, 0)), quantity, "Sketch geometry")
         old_constraints = {c["id"]: c for c in feature.options["constraints"]}
         feature.parameters = preserved
         feature.options["entities"] = new_entities

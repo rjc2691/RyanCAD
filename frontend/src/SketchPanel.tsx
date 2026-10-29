@@ -6,6 +6,8 @@ import {
   useState,
 } from "react";
 import { expressionLabel, api, waitJob } from "./api";
+import { NumericInput, ResolvedNumericInput, resolveNumericText } from "./NumericInput";
+import { expressionParameterNames } from "./parameterNames";
 import { Check, Crosshair, Trash2, Undo2, X } from "lucide-react";
 import {
   SKETCH_FIELDS,
@@ -62,6 +64,8 @@ export default forwardRef<
   },
   ref,
 ) {
+  const resolveLength = (text: string) => resolveNumericText(text, Object.values(state.document.parameters),
+    Object.fromEntries(Object.entries(state.parameter_graph).map(([id, info]) => [id, info.value])), "length");
   const [u, setU] = useState("0"),
     [v, setV] = useState("0"),
     [busy, setBusy] = useState(false),
@@ -224,7 +228,7 @@ export default forwardRef<
         const resolved = constraints.map((c, i) =>
           result.constraint_values[i] == null
             ? c
-            : { ...c, value: result.constraint_values[i] },
+            : { ...c, value: result.constraint_values[i], parameterName: expressionParameterNames(state.document.parameters, String(c.pendingExpression || "")).join(", ") || c.parameterName },
         );
         lastValid.current = value;
         setDimensionStatus("valid");
@@ -331,6 +335,10 @@ export default forwardRef<
   }, [d.tool]);
   const finish = async () => {
     if (busy || planePicking) return;
+    if (document.querySelector('.sketch-panel input[aria-invalid="true"]')) {
+      setError("Resolve the highlighted numeric field before finishing the sketch.");
+      return;
+    }
     if (dimensionLine) {
       applyDimension();
       return;
@@ -416,10 +424,9 @@ export default forwardRef<
               <>
                 <label className="field">
                   <span>{dimensionLine} length (mm)</span>
-                  <input
+                  <NumericInput kind="length"
                     aria-label="Dimension length"
                     value={dimensionValue}
-                    list="sketch-dimension-parameters"
                     onChange={(e) => setDimensionValue(e.target.value)}
                   />
                 </label>
@@ -508,9 +515,8 @@ export default forwardRef<
           <div className="field-grid">
             <label className="field">
               <span>U (mm)</span>
-              <input
+              <NumericInput kind="length"
                 aria-label="Sketch U"
-                type="number"
                 step="any"
                 value={u}
                 onChange={(e) => setU(e.target.value)}
@@ -518,9 +524,8 @@ export default forwardRef<
             </label>
             <label className="field">
               <span>V (mm)</span>
-              <input
+              <NumericInput kind="length"
                 aria-label="Sketch V"
-                type="number"
                 step="any"
                 value={v}
                 onChange={(e) => setV(e.target.value)}
@@ -532,12 +537,12 @@ export default forwardRef<
               d.tool === "project" ||
               d.tool === "select" ||
               d.tool === "dimension" ||
-              !Number.isFinite(Number(u)) ||
-              !Number.isFinite(Number(v))
+              !Number.isFinite(resolveLength(u)) ||
+              !Number.isFinite(resolveLength(v))
             }
             onClick={() =>
               change({
-                ...sketchClick({ ...d, snap: 0 }, [Number(u), Number(v)], 0),
+                ...sketchClick({ ...d, snap: 0 }, [resolveLength(u), resolveLength(v)], 0),
                 snap: d.snap,
               })
             }
@@ -622,17 +627,16 @@ export default forwardRef<
                 {SKETCH_FIELDS[selected.type].map((field) => (
                   <label className="field" key={field}>
                     <span>{field.replaceAll("_", " ")}</span>
-                    <input
-                      type="number"
+                    <ResolvedNumericInput kind={field.includes("angle") ? "angle" : "length"}
                       step="any"
                       aria-label={`Entity ${field}`}
-                      value={selected[field]}
-                      onChange={(e) =>
+                      value={selected.expressions?.[field] ?? selected[field]}
+                      onValue={(number, expression) =>
                         change({
                           ...d,
                           entities: d.entities.map((item) =>
                             item.id === selected.id
-                              ? { ...item, [field]: Number(e.target.value) }
+                              ? { ...item, [field]: number, expressions: { ...item.expressions, [field]: expression } }
                               : item,
                           ),
                         })
@@ -767,9 +771,8 @@ export default forwardRef<
               <span>
                 Value ({constraintType === "angle" ? "degrees" : "mm"})
               </span>
-              <input
+              <NumericInput kind={constraintType === "angle" ? "angle" : "length"}
                 aria-label="Constraint value"
-                type="number"
                 value={constraintValue}
                 onChange={(e) => setConstraintValue(e.target.value)}
               />
@@ -796,7 +799,7 @@ export default forwardRef<
                     ...(["distance", "angle", "radius", "diameter"].includes(
                       constraintType,
                     )
-                      ? { value: Number(constraintValue) }
+                      ? { value: constraintValue }
                       : {}),
                   },
                 ],
@@ -817,9 +820,8 @@ export default forwardRef<
                     {c.b ? ` / ${c.b}` : ""}
                   </span>
                   {c.value !== undefined && (
-                    <input
+                    <NumericInput kind={c.type === "angle" ? "angle" : "length"}
                       aria-label={`Constraint ${i + 1} value`}
-                      type="number"
                       value={c.value}
                       onChange={(e) =>
                         change({
@@ -828,8 +830,8 @@ export default forwardRef<
                             j === i
                               ? {
                                   ...v,
-                                  value: Number(e.target.value),
-                                  pendingExpression: undefined,
+                                  value: e.target.value,
+                                  pendingExpression: e.target.value,
                                 }
                               : v,
                           ),

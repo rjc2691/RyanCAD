@@ -261,7 +261,7 @@ Tool Path owns its edge count and Shift instructions; Tool Profile owns profile-
 
 ## Move Component workspace
 
-Move Component (G; grid on Shift+G) uses the same side-panel/native-preview/Apply/Cancel and Enter/Escape conventions as material operations. Its methods are **Reference movement**, **XYZ distances and rotation**, and **Rotation**. Reference movement is the default and replaces the separate point/direction/projected workflows.
+Move Component (M; grid on Shift+G) uses the same side-panel/native-preview/Apply/Cancel and Enter/Escape conventions as material operations. Its methods are **Reference movement**, **XYZ distances and rotation**, and **Rotation**. Reference movement is the default and replaces the separate point/direction/projected workflows.
 
 ```text
 G → acquire component (or use preselection)

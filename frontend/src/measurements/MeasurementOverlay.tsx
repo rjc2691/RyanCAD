@@ -1,3 +1,4 @@
+import {sectionKeeps} from "../sectionView";
 import { forwardRef, useImperativeHandle, useRef } from "react";
 import * as THREE from "three";
 import type { Geometry, Selection } from "../types";
@@ -17,6 +18,7 @@ interface Props {
   hoveredItems?: Selection[];
   units: "mm" | "in";
   section: boolean;
+  sectionPlane?: THREE.Plane;
 }
 export interface MeasurementOverlayHandle {
   update: (scene: any, now: number) => void;
@@ -115,7 +117,7 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
         node.setAttribute("data-source", c.entity);
         node.setAttribute("data-face", item.face.id);
         node.setAttribute("aria-label", `${c.qualifier}: ${item.label}`);
-        node.children[0].textContent = `${c.qualifier}: ${item.label}. Read-only measurement on face ${item.face.id}.`;
+        node.children[0].textContent = `${c.parameterNames?.length ? `Parameter: ${c.parameterNames.join(", ")}. ` : ""}${c.qualifier}: ${item.label}. Read-only measurement on face ${item.face.id}.`;
         const clip = node.children[1],
           label = node.children[2];
         clip.setAttribute("id", clipId);
@@ -171,7 +173,7 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
             ? (p.hoveredItems || []).map(focus).filter((f): f is Focus => !!f)
             : [];
           const shapeKey = Object.entries(p.geometry)
-            .map(([id, g]) => `${id}:${g.geometry_key}`)
+            .map(([id, g]) => `${id}:${g.geometry_key}:${JSON.stringify(g.named_extents)}:${JSON.stringify(g.edges?.map(e => e.parameter_names))}`)
             .join("|");
           if (shapeKey !== r.shapeKey) {
             r.service.reset();
@@ -188,6 +190,7 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
             p.selected?.point,
             p.units,
             p.section,
+            p.sectionPlane?.normal.toArray(),p.sectionPlane?.constant,
             selectedItems.map((f) => f.occurrence),
             hoveredItems.map((f) => f.occurrence),
           ]);
@@ -264,6 +267,7 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
                   id: o.id,
                   definition: o.definition,
                   bounds: info.bounds,
+                  namedExtents: info.named_extents,
                   focusFaceIds: [
                     selected?.occurrence === o.id
                       ? selected?.face?.id
@@ -276,6 +280,7 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
                     (face) =>
                       ({
                         ...face,
+                        parameterNames: (face as any).parameter_names,
                         center:
                           face.id === selected?.face?.id &&
                           o.id === selected.occurrence &&
@@ -298,6 +303,7 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
                       id: String(edge.segment_start),
                       type: edge.type,
                       length: edge.length,
+                      parameterNames: edge.parameter_names,
                       a: point(start),
                       b: point(last),
                       anchor: a.map((v, i) => (v + b[i]) / 2) as Vec3,
@@ -314,7 +320,7 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
             const world = new THREE.Vector3(...point).applyMatrix4(
               group.matrixWorld,
             );
-            const clipped = p.section && world.y < 0;
+            const clipped = p.section && !sectionKeeps(world,p.sectionPlane);
             const q = world.project(scene.camera);
             return {
               x: ((q.x + 1) * scene.width) / 2,
@@ -344,13 +350,13 @@ export default forwardRef<MeasurementOverlayHandle, Props>(
             if (
               Math.abs(ndc.x) > 1 ||
               Math.abs(ndc.y) > 1 ||
-              (p.section && world.y < 0)
+              (p.section && !sectionKeeps(world,p.sectionPlane))
             )
               return false;
             ray.setFromCamera(new THREE.Vector2(ndc.x, ndc.y), scene.camera);
             const hit = ray
               .intersectObjects(targets, false)
-              .find((h) => !p.section || h.point.y >= 0);
+              .find((h) => !p.section || sectionKeeps(h.point,p.sectionPlane));
             const distance = world
               .clone()
               .sub(ray.ray.origin)

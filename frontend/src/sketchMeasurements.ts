@@ -7,6 +7,7 @@ export type SketchAnnotation = {
   start: SketchPoint;
   end: SketchPoint;
   vertex?: SketchPoint;
+  parameterName?: string;
 };
 const fmt = (n: number) =>
   Number(n.toFixed(2)).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -23,7 +24,7 @@ const text = (c: any, measured: number, unit: string) => {
       : typeof c?.value === "string" && c.value.trim()
         ? c.value.trim()
         : fmt(measured);
-  return `${value} ${unit}`;
+  return `${c?.parameterName ? "p: " : ""}${value} ${unit}`;
 };
 export function sketchMeasurements(
   d: Pick<SketchDraft, "entities" | "constraints">,
@@ -46,6 +47,7 @@ export function sketchMeasurements(
       id: `length:${e.id}`,
       kind: "length",
       constrained: !!c,
+      parameterName: c?.parameterName,
       label: text(c, length, "mm"),
       start: a,
       end: b,
@@ -96,6 +98,7 @@ export function sketchMeasurements(
         id: `angle:${a.id}:${b.id}`,
         kind: "angle",
         constrained: !!c,
+        parameterName: c?.parameterName,
         label: text(c, angle, "°"),
         start: u,
         end: v,

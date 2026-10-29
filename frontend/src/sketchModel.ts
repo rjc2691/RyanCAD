@@ -1,4 +1,6 @@
 import * as THREE from "three";
+import { parameterNames } from "./parameterNames.ts";
+import { expressionLabel } from "./api.ts";
 import type { Feature, Selection, State } from "./types";
 import {
   initialOperation,
@@ -204,12 +206,22 @@ export function startSketch(
             });
           else if (solved?.point)
             Object.assign(q, { x: solved.point[0], y: solved.point[1] });
+          q.expressions = Object.fromEntries(SKETCH_FIELDS[e.type].flatMap(field => {
+            const pid = feature.parameters[`${e.id}.${field}`], p = state.document.parameters[pid];
+            return p && parameterNames(state.document.parameters, pid).length ? [[field, p.named ? `[${p.name}]` : expressionLabel(p.expression, state.document.parameters)]] : [];
+          }));
           return q;
         })
       : [],
     constraints: feature
       ? feature.options.constraints.map((c: any) => ({
           ...c,
+        parameterName: c.parameter_key ? parameterNames(state.document.parameters, feature.parameters[c.parameter_key]).join(", ") : undefined,
+        ...(c.parameter_key && parameterNames(state.document.parameters, feature.parameters[c.parameter_key]).length ? {
+          pendingExpression: state.document.parameters[feature.parameters[c.parameter_key]]?.named
+            ? `[${state.document.parameters[feature.parameters[c.parameter_key]].name}]`
+            : expressionLabel(state.document.parameters[feature.parameters[c.parameter_key]].expression, state.document.parameters),
+        } : {}),
           ...(c.parameter_key
             ? {
                 value:

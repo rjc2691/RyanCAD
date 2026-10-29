@@ -8,12 +8,11 @@ export interface ViewOrientationHandle {
 export default forwardRef<
   ViewOrientationHandle,
   {
-    units: string;
     onAxis: (axis: WorldAxis) => void;
     onOrigin: () => void;
     selectedAxis?: WorldAxis | null;
   }
->(function ViewOrientation({ units, onAxis, onOrigin, selectedAxis }, ref) {
+>(function ViewOrientation({ onAxis, onOrigin, selectedAxis }, ref) {
   const svg = useRef<SVGSVGElement>(null);
   useImperativeHandle(
     ref,
@@ -94,7 +93,6 @@ export default forwardRef<
           <circle cx="43" cy="41" r="3" fill="#c8d5df" />
         </g>
       </svg>
-      <span>{units}</span>
     </div>
   );
 });

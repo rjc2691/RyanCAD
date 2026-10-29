@@ -53,7 +53,7 @@ def test_sketch_length_dimension_references_parameter_and_regenerates():
     line={"id":"l", "type":"line", "x1":0, "y1":0, "x2":8, "y2":0, "fixed":False}
     feature=create(d,[line],constraints=[{"type":"distance","a":"l.start","b":"l.end","value":"Width"}])["feature_id"]
     con=d.features[feature].options["constraints"][0]; param=d.features[feature].parameters[con["parameter_key"]]
-    assert d.parameters[param].expression == root
+    assert param == root
     k=Evaluator(); solved=k.evaluate(d.model_dump(mode="json"))["sketches"][feature]["entities"][0]
     assert math.dist(solved["start"],solved["end"]) == pytest.approx(12)
     reduce(d,actor,"parameter.set",{"id":root,"value":20})
@@ -61,7 +61,7 @@ def test_sketch_length_dimension_references_parameter_and_regenerates():
     assert math.dist(solved["start"],solved["end"]) == pytest.approx(20)
     reduce(d,actor,"sketch.update",{"feature_id":feature,"entities":[line],"constraints":[{**con,"value":20}]})
     assert d.features[feature].parameters[con["parameter_key"]] == param
-    assert d.parameters[param].expression == root
+    assert param == root
 
 
 def test_editing_a_reused_constraint_does_not_mutate_the_shared_parameter():

@@ -197,6 +197,10 @@ def face_signatures(shape):
 
 
 def prepare(feature, document, values, shape, body_key, resolve, profiles, profile_keys):
+    if feature.options.get("reference_snapshot"):
+        from .reference_snapshots import restore_context
+        snapshot = feature.options["reference_snapshot"]
+        return restore_context(snapshot, shape), {"snapshot": snapshot}
     validate_path_components(feature.references.get("path_references",[]))
     from .placements import flatten_instances
     occurrences={o["id"]:o for o in flatten_instances(document,values)}

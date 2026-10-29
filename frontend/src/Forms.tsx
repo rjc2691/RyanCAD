@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import type { Parameter, RunCommand, Selection, State } from "./types";
 import { expressionLabel, numeric } from "./api";
+import { NumericInput } from "./NumericInput";
 
 export function Modal({
   title,
@@ -80,22 +81,18 @@ export function ParameterInput({
     onChange: (value: string) => void;
   };
 }) {
-  const references = Object.values(state.document.parameters).filter(
-    (p) => p.kind === kind,
-  );
   const reused = value.startsWith("@");
   return (
     <label className="field">
       <span>{label}</span>
       <div className={"quantity-input " + (reused ? "linked" : "")}>
-        <input
+        <NumericInput kind={kind}
           aria-label={label}
           value={
             reused
               ? state.document.parameters[value.slice(1)]?.name || value
               : value
           }
-          readOnly={reused}
           onChange={(e) => onChange(e.target.value)}
           spellCheck={false}
         />
@@ -141,27 +138,6 @@ export function ParameterInput({
                     : "")}
           </small>
         ) : null}
-        <select
-          aria-label={"Reuse parameter for " + label}
-          value=""
-          onChange={(e) => {
-            if (e.target.value) onChange("@" + e.target.value);
-          }}
-        >
-          <option value="">↗</option>
-          {references
-            .sort(
-              (a, b) =>
-                Number(b.favorite) - Number(a.favorite) ||
-                a.name.localeCompare(b.name),
-            )
-            .map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.favorite ? "★ " : ""}
-                {p.name} ({numeric(state.parameter_graph[p.id]?.value)})
-              </option>
-            ))}
-        </select>
       </div>
       {help && <small className="field-help">{help}</small>}
     </label>
@@ -865,322 +841,39 @@ export function ToolDialog({
   );
 }
 
-export function ParameterDialog({
-  parameter,
-  state,
-  run,
-  onClose,
-  preview,
-  onNavigate,
-}: {
-  parameter: Parameter;
-  state: State;
-  run: RunCommand;
-  onClose: () => void;
-  preview: (name: string, args: any) => Promise<any>;
-  onNavigate: (id: string) => void;
+export function ParameterDialog({ parameter, state, run, onClose, preview }: {
+  parameter: Parameter; state: State; run: RunCommand; onClose: () => void;
+  preview: (name: string, args: any) => Promise<any>; onNavigate: (id: string) => void;
 }) {
-  const [name, setName] = useState(parameter.name);
-  const [value, setValue] = useState(
-    expressionLabel(parameter.expression, state.document.parameters),
-  );
-  const [specified, setSpecified] = useState(!!parameter.tolerance);
+  const [value, setValue] = useState(expressionLabel(parameter.expression, state.document.parameters));
   const [minus, setMinus] = useState(String(parameter.tolerance?.minus || 0));
   const [plus, setPlus] = useState(String(parameter.tolerance?.plus || 0));
+  const [specified, setSpecified] = useState(!!parameter.tolerance);
   const [busy, setBusy] = useState(false);
-  const [impact, setImpact] = useState<any>(null);
-  const info = state.parameter_graph[parameter.id];
-  const args = () => ({
-    id: parameter.id,
-    name,
-    value,
-    tolerance: specified ? { minus: Number(minus), plus: Number(plus) } : null,
-  });
-  const apply = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setBusy(true);
-    try {
-      await run("parameter.set", args());
-      onClose();
-    } catch {
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal
-      title="Edit dimension"
-      eyebrow={
-        parameter.owner === "root"
-          ? "SHARED DESIGN INPUT"
-          : "COMPONENT DIMENSION"
-      }
-      onClose={onClose}
-    >
-      <form onSubmit={apply}>
-        <label className="field">
-          <span>Name</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} />
-        </label>
-        <label className="field">
-          <span>Value or expression</span>
-          <input
-            aria-label="Value or expression"
-            className="expression-input"
-            value={value}
-            onChange={(e) => {
-              setValue(e.target.value);
-              setImpact(null);
-            }}
-            autoFocus
-          />
-          <small className="field-help">
-            Use mm, in, degrees, arithmetic or [parameter names]. Bare lengths
-            use mm.
-          </small>
-        </label>
-        <div className="current-value">
-          <span>Current evaluated value</span>
-          <strong>
-            {numeric(info.value, 5)}{" "}
-            <small>
-              {parameter.kind === "length"
-                ? "mm"
-                : parameter.kind === "angle"
-                  ? "°"
-                  : ""}
-            </small>
-          </strong>
-        </div>
-        {parameter.kind === "length" && (
-          <section className="tolerance-panel">
-            <label className="check-field">
-              <input
-                type="checkbox"
-                checked={specified}
-                onChange={(e) => setSpecified(e.target.checked)}
-              />
-              Specify dimensional tolerance
-            </label>
-            {specified ? (
-              <div className="field-grid">
-                <label className="field">
-                  <span>Lower deviation −</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={minus}
-                    onChange={(e) => setMinus(e.target.value)}
-                  />
-                </label>
-                <label className="field">
-                  <span>Upper deviation +</span>
-                  <input
-                    type="number"
-                    min="0"
-                    step="any"
-                    value={plus}
-                    onChange={(e) => setPlus(e.target.value)}
-                  />
-                </label>
-              </div>
-            ) : (
-              <p>Unspecified. No manufacturing tolerance is assumed.</p>
-            )}
-          </section>
-        )}
-        <div className="dependency-summary">
-          <SlidersHorizontal size={16} />
-          <div>
-            <strong>
-              {info.root ? "Independent root input" : "Derived dimension"}
-            </strong>
-            <span>
-              {info.use_count} direct uses · {info.roots.length} root input
-              {info.roots.length === 1 ? "" : "s"}
-            </span>
-          </div>
-        </div>
-        {!info.root && (
-          <section className="root-input-list">
-            <h4>Trace to root inputs</h4>
-            {info.roots.map((id: string) => (
-              <button type="button" key={id} onClick={() => onNavigate(id)}>
-                <SlidersHorizontal size={12} />
-                <span>{state.document.parameters[id].name}</span>
-                <strong>{numeric(state.parameter_graph[id].value, 4)}</strong>
-                <ArrowRight size={12} />
-              </button>
-            ))}
-            <details className="dependency-list">
-              <summary>Direct upstream dependencies</summary>
-              {info.upstream.map((id: string) => (
-                <button
-                  type="button"
-                  className="text-button"
-                  key={id}
-                  onClick={() => onNavigate(id)}
-                >
-                  {state.document.parameters[id].name}
-                  <ArrowRight size={12} />
-                </button>
-              ))}
-            </details>
-          </section>
-        )}
-        {(info.downstream.length > 0 || info.consumers.length > 0) && (
-          <details className="dependency-list">
-            <summary>Where this dimension is used</summary>
-            {info.downstream.map((id: string) => (
-              <div key={id}>
-                <Link2 size={12} />
-                {state.document.parameters[id]?.name}
-              </div>
-            ))}
-            {info.consumers.map((use: any, index: number) => (
-              <div key={index}>
-                <ArrowRight size={12} />
-                {state.document.features[use.id]?.name ||
-                  state.document.instances[use.id]?.name}{" "}
-                · {use.field}
-              </div>
-            ))}
-          </details>
-        )}
-        <div className="parameter-management">
-          {parameter.owner !== "root" && (
-            <button
-              type="button"
-              className="text-button"
-              onClick={() =>
-                run("parameter.promote", { id: parameter.id, name })
-                  .then(onClose)
-                  .catch(() => {})
-              }
-            >
-              <Link2 size={12} />
-              Promote to shared standard
-            </button>
-          )}
-          {info.use_count === 0 && (
-            <button
-              type="button"
-              className="text-button danger"
-              onClick={() =>
-                run("parameter.delete", { id: parameter.id })
-                  .then(onClose)
-                  .catch(() => {})
-              }
-            >
-              Delete unused dimension
-            </button>
-          )}
-        </div>
-        {info.consumers.filter((use: any) => use.kind === "feature").length >
-          0 && (
-          <details className="dependency-list">
-            <summary>Reuse or detach a feature dimension</summary>
-            {info.consumers
-              .filter((use: any) => use.kind === "feature")
-              .map((use: any, index: number) => (
-                <div className="consumer-controls" key={index}>
-                  <span>
-                    {state.document.features[use.id]?.name} · {use.field}
-                  </span>
-                  <select
-                    aria-label={"Reuse another parameter in " + use.field}
-                    value=""
-                    onChange={(e) => {
-                      if (e.target.value)
-                        run("parameter.link", {
-                          feature_id: use.id,
-                          field: use.field,
-                          parameter_id: e.target.value,
-                        })
-                          .then(onClose)
-                          .catch(() => {});
-                    }}
-                  >
-                    <option value="">Reuse another…</option>
-                    {Object.values(state.document.parameters)
-                      .filter(
-                        (p) =>
-                          p.kind === parameter.kind && p.id !== parameter.id,
-                      )
-                      .map((p) => (
-                        <option value={p.id} key={p.id}>
-                          {p.name}
-                        </option>
-                      ))}
-                  </select>
-                  <button
-                    type="button"
-                    className="text-button"
-                    onClick={() =>
-                      run("parameter.independent", {
-                        feature_id: use.id,
-                        field: use.field,
-                      })
-                        .then((result) => onNavigate(result.parameter_id))
-                        .catch(() => {})
-                    }
-                  >
-                    Make independent
-                  </button>
-                </div>
-              ))}
-          </details>
-        )}
-        {impact && (
-          <div className="preview-report">
-            <Check size={16} />
-            <div>
-              <strong>Candidate evaluated successfully</strong>
-              <span>
-                {Object.keys(impact.components).length} components checked.{" "}
-                {impact.affected.length} directly changed entities. No edit has
-                been committed.
-              </span>
-              {Object.entries(impact.components).map(
-                ([id, data]: [string, any]) => {
-                  const before = state.geometry[id]?.volume;
-                  return before && data.volume !== before ? (
-                    <span key={id}>
-                      {state.document.components[id]?.name}: volume{" "}
-                      {numeric(before / 1000)} → {numeric(data.volume / 1000)}{" "}
-                      cm³
-                    </span>
-                  ) : null;
-                },
-              )}
-            </div>
-          </div>
-        )}
-        <footer>
-          <button
-            type="button"
-            className="button secondary"
-            disabled={busy}
-            onClick={async () => {
-              setBusy(true);
-              try {
-                setImpact(await preview("parameter.set", args()));
-              } catch {
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <Eye size={15} />
-            Preview impact
-          </button>
-          <button className="button primary" disabled={busy}>
-            {busy ? "Evaluating…" : "Apply dimension"}
-            <ArrowRight size={15} />
-          </button>
-        </footer>
-      </form>
-    </Modal>
-  );
+  const [error, setError] = useState("");
+  const args = () => ({ id: parameter.id, value, tolerance: specified ? { minus: Number(minus), plus: Number(plus) } : null });
+  const [previewValid, setPreviewValid] = useState(false);
+  return <Modal title={parameter.named ? parameter.name : "Edit dimension"} eyebrow={parameter.named ? "NAMED PARAMETER" : "LOCAL DIMENSION"} onClose={onClose}>
+    <form onSubmit={async e => {
+      e.preventDefault(); setBusy(true); setError("");
+      try { await run("parameter.set", args()); onClose(); } catch (e: any) { setError(e.message); } finally { setBusy(false); }
+    }}>
+      <ParameterInput label="Value or parameter name" value={value} onChange={value => { setValue(value); setPreviewValid(false); }} state={state} kind={parameter.kind} />
+      {parameter.kind === "length" && <section className="tolerance-panel">
+        <label className="check-field"><input type="checkbox" checked={specified} onChange={e => setSpecified(e.target.checked)} /> Specify dimensional tolerance</label>
+        {specified && <div className="field-grid">
+          <label className="field"><span>Lower deviation</span><input aria-label="Lower tolerance" type="number" min="0" step="any" value={minus} onChange={e => setMinus(e.target.value)} /></label>
+          <label className="field"><span>Upper deviation</span><input aria-label="Upper tolerance" type="number" min="0" step="any" value={plus} onChange={e => setPlus(e.target.value)} /></label>
+        </div>}
+      </section>}
+      {error && <p role="alert">{error}</p>}
+      {previewValid && <p role="status">Dimension preview validated.</p>}
+      <footer><button type="button" className="button secondary" onClick={onClose}>Cancel</button>
+        <button type="button" className="button secondary" disabled={busy} onClick={async () => {
+          setBusy(true); setError(""); setPreviewValid(false); try { await preview("parameter.set", args()); setPreviewValid(true); } catch(e: any) { setError(e.message); } finally { setBusy(false); }
+        }}>Preview</button>
+        <button className="button primary" disabled={busy}>Apply dimension</button>
+      </footer>
+    </form>
+  </Modal>;
 }

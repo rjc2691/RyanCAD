@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, waitJob } from "../api";
+import { api, waitJob, newRequestId } from "../api";
 const DEBOUNCE_MS = 120;
 
 /** One native evaluation in flight, newest draft wins. Superseded results never apply. */
@@ -58,7 +58,7 @@ export function useOperationPreview(
           name: snapshot.commandName,
           args: snapshot.args,
           expected_revision: snapshot.revision,
-          request_id: crypto.randomUUID(),
+          request_id: newRequestId(),
         }),
       });
       r.job = submission.job_id;

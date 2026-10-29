@@ -1,0 +1,110 @@
+// Isolated project only: optional named values, autocomplete and real movement.
+import { createRequire } from 'node:module';
+import assert from 'node:assert/strict';
+const { chromium } = createRequire(import.meta.url)(process.env.PLAYWRIGHT_MODULE_PATH || 'playwright');
+const browser = await chromium.launch({ channel: process.env.PLAYWRIGHT_CHANNEL || 'msedge', headless: true });
+const page = await browser.newPage({ viewport: { width: 1500, height: 1000 } });
+const errors = [];
+page.on('pageerror', error => errors.push(String(error)));
+const read = () => page.evaluate(async () => (await fetch('/api/state', { cache: 'no-store', headers: { 'X-RyanCAD-Design': sessionStorage.getItem('ryancad-active-design') } })).json());
+const ready = async (panel) => {
+  await panel.locator('.operation-preview-status').filter({ hasText: 'Preview validated' }).waitFor({ timeout: 45000 });
+  await page.waitForFunction(() => !document.querySelector('.operation-commit-row .primary')?.disabled);
+};
+try {
+  await page.goto(process.env.RYANCAD_UI_URL || 'http://127.0.0.1:8898');
+  await page.waitForFunction(() => document.querySelector('.design-tree-name')?.textContent === 'Untitled design');
+  assert.equal(Object.keys((await read()).document.features).length, 0);
+  assert.equal(await page.locator('.tool-strip').getByRole('button', { name: 'New parameter', exact: true }).count(), 0);
+  await page.locator('.tool-strip').getByRole('button', { name: 'Parameters', exact: true }).click();
+  for (const [name, value] of [['WallWidth', '12'], ['WallHeight', '8'], ...Array.from({length:12},(_,i)=>[`Shared${String(i).padStart(2,'0')}`, '2'])]) {
+    await page.getByLabel('Parameter name', { exact: true }).fill(name);
+    await page.getByLabel('Parameter value', { exact: true }).fill(value);
+    await page.getByRole('button', { name: 'Add parameter', exact: true }).click();
+    await page.getByLabel(`Value of ${name}`, { exact: true }).waitFor();
+  }
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  const tool = page.getByRole('complementary', { name: 'Tool operation workspace' });
+  await page.getByRole('button', { name: 'Tool operation', exact: true }).click();
+  await tool.getByLabel('Tool Profile Shape', { exact: true }).selectOption('rectangle');
+  await tool.getByLabel('Profile plane', { exact: true }).selectOption('XY');
+  const width = tool.getByLabel('Profile width', { exact: true });
+  await width.fill('Sha');
+  const list = page.getByRole('listbox', { name: 'Matching parameters' });
+  assert(await list.evaluate(el => el.scrollHeight > el.clientHeight));
+  await list.getByRole('option', { name: /Shared11/ }).click();
+  assert.equal(await width.inputValue(), 'Shared11');
+  await width.fill('Wa');
+  assert.equal(await page.getByRole('listbox', { name: 'Matching parameters' }).getByRole('option').count(), 2);
+  await width.press('Tab');
+  assert.equal(await width.inputValue(), 'WallHeight');
+  await width.press('Tab');
+  assert.equal(await width.inputValue(), 'WallWidth');
+  await width.press('Enter');
+  await tool.waitFor();
+  await tool.getByLabel('Profile height', { exact: true }).fill('8');
+  await tool.getByLabel('Path distance', { exact: true }).fill('5');
+  await ready(tool);
+  await tool.getByRole('button', { name: 'Apply operation', exact: true }).click();
+  await tool.waitFor({ state: 'hidden' });
+  let state = await read();
+  const part = state.occurrences.find(o => o.kind === 'solid');
+  assert.equal(state.geometry[part.definition].volume, 480);
+  assert.equal(Object.values(state.document.parameters).filter(p => p.named).length, 14);
+  assert(state.geometry[part.definition].named_extents['0'].includes('WallWidth'));
+  assert(Object.values(state.document.features).every(f => !f.references.reference && !f.references.target_occurrence));
+  const originalBounds = state.geometry[part.definition].bounds;
+  await page.locator('.tool-strip').getByRole('button', { name: 'Move Component', exact: true }).click();
+  const move = page.getByRole('complementary', { name: 'Move Component workspace' });
+  await move.getByLabel('Movement method', { exact: true }).selectOption('axes');
+  await move.getByLabel('X distance', { exact: true }).fill('10');
+  await ready(move);
+  await move.getByRole('button', { name: 'Apply move', exact: true }).click();
+  await move.waitFor({ state: 'hidden' });
+  state = await read();
+  assert.equal(state.occurrences.find(o => o.id === part.id).matrix[0][3], 10);
+  assert.deepEqual(state.geometry[part.definition].bounds, originalBounds);
+  await page.locator('.tool-strip').getByRole('button', { name: 'Parameters', exact: true }).click();
+  await page.getByLabel('Value of WallWidth', { exact: true }).fill('14');
+  await page.locator('.simple-parameter-row').filter({ has: page.getByLabel('Value of WallWidth', { exact: true }) }).getByRole('button', { name: 'Save', exact: true }).click();
+  await page.waitForFunction(async id => {
+    const state = await (await fetch('/api/state', { cache: 'no-store', headers: { 'X-RyanCAD-Design': sessionStorage.getItem('ryancad-active-design') } })).json();
+    return Math.abs(state.geometry[id]?.volume - 560) < 1e-6;
+  }, part.definition, { timeout: 45000 });
+  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.locator('.job-card').waitFor({ state: 'hidden' });
+  state = await read();
+  assert.equal(state.geometry[part.definition].volume, 560, JSON.stringify({revision:state.document.revision,params:Object.values(state.document.parameters).filter(p=>p.named),actions:state.actions.slice(0,2)}));
+  assert.equal(state.occurrences.find(o => o.id === part.id).matrix[0][3], 10);
+  assert.deepEqual(errors, []);
+  await page.locator(`.canvas-host[data-ready-revision="${state.document.revision}"]`).waitFor();
+  await page.screenshot({ path: '.cache/simple-intent-ui/result.png' });
+  await page.evaluate(async () => {
+    const headers = { 'Content-Type': 'application/json', 'X-RyanCAD-Design': sessionStorage.getItem('ryancad-active-design') };
+    const state = await (await fetch('/api/state', { headers, cache:'no-store' })).json();
+    const submitted = await (await fetch('/api/commands', { method:'POST', headers, body:JSON.stringify({name:'sketch.create',expected_revision:state.document.revision,args:{name:'Parameter sketch',entities:[{id:'l',type:'line',x1:0,y1:0,x2:14,y2:0}],constraints:[{type:'fix',a:'l.start'},{type:'horizontal',a:'l'},{type:'distance',a:'l.start',b:'l.end',value:'WallWidth'}]}}) })).json();
+    for(let i=0;i<400;i++) {
+      const job=await (await fetch('/api/jobs/'+submitted.job_id,{headers,cache:'no-store'})).json();
+      if(job.status==='complete') return;
+      if(job.status==='failed') throw Error(JSON.stringify(job.error));
+      await new Promise(r=>setTimeout(r,100));
+    }
+    throw Error('Sketch creation timed out');
+  });
+  await page.getByRole('button', { name:'Edit Parameter sketch', exact:true }).click();
+  await page.getByLabel('Sketch entity', { exact:true }).selectOption('l');
+  await page.locator('.tool-strip').getByRole('button', { name:'Sketch Dimension', exact:true }).click();
+  const inline = page.getByLabel('Viewport dimension length', { exact:true });
+  await inline.fill('WallH');
+  await page.getByRole('listbox', { name:'Matching parameters' }).getByRole('option', { name:/WallHeight/ }).click();
+  await page.waitForFunction(() => document.querySelector('[data-measurement="length:l"] text')?.textContent === 'p: 8 mm');
+  await inline.press('Enter');
+  await page.locator('.tool-strip').getByRole('button', { name:'Finish sketch', exact:true }).click();
+  await page.getByRole('button', { name:'Edit Parameter sketch', exact:true }).waitFor();
+  await page.getByRole('button', { name:'Edit Parameter sketch', exact:true }).click();
+  await page.waitForFunction(() => document.querySelector('[data-measurement="length:l"] text')?.textContent === 'p: 8 mm');
+  assert.equal(await page.locator('[data-measurement="length:l"] title').textContent(), 'Parameter: WallHeight');
+  await page.locator('.tool-strip').getByRole('button', { name:'Cancel sketch', exact:true }).click();
+  assert.deepEqual(errors, []);
+  console.log('Simple intent UI passed: named values, Tab cycling, scrolling/mouse suggestions, real movement, named-value regeneration, inline sketch dimensions and persistent parameter provenance.');
+} finally { await browser.close(); }

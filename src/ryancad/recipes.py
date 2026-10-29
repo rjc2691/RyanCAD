@@ -16,7 +16,7 @@ def build_recipe(document, actor, recipe):
         return {}, [], "Create an empty design"
 
     def root(name, value, category="Design inputs"):
-        return parameter(document, actor, "root", name, value, category=category)
+        return parameter(document, actor, "root", name, value, category=category, named=True)
 
     def ref(identifier):
         return {"parameter": identifier}

@@ -2,6 +2,26 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as THREE from '../frontend/node_modules/three/build/three.module.js';
 import {syncOperationAppearance,disposePreview,operationDisplayContext,SELECTION_COLOR,COMPONENT_SELECTION_COLOR} from '../frontend/src/viewportOperationDisplay.ts';
+import {defaultAppearance} from '../frontend/src/experiments.ts';
+
+test('experimental shading removes only active component edge styling and restores it when disabled',()=>{
+ const {parts,props}=fixture();props.operationDraft=undefined;props.selected={occurrence:'target',definition:'p'};
+ const active=parts.children[0],other=parts.children[1],outline=new THREE.Object3D(),selectedEdge=new THREE.Object3D();
+ outline.userData.wholeOutline=true;active.userData.selectionLayer.add(outline,selectedEdge);
+ syncOperationAppearance(parts,null,props);assert.equal(active.userData.wire.material.color.getHexString(),'f3a64f');
+ props.activeAppearance={...defaultAppearance(),enabled:true};syncOperationAppearance(parts,null,props);
+ assert.equal(active.userData.wire.material.color.getHexString(),'182330');assert.equal(other.userData.wire.material.color.getHexString(),'182330');
+ assert.equal(active.userData.surface.material.userData.activeAppearance.cadActiveMode.value,1);assert.equal(other.userData.surface.material.userData.activeAppearance,undefined);
+ assert(!outline.visible);assert(selectedEdge.visible);
+ props.activeAppearance.enabled=false;syncOperationAppearance(parts,null,props);
+ assert.equal(active.userData.wire.material.color.getHexString(),'f3a64f');assert(outline.visible);assert.equal(active.userData.surface.material.userData.activeAppearance.cadActiveMode.value,0);
+});
+
+test('native operation candidates receive experimental shading with neutral edges',()=>{
+ const {parts,props}=fixture(),display=candidate();props.activeAppearance={...defaultAppearance(),enabled:true,style:'rim-glow'};
+ syncOperationAppearance(parts,display,props);
+ const mesh=display.root.children[0].children[0];assert.equal(mesh.material.userData.activeAppearance.cadActiveMode.value,2);assert.equal(mesh.material.opacity,1);assert.equal(mesh.material.transparent,false);
+});
 
 function fixture() {
   const parts=new THREE.Group();

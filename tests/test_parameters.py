@@ -8,7 +8,7 @@ from ryancad.parameters import bind_expression, evaluate, graph
 
 def test_units_and_derived_dimensions_remain_linked_after_rename():
     doc, actor = Document(), Actor()
-    width = parameter(doc, actor, "root", "Width", "2 in")
+    width = parameter(doc, actor, "root", "Width", "2 in", named=True)
     half = parameter(doc, actor, "root", "Half width", "[Width]/2")
     assert evaluate(doc)[width] == pytest.approx(50.8)
     assert evaluate(doc)[half] == pytest.approx(25.4)
@@ -65,8 +65,8 @@ def test_scoped_duplicate_names_cannot_rebind_independent_parts():
     doc, actor = Document(), Actor()
     doc.components["left"] = Component(id="left", name="Left")
     doc.components["right"] = Component(id="right", name="Right")
-    first = parameter(doc, actor, "left", "Thickness", 4)
-    second = parameter(doc, actor, "right", "Thickness", 8)
+    first = parameter(doc, actor, "left", "Thickness", 4, named=True)
+    second = parameter(doc, actor, "right", "Thickness", 8, named=True)
     left_derived = parameter(doc, actor, "left", "Half", "[Thickness]/2")
     right_derived = parameter(doc, actor, "right", "Half", "[Thickness]/2")
     assert evaluate(doc)[left_derived] == 2

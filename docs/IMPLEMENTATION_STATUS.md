@@ -4,13 +4,33 @@
 
 ## Delivered application
 
+Toolbar and timeline follow-up: Tool uses the same button styling as the other operations. Move uses M; Group uses G, with Shift+G retained for grid visibility. Lane names are bordered rectangular start nodes connected to their tracks, without full-row label separators. A single Now marker follows the active visible component lane or falls back to the design lane. Browser checks verified both shortcuts, label/track alignment, and selection-driven Now placement; history model tests and TypeScript/Vite passed.
+
 The Python engine, native OCCT evaluator, PlaneGCS adapter, durable project store, local API, external MCP server and production web interface are implemented. The interface runs from bundled files with no cloud/model/chat dependency. A working Windows environment, launchers, locked dependencies, installable wheel, examples, test corpus, documentation and Windows/macOS CI configuration are present.
 
 Available modeling includes primitives, planar regions with holes, general bounded sketches/constraints, extrusion/cuts, revolve, holes/patterns, semantic edge fillets/chamfers, Booleans, mirrors, exact transforms, component arrays and linked/independent parts. Planar stock preview remains non-authoritative. Initial disconnected additive constructors get components; regeneration that splits a part is rejected safely.
 
-Parameters are automatic and independent unless explicitly reused. Expressions preserve stable references and reject cycles/dimensional mismatches. Root/upstream/downstream/usage navigation, favorites, scope promotion, tolerances and fit intervals are exposed manually and through the same engine. Creation/modification attribution follows shared-dimension edits, without erasing feature creators.
+Ordinary dimensions are private numeric values; the Parameters window lists only deliberately named values. Explicit named expressions preserve stable identities and reject cycles or incompatible units. Geometric references to other components become operation-owned snapshots, while sketch-local constraints remain. Cross-component fit constraints are disabled. The October 28 simplification supersedes the earlier parameter-navigation and live-reference policies recorded below.
 
 Native work is isolated and cancellable. Commands use revision checks and idempotency keys, previews preserve exact candidate identities, and only durably committed revisions are reported saved. Agents join the visible live session, with authored history, follow/step/pause/revoke controls and inspectable atomic batch steps. Recent failed/cancelled jobs appear as diagnostics rather than successful features.
+
+## Simpler references and named values — October 28
+
+Accepted operations capture external geometry and relative frames as independent snapshots. Source edits, movement and deletion do not change the accepted result. Legacy references are detached before the next accepted edit, preserving the existing visible geometry and history. Optional named values have a simple management window and compatible autocomplete in dimension fields; Tab cycles matches, mouse selection and scrolling are supported. Known named dimensions show `p:` and a full-name tooltip, including saved sketch constraints. The redundant New parameter toolbar button and cross-component fit controls are removed.
+
+Validation: 211 Python tests and 136 frontend tests passed. Native cases cover migration of previously moved world-origin parts, copied-body independence after source deletion and native-worker restart, explicit named-value regeneration, and retained sketch constraints. The isolated browser test covers parameter creation, Tab cycling, scrolling/mouse selection, real component movement, named-value edits, and inline sketch dimensions saved and reopened with provenance. A separate journal copy of the owner's current design verified that Component 2 moves 5 mm while its local geometry remains unchanged; the original design was not edited. See SIMPLE_DESIGN_INTENT.md for storage compatibility and annotation coverage.
+
+## Independent workspaces and designs — October 28
+
+Browser profiles receive persistent workspace identities; each workspace contains separately journaled designs. The sidebar workspace manager creates, selects, renames, deletes and restores designs, and provides a recovery code for another browser. Reference examples and native imports become separate designs. The existing server project remains intact and can be copied with its full history. Each tab, native request, preview, job, geometry response and download remains bound to its chosen design; MCP connectors can pin the same workspace and design. Workspace identity is not an account or access-control feature.
+
+The Python suite passed 202 tests, including simultaneous geometry jobs, isolated STL downloads, durable restart, deletion/restore, legacy copying and native archive history. The frontend suite passed 134 tests. An isolated browser check covered separate profiles, per-tab selection, create/rename/switch, refresh, delete/restore, recovery and independent reference examples. Windows extended-length project paths are used for deeper workspace folders and verified by the STL export test.
+
+## Windows notification icon — October 28
+
+The Windows launcher creates a native notification-area icon with Open and Quit actions and a port-specific tooltip. Quit requests normal server shutdown, removes the icon and connection file, and leaves accepted edits saved. The PowerShell launcher also accepts `-Background` for a hidden process, with an occupied-port check, and `-NoBrowser` to suppress opening a tab. The Windows API implementation has no new runtime dependency and is disabled on other operating systems or with `--no-tray`.
+
+The native tray tests exercised registration and command dispatch; an isolated end-to-end check quit and restarted the server, verified persisted design edits, and checked background launch with spaces in the project path. `scripts/check_windows_tray.py` reproduces the Windows-only integration check.
 
 ## Unified operation workspace — October 24 update
 
@@ -343,3 +363,93 @@ Component definitions, including groups and tool bodies, use unique names (case-
 Starting Sketch without a selected planar face first opens the sketch panel in plane-selection state. Pick a planar face in the viewport or choose World XY/XZ/YZ; drawing controls remain inactive until the plane is chosen. The plane reference uses the same colored reference-box styling as tool operations. Selecting a face before starting Sketch or drawing a profile inside a pending operation retains the inferred plane. Escape cancels a sketch that is waiting for its plane.
 
 Validation: TypeScript and production UI build passed; 116 frontend model tests and 18 focused component/group/sketch backend tests passed. Live UI checks covered inline group-edit status, empty-viewport double-click exit, aligned collection dividers, viewport face picking and world-plane sketch starts. The running default project was advanced from revision 157 to 158 only to rename one duplicate Boxy definition to Boxy 2; geometry/placement/feature/parameter intent was verified unchanged against both journal revisions. Evidence: artifacts/sidebar-polish-current-project-check.json, artifacts/sidebar-group-edit-polish.png, artifacts/sketch-plane-first.png.
+
+## Feature history chronology — October 28
+
+Split component timelines now have a muted teal chronological connection between consecutive global feature events. Lane changes curve quickly into steep diagonals through the column gutters and curve back onto the destination track; consecutive events in one lane remain horizontal. Feature captions stay clear of the transitions. Both split and unified layouts use 112-pixel columns. Connections reroute after merging/restoring lanes, scroll with their features, and ignore pointer events. Boxed lane labels and the single active-component/design Now cursor are retained. This is a display of creation order, without adding model dependencies or constraints.
+
+Validation: TypeScript and the production UI build passed; all 141 frontend tests passed, including four new chronology cases. An isolated headless Edge check created 12 real feature events across four components and a design sketch. It verified SVG endpoints against rendered tiles at two responsive widths, horizontal/vertical scrolling, sticky labels, lane merge/restore, feature selection, the active Now cursor and unified cleanup, with no JavaScript errors. The user's project was not edited. Reproducible check: `scripts/ui_history_flow_check.mjs`; visual evidence: `artifacts/history-lane-chronology.png`. Behavior is documented in `docs/TOOL_BODIES_AND_HISTORY.md`.
+
+## Initial mobile layout — October 28
+
+LAN follow-up: `--lan` / Windows `-Lan` binds the server to `0.0.0.0` and adds detected private IPv4 interface URLs to the existing Host/Origin allowlist. Local browser/tray/MCP URLs remain on loopback. Startup performs no firewall configuration. LAN addresses are printed and recorded in connection metadata. Windows port probes now use exclusive binding to reject an existing loopback listener before a LAN launch opens a project. Normal startup remains localhost-only.
+
+The running port-8790 instance was cleanly restarted in LAN mode and serves UI, health and state at `http://192.168.1.11:8790`. Nineteen networking, public-proxy and tray/launcher tests passed, plus the full mobile workflow against an isolated real LAN URL. A one-time administrator action had completed a firewall exception for TCP 8790 and LocalSubnet; no PowerShell service was enabled. Five existing workspace manifests stayed byte-identical. The legacy document remains revision 165 with geometry, features and placements matching its journal; startup serialized the already-implemented migration of 115 previously-null parameter `named` flags. Evidence: `artifacts/lan-access-check.json`.
+
+Browsers below 1000 pixels now use a bottom bar for View, Design, Inspector and History. Portrait stacks the selected panel below the viewport; landscape places it alongside the viewport. Toolbars and history controls scroll horizontally, dialogs fit the screen, and inputs/touch targets are enlarged. Starting a workflow reveals its existing operation panel. Switching panels preserves drafts and previews. Modeling commands, saved document structures and dependencies are unchanged. Responsive styles are isolated in `frontend/src/mobile.css`, with a small navigation/media-query component. See `docs/MOBILE_LAYOUT.md` and the phone instructions in `docs/USER_GUIDE.md`.
+
+Existing touch orbit/pan/zoom are retained; pinch release no longer places an accidental sketch point or selection. Resize handling guards a temporarily zero-size viewport. Redundant phone-sized viewport legends are hidden to leave room for the model and its actual reference markers.
+
+Validation: TypeScript, the production UI build and all 141 frontend tests passed. `scripts/ui_mobile_check.mjs` used a disposable workspace in mobile-emulated Edge at 320/390 pixels in portrait and 844 pixels in landscape, then restored desktop layout at 1440 pixels. It checked panel/dialog access, horizontal page bounds, operation auto-opening and draft retention, an applied 3 mm movement, a validated material-operation preview, touch sketch drawing, two-finger release safety, and component history with no JavaScript errors. Screenshots: `artifacts/mobile-tool-operation.png`, `artifacts/mobile-sketch.png` and `artifacts/mobile-landscape.png`. No user design was changed. Physical iPhone Safari, keyboard and hardware safe-area checks remain open.
+
+
+## Import and export menus — October 28
+
+Removed the duplicate Reference designs link from the sidebar while retaining logo-menu examples. Adjacent Import and Export dropdowns now offer native RyanCAD files, STL components and SVG sketches. Native import keeps the existing separate-design behavior. STL import is an undoable faceted solid feature with embedded triangles; SVG import creates an independent design sketch. Export retains validated per-component STL output and adds selectable sketch SVG output, with ZIP download for multiple sketches. File transfers use the app busy guard and bind their jobs to the originating design.
+
+Coverage and limits are in `docs/FILE_IMPORT_EXPORT.md`: millimeter STL imports up to 5,000 triangles, 8 MB uploads, 200-entity SVG sketches, analytic circles and adaptive line approximation for other curved SVG paths. The existing SVG parser dependency is now explicitly pinned; the lockfile validates offline with unchanged resolved packages.
+
+Validation: 30 related backend tests, all 141 frontend tests, TypeScript and the production build passed. Isolated browser checks exercised SVG upload, sketch creation, actual SVG download, STL upload/component creation and export selection, retained logo examples, removed sidebar duplication, mobile menus/bounds, and the existing mobile workflow. The running LAN server was restarted to load the new endpoints; no test geometry was added to user designs.
+
+
+## Reference-design error audit — October 28
+
+The current loader successfully opens both Silicone mold tooling and Mounting plate & pins through the logo menu. Reproducing the older parameter-creation behavior produces `named_parameter_required` for both examples: recipe inputs were private while reused feature dimensions now require deliberate named inputs. The existing `named=True` recipe-input correction is already present in the running build. This is a likely explanation for the historical report; the user's exact prior error text was unavailable.
+
+Added `tests/test_reference_designs.py` to guard the named-input requirement for both recipes, and `scripts/ui_reference_designs_check.mjs` to exercise menu loading, real geometry, separate-design preservation and refresh persistence. Both new model cases, both browser cases, and the existing 15 native workflow tests passed. All reproduction used disposable projects/workspaces; no user design was changed and no additional production-code fix was needed during this audit.
+
+
+## Movable section view — October 28
+
+The viewport section control now offers world XY/XZ/YZ planes, a live bounds-scaled slider, exact millimeter position, Center and Flip cut side. It centers on first opening, retains settings when toggled and is suspended while sketching. Render materials and in-progress operation previews share a mutable plane, so moving the cut requires no native rebuild or mesh reload. Ray picking and contextual measurement visibility use that same plane rather than hardcoded world Y checks. Measurements invalidate on plane changes. World axes/grid remain available for orientation. This is display-only surface clipping, without filled caps or arbitrary-angle planes.
+
+Validation: TypeScript, production build and all 143 frontend tests passed. `scripts/section_view.test.mjs` covers signed positions, flipping, axis choices and transformed bounds. `scripts/ui_section_view_check.mjs` verifies actual canvas output changes at exact positions on all axes, flip, Center, retained settings, mobile control bounds, no JavaScript errors and unchanged document intent in a disposable project. Evidence: `artifacts/movable-section-view.png`.
+
+
+## Section references and account-menu mockup — October 28
+
+Section view can copy a planar face or sketch plane, including arbitrary orientations. A preselected face/sketch can be used immediately; otherwise a colored reference box starts viewport/tree picking. Clipping is temporarily suspended during picking. Successful picks keep the active component unchanged and position the cut at the reference, with subsequent offset along its normal. Exploded face placement is accounted for. Escape/Cancel preserves the old cut; clearing the reference or selecting a world plane restores axis mode. These references are view-only snapshots without model dependencies. World-axis picks during acquisition select a world section plane rather than opening another operation.
+
+The R avatar opens a corner account dropdown with Profile, Account settings, Sign in and Create account mockups. Their forms/actions are disabled and labeled as previews; no credentials or account requests are sent. Mobile uses the avatar in place of the header Agents button, with functional External agents access inside the dropdown. Header menus render above viewport popovers.
+
+Validation: TypeScript, production build and all 144 frontend tests passed. The section reference browser check selected an actual body face, copied a tilted sketch plane, adjusted offset, canceled/cleared references, and exercised the account mockup and mobile agent access without JavaScript errors. The full mobile workflow also passed. All fixtures used disposable projects. Evidence: `artifacts/section-plane-reference.png`, `artifacts/account-menu-mobile.png`; reproducible check: `scripts/ui_section_reference_check.mjs`.
+
+
+## Resizable history panel — October 28
+
+A pointer-captured top divider resizes Feature history and Activity without changing document intent. Height is retained across unified/split timeline changes during the session, constrained to preserve the viewport, and reset by double-click or Enter. Arrow keys support keyboard resizing. Portrait mobile history supports dragging; landscape keeps the existing full-height side pane. Panel contents have bounded flex sizing and explicit horizontal/vertical overflow styling with standard-width scrollbars.
+
+TypeScript and production build passed. `scripts/ui_history_resize_check.mjs` built a disposable 12-component fixture and verified dragging up/down, split-mode height retention, actual two-axis overflow and scroll offsets, standard-width scrollbars, keyboard resizing, reset and phone portrait sizing with no JavaScript errors. Evidence: `artifacts/resizable-history.png`.
+
+
+## Explicit Codex setup and section-reference guides — October 28
+
+The Agents panel generates read-only, copyable Codex TOML with absolute launch paths and the selected browser workspace/design. It includes setup steps, target identity, a missing-connection-file notice and Clipboard API/HTTP copy fallback. The generated block contains no service token. Format/options were checked against official OpenAI MCP documentation. TOML is used because Codex does not use YAML for this configuration. The copied block successfully initialized the real stdio connector and inspected the scoped design. Unit tests parse TOML (including quoted Windows paths) and verify request/design routing and token omission.
+
+The main-menu button now follows the logo. Standard view buttons are 5 px closer to the axis indicator. The section reference picker shares Tool/Move card classes, color, role icon, pointer icon, active-picking treatment and clear icon. A projected violet reference plane, offset cut outline, normal travel path, endpoint markers and signed offset label update with the camera and section offset.
+
+TypeScript/build and all 144 frontend tests passed. Isolated browser checks verified menu order, copy fallback, styled face/sketch picking and account/mobile controls; the generated config was exercised through the official MCP client. Evidence: `artifacts/section-offset-guide.png`. Sixteen backend/API regression tests passed. No test geometry or agent edits were applied to user projects.
+
+## Experimental active-component appearance — October 28
+
+A beaker dropdown directly after Parameters hosts persistent, default-off experiments with explicit stable identifiers. The first, `active-component-appearance`, offers Soft glow, Rim glow and Height gradient, adjustable strength/tint and reset. Enabling it replaces amber whole-component edge highlighting with surface shading; blue face/edge/vertex selection and hover remain intact. Preview materials share the effect and retain normal depth/clipping behavior. Live settings update uniforms without reloading geometry. Settings are browser-local and never enter the document or history.
+
+TypeScript, production build and all 148 frontend tests passed. An isolated Edge browser check rendered three distinct modes, verified exact baseline pixel restoration when disabled, refresh persistence, valid tool previews, unchanged document intent, reset and phone dropdown bounds without shader or JavaScript errors. Evidence: `artifacts/experimental-soft-glow.png`, `artifacts/experimental-rim-glow.png`, `artifacts/experimental-height-gradient.png`. See `docs/EXPERIMENTAL_FEATURES.md` for the experiment lifecycle.
+
+## Point-to-point Measure sidebar — October 28
+
+Removed the whole-component Measure modal and replaced it with a right-side operation panel. Two sequential viewport picks measure design-coordinate distance, signed XYZ components and unit direction. Native vertices/midpoints are exact; edge/face hits carry the clicked local position through the occurrence transform. World origin is available. Shift-click builds/toggles a point chain with consecutive distances and total length. Reference cards support replacement, removal and source hover; a projected viewport guide follows the camera. Edge length/face area remain small contextual details. Done/Escape restores the inspector and prior selection. Samples are transient, reset after document revisions, and never create dependencies or history events. Existing backend component-separation endpoints remain available to agents; the new panel focuses on point measurements.
+
+TypeScript, production build and all 152 frontend tests passed. The isolated browser check exercised exact vertices/midpoints, clicked edge/face coordinates, zero distance, shift chains/toggle, reference replacement/hover, world origin, Done/Escape, unchanged document/history and mobile layout without JavaScript errors. Evidence: `artifacts/point-measure-sidebar.png`, `artifacts/point-measure-mobile.png`; reproducible check: `scripts/ui_point_measure_check.mjs`.
+
+## WebGL startup failure containment — October 28
+
+Viewport initialization catches renderer-construction failure rather than letting it propagate through React and remove the whole interface. A viewport-local recovery message explains the WebGL 2 requirement, Chrome graphics settings/GPU diagnostics and reload action. Workspace and file menus remain usable. This does not enable browser-disabled graphics or claim to fix a remote Mac's GPU configuration; runtime context loss is outside this startup guard.
+
+TypeScript/build passed. `scripts/ui_webgl_unavailable_check.mjs` simulates canvas WebGL denial before app startup, verifies recovery guidance, initialized workspace and working project menu without an uncaught error, and separately confirms normal renderer startup. Evidence: `artifacts/webgl-unavailable.png`. The user's exact Chrome/macOS configuration remains unverified.
+
+## Shared bug reports and feature requests — October 28
+
+A bug-glyph dropdown after Experimental features provides searchable, expandable reports with create/read/edit/delete, Bug/Feature request type, title, date, separate steps/error/notes fields and editable automatic browser/device context. Screenshots support file selection, paste and drag-and-drop, preview/removal and full-image viewing. Saved reports live in the initial server project's `feedback/reports.yaml` with separate screenshot files and are shared across workspaces. Atomic YAML writes, per-report conflict checks and attachment validation preserve existing reports; all edits are independent of CAD intent/history. Drafts survive menu closing in memory. List polling picks up other users' changes while open.
+
+TypeScript/build, all 152 frontend tests, and 21 backend tests covering reports plus workspace/network regressions passed. The isolated browser check exercised the full CRUD flow, a second independent workspace reading the same report, all screenshot input methods, attachment retrieval/removal, persisted edits after refresh, browser context, retained drafts, shortcut isolation and mobile layout without JavaScript errors or CAD document edits. Evidence: `artifacts/bug-reports-desktop.png`, `artifacts/bug-reports-mobile.png`. Details and API: `docs/BUG_REPORTS.md`.

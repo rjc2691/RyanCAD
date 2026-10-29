@@ -56,9 +56,19 @@ def atomic_text(path: Path, text: str):
     os.replace(temporary, path)
 
 
+def platform_path(path: Path) -> Path:
+    """Use Windows extended-length paths before nested project files get long."""
+    path = Path(path).absolute()
+    text = str(path)
+    if os.name == "nt" and len(text) >= 180 and not text.startswith("\\\\?\\"):
+        text = "\\\\?\\UNC\\" + text[2:] if text.startswith("\\\\") else "\\\\?\\" + text
+        path = Path(text)
+    return path.resolve()
+
+
 class ProjectStore:
     def __init__(self, directory: Path):
-        self.directory = directory.resolve()
+        self.directory = platform_path(directory)
         self.directory.mkdir(parents=True, exist_ok=True)
         self._lock_file = (self.directory / ".session.lock").open("a+b")
         try:
@@ -116,7 +126,18 @@ class ProjectStore:
                 raise CadError("missing_revision", "This saved revision does not exist.")
             if hashlib.sha256(row[0].encode()).hexdigest() != row[1]:
                 raise CadError("corrupt_journal", "The saved revision checksum does not match. Restore a known-good project snapshot.")
-            return Document.model_validate_json(row[0])
+            document = Document.model_validate_json(row[0])
+            # Old files did not distinguish explicit named inputs from the
+            # private value slots used by features and placements.
+            explicit = set()
+            for (action_text,) in self.connection.execute("SELECT action FROM revisions WHERE action IS NOT NULL AND revision <= ?", (document.revision,)):
+                action = json.loads(action_text)
+                if action.get("command") == "parameter.create":
+                    explicit.update(action.get("affected", []))
+            for p in document.parameters.values():
+                if p.named is None:
+                    p.named = p.id in explicit or p.category in {"Shared", "Shared standards", "Design inputs"}
+            return document
 
     def stacks(self):
         with self.lock:

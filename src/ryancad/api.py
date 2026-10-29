@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 import io
 import json
 import os
@@ -18,14 +19,33 @@ from . import __version__
 from .commands import COMMANDS, FEATURE_FIELDS
 from .errors import CadError
 from .model import Actor, Command, ExportRequest, uid
+from .network import local_ipv4_addresses
 from .service import CadService
 from .storage import read_manifest
+from .workspaces import WorkspaceManager
+from .reports import ReportStore, ReportInput
 
 
-def create_app(project: Path, token: str, port: int = 8790, demo: str | None = None, frontend: Path | None = None, testing=False):
+class _RequestService:
+    """Resolve existing endpoints to the service bound to this request."""
+    def __init__(self, fallback: CadService):
+        self.current: ContextVar[CadService] = ContextVar("ryancad_service", default=fallback)
+
+    def __getattr__(self, name):
+        return getattr(self.current.get(), name)
+
+
+def create_app(project: Path, token: str, port: int = 8790, demo: str | None = None, frontend: Path | None = None, testing=False, lan=False):
     cookie_name = f"ryancad_session_{port}"
+    workspace_cookie = f"ryancad_workspace_{port}"
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     allowed_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
+    lan_urls = []
+    if lan:
+        for address in local_ipv4_addresses():
+            allowed_hosts.add(f"{address}:{port}")
+            lan_urls.append(f"http://{address}:{port}")
+        allowed_origins.update(lan_urls)
     secure_public_host = None
     public_url = os.environ.get("RYANCAD_PUBLIC_URL", "")
     if public_url:
@@ -49,30 +69,36 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
     if testing:
         allowed_hosts.add("testserver")
         allowed_origins.add("http://testserver")
-    service = CadService(project)
+    legacy_service = CadService(project)
+    workspaces = WorkspaceManager(project, legacy_service)
+    service = _RequestService(legacy_service)
+    reports = ReportStore(legacy_service.store.directory / "feedback")
     frontend = frontend or Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if not frontend.exists():
         frontend = Path(__file__).resolve().parent / "web"
 
     @asynccontextmanager
     async def lifespan(app):
-        if demo and service.document.revision == 0 and not service.document.features:
-            service.submit("command", Actor(id="reference-library", name="RyanCAD reference library", kind="system"),
+        if demo and legacy_service.document.revision == 0 and not legacy_service.document.features:
+            legacy_service.submit("command", Actor(id="reference-library", name="RyanCAD reference library", kind="system"),
                            command=Command(name="recipe.load", args={"recipe": demo}, expected_revision=0))
         else:
-            service.submit("rebuild")
+            legacy_service.submit("rebuild")
         yield
-        service.close()
+        workspaces.close()
+        legacy_service.close()
 
     app = FastAPI(title="RyanCAD local engine", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
-    app.state.service = service
+    app.state.service = legacy_service
+    app.state.workspaces = workspaces
     app.state.token = token
+    app.state.lan_urls = lan_urls
 
     @app.middleware("http")
     async def local_access(request: Request, call_next):
         host = request.headers.get("host", "").lower()
         if host not in allowed_hosts:
-            return JSONResponse({"error": {"code": "invalid_host", "message": "RyanCAD accepts local application hosts only."}}, status_code=403)
+            return JSONResponse({"error": {"code": "invalid_host", "message": "RyanCAD accepts configured application hosts only."}}, status_code=403)
         origin = request.headers.get("origin")
         if origin and origin not in allowed_origins:
             return JSONResponse({"error": {"code": "invalid_origin", "message": "This page is not authorized to control the local CAD service."}}, status_code=403)
@@ -83,9 +109,32 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
             cookie = request.cookies.get(cookie_name, "")
             if not (secrets.compare_digest(bearer, token) or secrets.compare_digest(cookie, token)):
                 return JSONResponse({"error": {"code": "unauthorized", "message": "Open RyanCAD locally or connect using the registered service token."}}, status_code=401)
-        response = await call_next(request)
+        workspace_code = request.cookies.get(workspace_cookie, "")
+        if request.headers.get("authorization") == f"Bearer {token}":
+            workspace_code = request.headers.get("x-ryancad-workspace", workspace_code)
+        request.state.workspace_code = workspace_code
+        request.state.design_id = None
+        bound = None
+        if request.url.path.startswith("/api/") and request.url.path != "/api/health" and not request.url.path.startswith(("/api/workspace", "/api/reports")):
+            try:
+                if workspace_code:
+                    identifier = request.headers.get("x-ryancad-design") or request.query_params.get("design_id")
+                    request.state.design_id, current = workspaces.acquire(workspace_code, identifier)
+                    bound = service.current.set(current)
+            except CadError as error:
+                return JSONResponse({"error": error.payload()}, status_code=400)
+        try:
+            response = await call_next(request)
+        finally:
+            if bound is not None:
+                service.current.reset(bound)
+                workspaces.release(workspace_code, request.state.design_id)
+        if request.state.design_id:
+            response.headers["X-RyanCAD-Design"] = request.state.design_id
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Referrer-Policy"] = "no-referrer"
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "no-store"
         return response
 
     @app.exception_handler(CadError)
@@ -99,6 +148,35 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
     @app.exception_handler(zipfile.BadZipFile)
     async def bad_archive(request, error):
         return JSONResponse({"error": {"code": "invalid_archive", "message": "The native project archive is damaged or incomplete."}}, status_code=400)
+
+    @app.get("/api/reports")
+    def list_reports():
+        return {"reports": reports.list()}
+
+    @app.post("/api/reports")
+    def create_report(values: ReportInput):
+        return reports.save(values)
+
+    @app.get("/api/reports/{identifier}")
+    def read_report(identifier: str):
+        report = next((r for r in reports.list() if r["id"] == identifier), None)
+        if not report:
+            raise CadError("report_missing", "This report is no longer available.")
+        return report
+
+    @app.put("/api/reports/{identifier}")
+    def update_report(identifier: str, values: ReportInput):
+        return reports.save(values, identifier)
+
+    @app.delete("/api/reports/{identifier}")
+    def delete_report(identifier: str, version: int):
+        reports.delete(identifier, version)
+        return {"deleted": identifier}
+
+    @app.get("/api/reports/{identifier}/images/{image_id}")
+    def report_image(identifier: str, image_id: str):
+        path, media = reports.image(identifier, image_id)
+        return FileResponse(path, media_type=media)
 
     def actor_for(request):
         identifier = request.headers.get("x-ryancad-actor")
@@ -114,6 +192,76 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
     def health():
         return {"application": "RyanCAD", "version": __version__, "status": "running"}
 
+    def workspace_code_for(request: Request):
+        code = request.state.workspace_code
+        if not workspaces.exists(code):
+            raise CadError("missing_workspace", "Open RyanCAD in a browser or supply a valid workspace code.")
+        return code
+
+    @app.get("/api/workspace")
+    def workspace(request: Request):
+        return workspaces.describe(workspace_code_for(request))
+
+    @app.post("/api/workspace/designs")
+    async def create_design(request: Request):
+        body = await request.json()
+        identifier = workspaces.create(workspace_code_for(request), body.get("name", "Untitled design"))
+        return {"design_id": identifier}
+
+    @app.post("/api/workspace/designs/{identifier}/select")
+    def select_design(identifier: str, request: Request):
+        workspaces.select(workspace_code_for(request), identifier)
+        return {"design_id": identifier}
+
+    @app.post("/api/workspace/designs/{identifier}/rename")
+    async def rename_design(identifier: str, request: Request):
+        payload = await request.json()
+        code = workspace_code_for(request)
+        _, current = workspaces.acquire(code, identifier)
+        bound = service.current.set(current)
+        try:
+            return current.submit("command", actor_for(request), command=Command(name="document.rename", args={"name": payload.get("name", "")}, expected_revision=current.document.revision))
+        finally:
+            service.current.reset(bound)
+            workspaces.release(code, identifier)
+
+    @app.post("/api/workspace/designs/{identifier}/delete")
+    def delete_design(identifier: str, request: Request):
+        return {"design_id": workspaces.delete(workspace_code_for(request), identifier)}
+
+    @app.post("/api/workspace/designs/{identifier}/restore")
+    def restore_design(identifier: str, request: Request):
+        workspaces.restore(workspace_code_for(request), identifier)
+        return {"ok": True}
+
+    @app.post("/api/workspace/copy-existing")
+    def copy_existing(request: Request):
+        return {"design_id": workspaces.copy_legacy(workspace_code_for(request))}
+
+    @app.post("/api/workspace/import")
+    async def import_design(request: Request):
+        return {"design_id": workspaces.import_native(workspace_code_for(request), await request.body())}
+
+    @app.post("/api/workspace/recover")
+    async def recover_workspace(request: Request):
+        body = await request.json()
+        code = str(body.get("code", "")).strip()
+        if not workspaces.exists(code):
+            raise CadError("missing_workspace", "This workspace could not be found. Check its recovery code.")
+        response = JSONResponse({"ok": True})
+        response.set_cookie(workspace_cookie, code, max_age=60 * 60 * 24 * 365 * 5, httponly=True, samesite="strict", path="/",
+                            secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
+        return response
+
+    @app.post("/api/workspace/new")
+    def new_workspace(request: Request):
+        code = secrets.token_urlsafe(32)
+        workspaces.ensure(code)
+        response = JSONResponse({"ok": True})
+        response.set_cookie(workspace_cookie, code, max_age=60 * 60 * 24 * 365 * 5, httponly=True, samesite="strict", path="/",
+                            secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
+        return response
+
     @app.get("/api/state")
     def state():
         return service.state()
@@ -127,6 +275,14 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
                 "session": {"document_id": service.document.id, "revision": service.document.revision},
                 "limits": {"components": 250, "features": 2000, "batch_commands": 100, "sketch_entities": 200, "part_span_mm": 10000, "absolute_local_coordinate_mm": 10000},
                 "export_validation": "OCCT validity; float32 STL closure/winding/degeneracy/material volume; BVH/SAT nonadjacent triangle intersections with 1e-7 mm tolerance (welded vertex-adjacent pairs excluded)."}
+
+    @app.get('/api/agents/setup')
+    def agent_setup(request: Request):
+        from .mcp_setup import codex_setup
+        code=workspace_code_for(request)
+        if not request.state.design_id:
+            raise CadError('missing_design','Open a workspace design before copying the Codex setup.')
+        return codex_setup(port,code,request.state.design_id,service.document.name)
 
     @app.post("/api/commands")
     async def command(request: Request):
@@ -225,6 +381,51 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
         payload = ExportRequest.model_validate(await request.json())
         return service.submit("export", actor_for(request), **payload.model_dump())
 
+    @app.post("/api/import-geometry/{file_type}")
+    async def import_geometry(file_type: str, request: Request):
+        from .file_formats import stl_options, svg_entities
+        body = await request.body()
+        if not body or len(body)>8_000_000:
+            raise CadError('request_limit', 'Choose a file no larger than 8 MB.')
+        name = str(request.query_params.get('name', 'Imported geometry')).strip()[:100] or 'Imported geometry'
+        try:
+            revision = int(request.query_params.get('revision', '-1'))
+        except ValueError:
+            raise CadError('invalid_revision', 'Supply the current design revision.') from None
+        if file_type == 'stl':
+            command_name, args = 'feature.create', {'type':'mesh','name':name,'options':stl_options(body)}
+        elif file_type == 'svg':
+            command_name, args = 'sketch.create', {'name':name,'owner':'root','plane':'XY','entities':svg_entities(body)}
+        else:
+            raise CadError('unsupported_format', 'Choose STL or SVG.')
+        return service.submit('command', actor_for(request), command=Command(name=command_name, args=args,
+            expected_revision=revision))
+
+    @app.post('/api/export-svg')
+    async def export_svg(request: Request):
+        from .file_formats import sketch_svg
+        payload = await request.json()
+        ids = payload.get('sketches', [])
+        if not isinstance(ids,list) or not 1<=len(ids)<=200 or not all(isinstance(item,str) for item in ids) or len(set(ids))!=len(ids):
+            raise CadError('invalid_selection','Select one or more distinct sketches.')
+        with service.write_lock:
+            if payload.get('expected_revision') != service.document.revision:
+                raise CadError('stale_revision','The design changed. Reopen Export and try again.')
+            files=[]
+            for index, identifier in enumerate(ids):
+                feature=service.document.features.get(identifier)
+                solved=service.evaluation.get('sketches',{}).get(identifier)
+                if not feature or feature.suppressed or not solved:
+                    raise CadError('invalid_selection','Select an available sketch.')
+                label=''.join(c if c.isalnum() or c in ' -_' else '_' for c in feature.name)[:70] or 'Sketch'
+                files.append((f'{index+1:02d}-{label}.svg',sketch_svg(feature.name,solved['entities'])))
+        if len(files)==1:
+            return Response(files[0][1],media_type='image/svg+xml',headers={'Content-Disposition':'attachment; filename="sketch.svg"'})
+        buffer=io.BytesIO()
+        with zipfile.ZipFile(buffer,'w',zipfile.ZIP_DEFLATED) as archive:
+            for name,data in files: archive.writestr(name,data)
+        return Response(buffer.getvalue(),media_type='application/zip',headers={'Content-Disposition':'attachment; filename="sketches.zip"'})
+
     @app.get("/api/exports/{export_id}/{filename}")
     def export_file(export_id: str, filename: str):
         if not export_id.startswith("export_") or Path(filename).name != filename:
@@ -294,10 +495,16 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
 
     @app.get("/")
     def index(request: Request):
-        if not (frontend / "index.html").exists():
-            return HTMLResponse("<h1>RyanCAD engine is running</h1><p>Build the frontend, then refresh this page.</p>")
-        response = HTMLResponse((frontend / "index.html").read_text("utf-8"))
+        code = request.cookies.get(workspace_cookie, "")
+        if not workspaces.valid_code(code):
+            code = secrets.token_urlsafe(32)
+            workspaces.ensure(code)
+        content = ((frontend / "index.html").read_text("utf-8") if (frontend / "index.html").exists()
+                   else "<h1>RyanCAD engine is running</h1><p>Build the frontend, then refresh this page.</p>")
+        response = HTMLResponse(content)
         response.set_cookie(cookie_name, token, httponly=True, samesite="strict", path="/",
+                            secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
+        response.set_cookie(workspace_cookie, code, max_age=60 * 60 * 24 * 365 * 5, httponly=True, samesite="strict", path="/",
                             secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
         return response
 

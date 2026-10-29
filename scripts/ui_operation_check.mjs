@@ -104,7 +104,7 @@ try{
     assert(view.width>=340);assert(view.x+view.width<=dock.x+1);assert(dock.x+dock.width<=width+1);assert(dock.y+dock.height<=height+1);
     assert(await panel.getByRole('button',{name:'Apply operation'}).isVisible());assert.equal(await page.getByRole('dialog').count(),0);
     assert.equal(await page.getByRole('slider',{name:'Exploded display'}).isEnabled(),false);
-    assert.equal(await page.getByRole('button',{name:'Export STL',exact:false}).isEnabled(),false);
+    assert.equal(await page.getByRole('button',{name:'Export',exact:true}).isEnabled(),false);
     await page.screenshot({path:`artifacts/operation-workspace-${width}.png`});await panel.getByRole('button',{name:'Cancel',exact:true}).click();
     assert.equal((await read()).document.revision,savedRevision);
   }

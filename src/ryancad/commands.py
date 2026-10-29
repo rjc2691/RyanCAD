@@ -6,7 +6,7 @@ import re
 from typing import Any
 
 from .errors import CadError
-from .model import Actor, Component, Document, Feature, Fit, Instance, Parameter, Tolerance, uid
+from .model import Actor, Component, Document, Feature, Instance, Parameter, Tolerance, uid
 from .parameters import bind_expression, evaluate
 
 PALETTE = ["#689ac5", "#70a997", "#c18e70", "#9c8fbe", "#c5aa68", "#b77d8e", "#acbcc9", "#657487"]
@@ -20,6 +20,7 @@ def references_component(value, component):
     return False
 
 FEATURE_FIELDS = {
+    "mesh": {},
     "box": {"length": ("length", 40), "width": ("length", 30), "height": ("length", 10),
             "x": ("length", 0), "y": ("length", 0), "z": ("length", 0)},
     "cylinder": {"diameter": ("length", 10), "height": ("length", 20),
@@ -45,11 +46,18 @@ def require(mapping, identifier, label="entity"):
     return mapping[identifier]
 
 
-def parameter(document: Document, actor: Actor, owner: str, name: str, value: Any, kind="length", category="Dimensions") -> str:
+def parameter(document: Document, actor: Actor, owner: str, name: str, value: Any, kind="length", category="Dimensions", named=False) -> str:
+    if isinstance(value, str) and not named:
+        label = value.strip().removeprefix("[").removesuffix("]")
+        matches = [p for p in document.parameters.values() if p.named and (p.name.casefold() == label.casefold() or p.id == label)]
+        if len(matches) == 1:
+            value = {"parameter": matches[0].id}
     if isinstance(value, dict):
         if set(value) != {"parameter"}:
             raise CadError("invalid_parameter_reference", "Reuse a parameter with {'parameter': '<id>'}.")
         existing = require(document.parameters, value["parameter"], "parameter")
+        if existing.named is False:
+            raise CadError("named_parameter_required", "Create a named parameter to reuse a value; ordinary dimensions belong to their operation.")
         if existing.kind != kind:
             raise CadError("unit_mismatch", f"'{existing.name}' is {existing.kind}; this field needs {kind}.")
         return existing.id
@@ -60,7 +68,7 @@ def parameter(document: Document, actor: Actor, owner: str, name: str, value: An
     label, number = name, 2
     while label in siblings:
         label, number = f"{name} {number}", number + 1
-    document.parameters[identifier] = Parameter(id=identifier, name=label[:120], owner=owner, kind=kind,
+    document.parameters[identifier] = Parameter(id=identifier, name=label[:120], named=named, owner=owner, kind=kind,
         expression=bind_expression(value, document, owner), category=category, created_by=actor.id, modified_by=actor.id)
     return identifier
 
@@ -323,14 +331,28 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
         instance.suppressed = bool(args["suppressed"])
         return {}, [instance.id], f"{'Suppress' if instance.suppressed else 'Restore'} {instance.name}"
     if name == "parameter.create":
-        owner = args.get("owner", "root")
+        owner = "root"
+        label = str(args.get("name", "Parameter")).strip()
+        if not label or len(label) > 120 or any(p.named and p.name.casefold() == label.casefold() for p in document.parameters.values()):
+            raise CadError("invalid_name", "Use a unique parameter name with 1–120 characters.")
         require(document.components, owner, "component")
-        identifier = parameter(document, actor, owner, args.get("name", "Dimension"), args.get("value", 1), args.get("kind", "length"), args.get("category", "Shared"))
+        value = args.get("value", 1)
+        if isinstance(value, dict):
+            source = require(document.parameters, value.get("parameter"), "parameter")
+            if not source.named:
+                raise CadError("named_parameter_required", "Only deliberately named values can be reused.")
+            value = source.id
+        identifier = parameter(document, actor, owner, label, value, args.get("kind", "length"), args.get("category", "Shared"), named=True)
+        document.parameters[identifier].name = label
         return {"parameter_id": identifier}, [identifier], f"Create parameter {document.parameters[identifier].name}"
     if name in {"parameter.set", "parameter.rename", "parameter.promote"}:
         p = require(document.parameters, args["id"], "parameter")
+        if p.named and "name" in args and not 1 <= len(str(args["name"]).strip()) <= 120:
+            raise CadError("invalid_name", "Use a parameter name with 1–120 characters.")
         if "value" in args:
             p.expression = bind_expression(args["value"], document, p.owner)
+        if "name" in args and p.named and any(other.id != p.id and other.named and other.name.casefold() == str(args["name"]).strip().casefold() for other in document.parameters.values()):
+            raise CadError("invalid_name", "Parameter names must be unique.")
         for field in ("name", "category", "description", "favorite"):
             if field in args:
                 setattr(p, field, args[field])
@@ -338,12 +360,15 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
             p.tolerance = Tolerance.model_validate(args["tolerance"]) if args["tolerance"] is not None else None
         if name == "parameter.promote":
             p.owner = "root"
+            p.named = True
             p.category = args.get("category", "Shared standards")
         p.modified_by = actor.id
         return {"parameter_id": p.id}, [p.id], f"Update {p.name}"
     if name == "parameter.link":
         feature = require(document.features, args["feature_id"], "feature")
         target = require(document.parameters, args["parameter_id"], "parameter")
+        if not target.named:
+            raise CadError("named_parameter_required", "Create a named parameter to reuse a value.")
         current = require(document.parameters, feature.parameters.get(args["field"]), "parameter")
         if current.kind != target.kind:
             raise CadError("unit_mismatch", "The linked parameter must have the same dimensional type.")
@@ -417,14 +442,7 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
         feature.modified_by = actor.id
         return {}, [feature.id], f"Repair selection for {feature.name}"
     if name == "fit.create":
-        pin = require(document.parameters, args["pin_parameter"], "parameter")
-        socket = require(document.parameters, args["socket_parameter"], "parameter")
-        if pin.kind != "length" or socket.kind != "length":
-            raise CadError("unit_mismatch", "A fit requires length parameters.")
-        fit = Fit(id=uid("fit"), name=args.get("name", "Pin / socket fit"), pin_parameter=pin.id,
-                  socket_parameter=socket.id, convention=args.get("convention", "diametral"))
-        document.fits[fit.id] = fit
-        return {"fit_id": fit.id}, [fit.id], f"Define {fit.name}"
+        raise CadError("unsupported_feature", "Cross-component fit constraints are disabled. Use independent dimensions or explicitly named values.")
     if name.startswith("sketch."):
         from .sketches import edit_sketch
         return edit_sketch(document, actor, name, args)
@@ -471,11 +489,11 @@ COMMANDS = {
     "instance.visibility": "Change display visibility without changing manufactured quantities.",
     "instance.suppress": "Suppress or restore a manufactured instance explicitly.",
     "instance.reparent": "Move a placed instance into an assembly, preserving its explicit local transform.",
-    "parameter.create": "Create a typed named parameter in a component or shared root scope.",
+    "parameter.create": "Create a unique optional named design value. Ordinary numeric dimensions are private to their operation.",
     "parameter.set": "Change a value/expression, tolerance, category, description or favorite flag.",
     "parameter.rename": "Rename a parameter while preserving stable references.",
     "parameter.promote": "Promote a local input to a reusable shared standard.",
-    "parameter.link": "Reuse an existing parameter in a feature field explicitly.",
+    "parameter.link": "Bind a feature field explicitly to a deliberately named design value.",
     "parameter.offset": "Apply an exact typed offset to an existing generating dimension; the resulting value remains parameter-backed.",
     "parameter.independent": "Detach one feature dimension into a new independent input.",
     "parameter.delete": "Delete an unused parameter; referenced dimensions are protected.",
@@ -487,7 +505,6 @@ COMMANDS = {
     "sketch.constraint": "Add an explicit dimensional/geometric constraint through PlaneGCS.",
     "sketch.update": "Edit a sketch's geometry and constraints atomically, preserving surviving entity/parameter identities.",
     "sketch.remove_constraint": "Remove a sketch constraint by ID.",
-    "fit.create": "Track nominal and tolerance-limit pin/socket clearance with an explicit convention.",
     "batch": "Apply a bounded atomic command sequence; staged work commits together.",
     "document.rename": "Rename the design.", "document.units": "Change display units without changing physical geometry.",
     "recipe.load": "Load a native reference design: mold, plate or blank; replace requires explicit intent.",

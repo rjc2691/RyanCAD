@@ -34,6 +34,7 @@ class Tolerance(Model):
 class Parameter(Model):
     id: str
     name: str
+    named: bool | None = None
     owner: str = "root"
     kind: Literal["length", "angle", "count", "ratio"] = "length"
     expression: str

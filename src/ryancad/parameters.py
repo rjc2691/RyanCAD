@@ -51,10 +51,10 @@ def bind_expression(expression: str | int | float, document: Document, owner: st
         label = match[1]
         if "::" in label:
             scope, label = label.split("::", 1)
-            candidates = [p for p in document.parameters.values() if p.name == label and
+            candidates = [p for p in document.parameters.values() if p.named is not False and p.name == label and
                           document.components.get(p.owner) and document.components[p.owner].name == scope]
         else:
-            candidates = [p for p in document.parameters.values() if p.name == label]
+            candidates = [p for p in document.parameters.values() if p.named is not False and p.name == label]
             local = [p for p in candidates if p.owner == owner]
             candidates = local or candidates
         if len(candidates) != 1:
@@ -68,7 +68,7 @@ def bind_expression(expression: str | int | float, document: Document, owner: st
         if node.id in document.parameters:
             continue
         candidates = [p for p in document.parameters.values()
-                      if re.sub(r"\W+", "_", p.name).strip("_").lower() == node.id.lower()]
+                      if p.named is not False and re.sub(r"\W+", "_", p.name).strip("_").lower() == node.id.lower()]
         local = [p for p in candidates if p.owner == owner]
         candidates = local or candidates
         if len(candidates) != 1:

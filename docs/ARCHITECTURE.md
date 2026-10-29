@@ -1,6 +1,12 @@
 # RyanCAD architecture
 
+**October 28 simplification:** [Simple design intent](SIMPLE_DESIGN_INTENT.md) supersedes the live geometric-reference and automatic named-parameter policies below. Operation-owned snapshots preserve external shape inputs and local frames. Explicit named values are distinguished from private numeric storage slots; legacy records remain readable and migrate on accepted edits.
+
 **Revision 3 — October 24, 2026. Architectural intent. The concrete 0.1 contracts are documented in [API.md](API.md), with gaps tracked in [IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md).**
+
+## Browser workspaces and multiple designs
+
+The server keeps workspace metadata beside its configured legacy project, and a separate revisioned project directory for every design. A persistent browser cookie chooses a workspace; the UI sends a per-tab design ID with every CAD request and download so concurrent tabs cannot silently redirect each other's commands. The request-scoped service owns that design's worker, journal, previews, jobs and agent sessions. Workspace defaults are persisted for new tabs. There is no account or authentication model. Workspace recovery codes let a person reconnect from another browser; deletion is recoverable, and a deliberate legacy copy preserves the old journal. See [API.md](API.md) for routing and [USER_GUIDE.md](USER_GUIDE.md) for recovery.
 
 ## Unified operation implementation
 

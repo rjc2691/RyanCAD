@@ -1,4 +1,12 @@
+import type {ActiveAppearance} from "./experiments";
+import MeasureGuide,{type MeasureGuideHandle} from "./MeasureGuide";
+import type {MeasurePoint} from "./measureModel";
+import SectionGuide,{type SectionGuideHandle} from "./SectionGuide";
+import type {SectionSettings} from "./sectionView";
+import {sectionKeeps} from "./sectionView";
 import MovementGuide, { type MovementGuideHandle } from "./MovementGuide";
+import { designHeaders } from "./api";
+import { explodedLayout } from "./explodedView";
 import { sketchOrbitOffset } from "./sketchOrbit";
 import { expandedGroupSelection } from "./groupModel";
 import SketchGuide, {
@@ -59,6 +67,7 @@ import {
 } from "./viewportOperationDisplay";
 
 interface Props {
+  measurePoints?: MeasurePoint[] | null;
   onWorldAxis?: (axis: WorldAxis) => void;
   editingGroup?: string;
   resolveHover?: (selection: Selection | null) => Selection | null;
@@ -93,8 +102,13 @@ interface Props {
   selected: Selection | null;
   onSelect: (selection: Selection | null, add?: boolean) => void;
   explode: number;
+  showBounds?: boolean;
   grid: boolean;
+  activeAppearance?: ActiveAppearance;
   section: boolean;
+  sectionPlane?: THREE.Plane;
+  sectionReference?: SectionSettings["reference"];
+  sectionOffset?: number;
   historyKey?: string;
   previewToken?: string;
   units?: "mm" | "in";
@@ -110,7 +124,7 @@ export interface ViewportHandle {
 async function previewAsset(id: string, token: string, signal?: AbortSignal) {
   const response = await fetch(
     `/api/geometry/${id}?preview_token=${encodeURIComponent(token)}`,
-    { signal },
+    { signal, headers: designHeaders() },
   );
   if (!response.ok) throw new Error("Preview mesh could not be loaded.");
   const buffer = await response.arrayBuffer(),
@@ -147,6 +161,7 @@ async function previewAsset(id: string, token: string, signal?: AbortSignal) {
 const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const container = useRef<HTMLDivElement>(null);
   const movementGuide = useRef<MovementGuideHandle>(null);
+  const measureGuide = useRef<MeasureGuideHandle>(null);
   const operationGuide = useRef<OperationGuideHandle>(null);
   const sketchGuide = useRef<SketchGuideHandle>(null);
   const sketchView = useRef<any>(null);
@@ -163,8 +178,10 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const displayedPreview = useRef<DisplayedPreview | null>(null);
   const previousProfile = useRef(props.operationDraft?.profile);
   const [previewDisplayError, setPreviewDisplayError] = useState("");
+  const [rendererError,setRendererError]=useState('');
   const displayContext = viewportDisplayContext(props);
   const measurementRef = useRef<MeasurementOverlayHandle>(null);
+  const sectionGuide=useRef<SectionGuideHandle>(null);
   const hoverHint = useRef<HTMLDivElement>(null);
   const [shiftHeld, setShiftHeld] = useState(false);
   useEffect(() => {
@@ -441,6 +458,8 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const colorStamp = JSON.stringify(
     props.occurrences.map((o) => [o.id, o.color]),
   );
+  const appearanceStamp=JSON.stringify(props.activeAppearance);
+  useEffect(()=>{const scene=sceneRef.current;if(scene)syncOperationAppearance(scene.parts,displayedPreview.current,propsRef.current);},[appearanceStamp]);
   const refreshSelection = () => {
     const s = sceneRef.current;
     if (!s) return;
@@ -507,11 +526,17 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     const camera = new THREE.OrthographicCamera(-100, 100, 80, -80, 0.1, 10000);
     camera.up.set(0, 0, 1);
     camera.position.set(150, -220, 165);
-    const renderer = new THREE.WebGLRenderer({
-      antialias: true,
-      alpha: false,
-      preserveDrawingBuffer: true,
-    });
+    let renderer:THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        preserveDrawingBuffer: true,
+      });
+    } catch(error) {
+      setRendererError(error instanceof Error ? error.message : 'The browser could not initialize WebGL.');
+      return;
+    }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(host.clientWidth, host.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -712,6 +737,8 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       dragging = false,
       hoverKey = "";
     let lastPointer: PointerEvent | null = null;
+    const activeTouches = new Set<number>();
+    let multiTouchGesture = false;
     let hoverSource: "viewport" | "panel" = "viewport";
     const showHover = (
       picked: Selection | null,
@@ -818,6 +845,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         !objects ||
         current.sketch ||
         current.placementTarget ||
+        current.measurePoints ||
         (current.pickSlot && current.pickSlot !== "profile")
       )
         return null;
@@ -890,7 +918,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       );
       const surface = raycaster
         .intersectObjects(surfaces, false)
-        .find((h) => !current.section || h.point.y >= -1e-6);
+        .find((h) => !current.section || sectionKeeps(h.point,current.sectionPlane));
       if (surface && surface.distance < hit.distance - tolerance) return null;
       return hit.object.userData.worldAxis as WorldAxis;
     };
@@ -912,7 +940,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       );
       const hits = raycaster
         .intersectObjects(targets, false)
-        .filter((hit) => !propsRef.current.section || hit.point.y >= -1e-6);
+        .filter((hit) => !propsRef.current.section || sectionKeeps(hit.point,propsRef.current.sectionPlane));
       const surface = hits.find((item) => item.object.type === "Mesh");
       const edgeHit = hits.find(
         (item) =>
@@ -952,7 +980,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
             const world = new THREE.Vector3(
               ...(point as [number, number, number]),
             ).applyMatrix4(group.matrixWorld);
-            if (propsRef.current.section && world.y < 0) continue;
+            if (propsRef.current.section && !sectionKeeps(world,propsRef.current.sectionPlane)) continue;
             const projected = world.clone().project(camera);
             const distance = Math.hypot(
               ((projected.x - pointer.x) * rect.width) / 2,
@@ -1009,6 +1037,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           occurrence: occurrence.id,
           definition: occurrence.definition,
           edge,
+          point: hit.object.worldToLocal(hit.point.clone()).toArray(),
         };
       }
       const face = data?.faces?.find(
@@ -1050,11 +1079,26 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       };
     };
     const pointerdown = (event: PointerEvent) => {
+      if (event.pointerType === "touch") {
+        activeTouches.add(event.pointerId);
+        if (activeTouches.size > 1) multiTouchGesture = true;
+      }
       down = { x: event.clientX, y: event.clientY };
       dragging = true;
       clearHover();
     };
     const pointerup = (event: PointerEvent) => {
+      if (event.pointerType === "touch") {
+        activeTouches.delete(event.pointerId);
+        const wasMultiTouch = multiTouchGesture;
+        if (!activeTouches.size) multiTouchGesture = false;
+        // A pinch/pan must never become a geometry pick or a sketch point when
+        // one finger is lifted before the other.
+        if (wasMultiTouch) {
+          dragging = activeTouches.size > 0;
+          return;
+        }
+      }
       dragging = false;
       if (
         event.button !== 0 ||
@@ -1151,6 +1195,11 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       dragging = false;
       clearHover();
     };
+    const pointercancel = (event: PointerEvent) => {
+      activeTouches.delete(event.pointerId);
+      if (!activeTouches.size) multiTouchGesture = false;
+      pointerleave();
+    };
     const doubleclick = (event: MouseEvent) => {
       if (pickSketch(event)) return;
       if (
@@ -1164,7 +1213,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     renderer.domElement.addEventListener("pointerup", pointerup);
     renderer.domElement.addEventListener("pointermove", pointermove);
     renderer.domElement.addEventListener("pointerleave", pointerleave);
-    renderer.domElement.addEventListener("pointercancel", pointerleave);
+    renderer.domElement.addEventListener("pointercancel", pointercancel);
     renderer.domElement.addEventListener("contextmenu", contextmenu);
     renderer.domElement.addEventListener("dblclick", doubleclick);
     controls.addEventListener("change", clearHover);
@@ -1186,6 +1235,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     const observer = new ResizeObserver(() => {
       state.width = host.clientWidth;
       state.height = host.clientHeight;
+      if (!state.width || !state.height) return;
       renderer.setSize(state.width, state.height);
       const h = camera.top - camera.bottom;
       camera.left = (-h * state.width) / state.height / 2;
@@ -1247,7 +1297,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         material.opacity = hovered || selected ? 1 : 0.4;
       }
       const external =
-        (propsRef.current.operationDraft || propsRef.current.placementTarget) &&
+        (propsRef.current.operationDraft || propsRef.current.placementTarget || propsRef.current.measurePoints) &&
         propsRef.current.referenceHover;
       if (external) {
         showHover(
@@ -1260,9 +1310,11 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       } else if (hoverSource === "panel") showHover(null, "viewport");
       camera.updateMatrixWorld();
       parts.updateMatrixWorld(true);
+      sectionGuide.current?.update(state);
       if (
         !propsRef.current.sketch &&
         !propsRef.current.operationDraft &&
+        !propsRef.current.measurePoints &&
         !propsRef.current.placementTarget
       )
         measurementRef.current?.update(state, performance.now());
@@ -1274,6 +1326,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         clearProfileRole();
       }
       movementGuide.current?.update(camera, state.width, state.height);
+      measureGuide.current?.update(camera, state.width, state.height);
       sketchGuide.current?.update(camera, state.width, state.height);
       propsRef.current.orientationRef?.current?.update(camera);
       renderer.render(scene, camera);
@@ -1297,7 +1350,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       renderer.domElement.removeEventListener("pointerup", pointerup);
       renderer.domElement.removeEventListener("pointermove", pointermove);
       renderer.domElement.removeEventListener("pointerleave", pointerleave);
-      renderer.domElement.removeEventListener("pointercancel", pointerleave);
+      renderer.domElement.removeEventListener("pointercancel", pointercancel);
       renderer.domElement.removeEventListener("contextmenu", contextmenu);
       renderer.domElement.removeEventListener("dblclick", doubleclick);
       parts.traverse((object: any) => {
@@ -1340,6 +1393,75 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   ]);
 
   useEffect(() => {
+    const scene = sceneRef.current?.scene;
+    if (!scene || !props.showBounds || !props.selected || props.sketch) return;
+    const layout = explodedLayout(
+      props.occurrences,
+      props.geometry,
+      props.explode,
+    );
+    const selected = new Set(
+      selectionMembers(props.selected).flatMap((item) =>
+        expandedGroupSelection(item, props.occurrences).map(
+          (part) => part.occurrence,
+        ),
+      ),
+    );
+    const layer = new THREE.Group();
+    for (const occurrence of props.occurrences) {
+      if (!selected.has(occurrence.id) || !occurrence.visible) continue;
+      const entry = layout.entries.get(occurrence.id);
+      if (!entry) continue;
+      const box = entry.bounds.clone().translate(entry.offset);
+      const helper = new THREE.Box3Helper(box, 0xe5a860);
+      const material = helper.material as THREE.LineBasicMaterial;
+      material.transparent = true;
+      material.opacity = 0.65;
+      material.depthTest = false;
+      material.depthWrite = false;
+      helper.renderOrder = 20;
+      layer.add(helper);
+      const c = entry.center.clone().add(entry.offset);
+      const size = Math.max(
+        box.getSize(new THREE.Vector3()).length() * 0.025,
+        0.3,
+      );
+      const points = [
+        new THREE.Vector3(-size, 0, 0),
+        new THREE.Vector3(size, 0, 0),
+        new THREE.Vector3(0, -size, 0),
+        new THREE.Vector3(0, size, 0),
+        new THREE.Vector3(0, 0, -size),
+        new THREE.Vector3(0, 0, size),
+      ].map((p) => p.add(c));
+      const cross = new THREE.LineSegments(
+        new THREE.BufferGeometry().setFromPoints(points),
+        new THREE.LineBasicMaterial({
+          color: 0xffdf98,
+          transparent: true,
+          opacity: 0.95,
+          depthTest: false,
+          depthWrite: false,
+        }),
+      );
+      cross.renderOrder = 21;
+      layer.add(cross);
+    }
+    scene.add(layer);
+    return () => {
+      scene.remove(layer);
+      disposeOverlay(layer);
+    };
+  }, [
+    props.showBounds,
+    selectionStamp,
+    occurrenceStamp,
+    geometryStamp,
+    props.explode,
+    !!props.sketch,
+  ]);
+
+  useEffect(() => {
     let cancelled = false;
     const load = async () => {
       const s = sceneRef.current;
@@ -1372,6 +1494,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
             query.set("preview_token", props.previewToken);
           const response = await fetch(
             "/api/geometry/" + identifier + "?" + query,
+            { headers: designHeaders() },
           );
           if (!response.ok) continue;
           const buffer = await response.arrayBuffer();
@@ -1423,8 +1546,13 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         });
       }
       const clip = props.section
-        ? [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)]
+        ? [props.sectionPlane || new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)]
         : [];
+      const layout = explodedLayout(
+        props.occurrences,
+        props.geometry,
+        props.explode,
+      );
       const physical = props.occurrences.filter(
         (o) => o.kind !== "assembly" && !o.suppressed && o.visible,
       );
@@ -1471,11 +1599,11 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
             number,
           ]),
         );
-        if (props.explode) {
-          const angle = (index / physical.length) * Math.PI * 2;
-          matrix.elements[12] += Math.cos(angle) * props.explode;
-          matrix.elements[13] += Math.sin(angle) * props.explode;
-          matrix.elements[14] += index * props.explode * 0.14;
+        const displacement = layout.entries.get(occurrence.id)?.offset;
+        if (displacement) {
+          matrix.elements[12] += displacement.x;
+          matrix.elements[13] += displacement.y;
+          matrix.elements[14] += displacement.z;
         }
         group.matrix.copy(matrix);
         const selectionLayer = new THREE.Group();
@@ -1632,7 +1760,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           return;
         }
         const clip = current.section
-          ? [new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)]
+          ? [current.sectionPlane || new THREE.Plane(new THREE.Vector3(0, 1, 0), 0)]
           : [];
         next.section = current.section;
         for (const occurrence of report.occurrences || []) {
@@ -1728,6 +1856,14 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const selectedCount = visibleSelections.length;
   return (
     <>
+      {rendererError&&<div className="viewport-renderer-error" role="alert">
+        <h2>3D graphics unavailable</h2>
+        <p>This browser could not start WebGL 2. The design remains on the server; the workspace and file menus are still available.</p>
+        <p>In Chrome, open <code>chrome://settings/system</code>, enable graphics acceleration, then quit and reopen Chrome. Check <code>chrome://gpu</code> for WebGL / WebGL2 status and Problems Detected.</p>
+        <p>If graphics are still unavailable, update Chrome and macOS, or use a browser where this design already works.</p>
+        <button className="button primary" onClick={()=>window.location.reload()}>Reload app</button>
+        <details><summary>Graphics error details</summary><pre>{rendererError}</pre></details>
+      </div>}
       <div
         className="canvas-host"
         ref={container}
@@ -1791,6 +1927,8 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
             ? "Use as reference direction / Tool Path"
             : props.placementTarget
               ? "Pick points for origin/target or an edge for direction"
+              : props.measurePoints
+                ? shiftHeld ? "Add or remove a measurement point" : "Use clicked location as a measurement point"
               : hovered
                 ? hoverIntent(
                     hovered,
@@ -1802,7 +1940,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
                 : ""}
         </small>
       </div>
-      {selectedOccurrence && !props.sketch && (
+      {selectedOccurrence && !props.sketch && !props.measurePoints && (
         <div className="viewport-selection-summary" aria-live="polite">
           <span className="active-part-marker" />
           <span>
@@ -1859,7 +1997,8 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           Previous preview · current edit is not validated
         </div>
       )}
-      {!props.sketch && !props.operationDraft && !props.placementTarget && (
+      {props.measurePoints && <MeasureGuide ref={measureGuide} points={props.measurePoints} units={props.units||'mm'}/>}
+      {!props.sketch && !props.operationDraft && !props.placementTarget && !props.measurePoints && (
         <MeasurementOverlay
           ref={measurementRef}
           geometry={props.geometry}
@@ -1875,11 +2014,13 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           }
           units={props.units || "mm"}
           section={props.section}
+          sectionPlane={props.sectionPlane}
         />
       )}
+      {props.section && props.sectionReference && <SectionGuide ref={sectionGuide} reference={props.sectionReference} offset={props.sectionOffset||0} geometry={props.geometry} occurrences={props.occurrences} explode={props.explode} units={props.units}/>}
       <div className="viewport-selection-legend" hidden={!!props.sketch}>
         <span>
-          <i className="active" />
+          <i className="active" style={props.activeAppearance?.enabled?{background:props.activeAppearance.tint}:undefined} />
           Active part
         </span>
         <span>

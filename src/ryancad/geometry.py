@@ -176,6 +176,7 @@ class Evaluator:
         timings = {}
         operation_decisions = {}
         operation_displays = {}
+        reference_snapshots = {}
         cutoff = set() if rollback=="origin" else set(document.feature_order[:document.feature_order.index(rollback) + 1]) if rollback else None
 
         def resolve_component(identifier):
@@ -207,17 +208,36 @@ class Evaluator:
                 if feature.type == "operation":
                     from .operations import prepare
                     operation_context, extras = prepare(feature, document, values, shape, body_key, resolve_component, profiles, profile_keys)
+                    if not feature.options.get("reference_snapshot"):
+                        from .reference_snapshots import capture_context
+                        reference_snapshots[feature.id] = capture_context(feature, operation_context)
                 if feature.type in {"boolean", "mirror"}:
-                    source = feature.references.get("component")
-                    source_shape, source_key = resolve_component(source)
+                    from .reference_snapshots import decode_shape, encode_shape
+                    snapshot = feature.options.get("reference_snapshot")
+                    if snapshot:
+                        source_shape, source_key = decode_shape(snapshot["source"]), snapshot["source"]
+                    else:
+                        source = feature.references.get("component")
+                        source_shape, source_key = resolve_component(source)
+                        reference_snapshots[feature.id] = {"version": 1, "source": encode_shape(source_shape)}
                     if source_shape is None:
                         raise CadError("missing_reference", "The referenced component has no evaluated solid.", feature_id=feature.id)
                     extras["component"] = source_key
                 if feature.type in {"extrude", "revolve"}:
                     profile_id = feature.references.get("profile")
-                    if profile_id not in profiles:
+                    snapshot = feature.options.get("reference_snapshot")
+                    if snapshot:
+                        from .reference_snapshots import decode_shape
+                        source_profile = decode_shape(snapshot["profile"])
+                        extras["profile"] = snapshot["profile"]
+                    elif profile_id not in profiles:
                         raise CadError("missing_reference", "The feature's sketch/profile is missing, suppressed, or later in history.", feature_id=feature.id, reference=profile_id)
-                    extras["profile"] = profile_keys[profile_id]
+                    else:
+                        source_profile = profiles[profile_id]
+                        extras["profile"] = profile_keys[profile_id]
+                        if document.features[profile_id].owner != feature.owner:
+                            from .reference_snapshots import encode_shape
+                            reference_snapshots[feature.id] = {"version": 1, "profile": encode_shape(source_profile)}
                 key = hashlib.sha256(json.dumps({"type": feature.type, "q": q, "options": feature.options, "references": feature.references,
                                                  "body": body_key, "extras": extras}, sort_keys=True).encode()).hexdigest()
                 started = time.perf_counter()
@@ -232,6 +252,9 @@ class Evaluator:
                         if feature.type == "operation":
                             from .operations import execute
                             result = execute(feature, q, shape, operation_context)
+                        elif feature.type == "mesh":
+                            from .file_formats import mesh_solid
+                            tool = mesh_solid(feature.options)
                         elif feature.type in {"box", "rectangle"}:
                             if min(q["length"], q["width"]) <= 1e-5:
                                 raise CadError("invalid_dimension", "Length and width must be positive.")
@@ -286,7 +309,7 @@ class Evaluator:
                                 plane = sketch_plane(feature.options)
                                 tool = plane.location * tool
                         elif feature.type == "extrude":
-                            profile = profiles[feature.references["profile"]]
+                            profile = source_profile
                             if len(profile.faces()) != 1:
                                 raise CadError("open_profile", "Extrusion needs one closed region. Close the sketch or separate disconnected pieces into components.")
                             face = profile.faces()[0]
@@ -295,7 +318,7 @@ class Evaluator:
                             if abs(q["distance"]) <= 1e-5:
                                 raise CadError("invalid_dimension", "Extrusion distance must be nonzero.")
                         elif feature.type == "revolve":
-                            profile = profiles[feature.references["profile"]]
+                            profile = source_profile
                             if len(profile.faces()) != 1 or not 0 < abs(q["angle"]) <= 360:
                                 raise CadError("invalid_revolve", "Choose a closed profile and an angle up to 360 degrees.")
                             axis = {"X": Axis.X, "Y": Axis.Y, "Z": Axis.Z}.get(feature.options.get("axis", "Y"))
@@ -450,7 +473,7 @@ class Evaluator:
             output[identifier] = {"status": "valid" if solids else "planar" if shape.faces() else "open_profile", "bounds": envelope, "center":vector(shape.center()),
                 "stock_thickness_mm": thickness, "thickness_preview": bool(preview),
                 "volume": float(shape.volume) if solids else None, "area": float(shape.area), "solid_count": len(solids),
-                "face_count": len(shape.faces()), "edge_count": len(shape.edges()), "faces": [dict(face) for face in mesh["faces"]], "edges": mesh["edges"], "vertices": mesh["points"], "vertex_info":[{"id":f"vertex_{i}","name":f"Vertex {i+1}","point":point} for i,point in enumerate(mesh["points"])],
+                "face_count": len(shape.faces()), "edge_count": len(shape.edges()), "faces": [dict(face) for face in mesh["faces"]], "edges": [dict(edge) for edge in mesh["edges"]], "vertices": mesh["points"], "vertex_info":[{"id":f"vertex_{i}","name":f"Vertex {i+1}","point":point} for i,point in enumerate(mesh["points"])],
                 "triangles": mesh["triangles"], "mesh": mesh["buffer"], "geometry_key": mesh_key}
             # A generating dimension is only offered for a unique planar top face.
             top = [f for f in output[identifier]["faces"] if f["type"] == "PLANE" and f["normal"][2] > .999 and abs(f["center"][2] - output[identifier]["bounds"]["max"][2]) < 1e-5]
@@ -472,6 +495,49 @@ class Evaluator:
             if len(top) == 1 and len(generators) == 1:
                 generator = generators[0]
                 top[0]["controlling_parameter"] = generator.parameters.get("distance", generator.parameters.get("height"))
+            # Only tag measurements with known generating-dimension provenance;
+            # equal numbers on unrelated features are never inferred as links.
+            active = [document.features[f] for f in component.feature_ids if not document.features[f].suppressed and document.features[f].type != "sketch"]
+            if len(active) == 1:
+                generator = active[0]
+                fields = ["length", "width", "height"] if generator.type == "box" else ["diameter", "diameter", "height"] if generator.type == "cylinder" else None
+                if generator.type == "operation" and generator.options.get("motion") == "linear" and generator.options.get("plane") == "XY" and generator.options.get("direction") == "normal":
+                    fields = ["width", "height", "distance"] if generator.options.get("profile") == "rectangle" else ["diameter", "diameter", "distance"] if generator.options.get("profile") == "circle" else None
+                if fields:
+                    from .parameters import dependencies
+                    def named_sources(pid, seen=None):
+                        seen = set() if seen is None else seen
+                        if pid in seen: return []
+                        seen.add(pid)
+                        p = document.parameters[pid]
+                        return [p.name] if p.named else [name for dep in dependencies(p.expression) for name in named_sources(dep, seen)]
+                    extents = {}
+                    for axis, field in enumerate(fields):
+                        pid = generator.parameters.get(field)
+                        if not pid or abs(abs(values[pid]) - envelope["size"][axis]) > 1e-6: continue
+                        names = sorted(set(named_sources(pid)))
+                        if not names: continue
+                        extents[str(axis)] = names
+                        for edge in output[identifier]["edges"]:
+                            if edge["type"] == "LINE" and abs(abs(edge["tangent"][axis]) - 1) < 1e-6 and abs(edge["length"] - abs(values[pid])) < 1e-6:
+                                edge["parameter_names"] = names
+                    output[identifier]["named_extents"] = extents
+                    for face in output[identifier]["faces"]:
+                        for axis in range(3):
+                            if face["type"] != "PLANE" or abs(abs(face["normal"][axis]) - 1) > 1e-6: continue
+                            ids = [generator.parameters.get(fields[i]) for i in range(3) if i != axis]
+                            if all(ids) and abs(face["area"] - abs(values[ids[0]] * values[ids[1]])) < 1e-6:
+                                names = sorted({name for pid in ids for name in named_sources(pid)})
+                                if names: face["parameter_names"] = names
+                    diameter = generator.parameters.get("diameter")
+                    if diameter:
+                        names = sorted(set(named_sources(diameter)))
+                        for edge in output[identifier]["edges"]:
+                            if names and edge["type"] == "CIRCLE" and abs(edge["length"] - math.pi * abs(values[diameter])) < 1e-6:
+                                edge["parameter_names"] = names
+                        for face in output[identifier]["faces"]:
+                            if names and face["type"] == "PLANE" and abs(face["area"] - math.pi * (values[diameter] / 2) ** 2) < 1e-6:
+                                face["parameter_names"] = names
         if len(self.shape_cache) > self.maximum_cache:
             keep = list(self.shape_cache)[-self.maximum_cache:]
             self.shape_cache = {k: self.shape_cache[k] for k in keep}
@@ -490,7 +556,7 @@ class Evaluator:
             else: profile_info[identifier]={"status":"open"}
         if len(self.profile_display_cache)>self.maximum_cache:
             self.profile_display_cache={k:self.profile_display_cache[k] for k in list(self.profile_display_cache)[-self.maximum_cache:]}
-        return {"components": output, "timings": timings, "bindings": bindings, "sketches": sketches, "profiles":profile_info, "values": values,"operation_decisions":operation_decisions,"operation_displays":operation_displays}
+        return {"components": output, "timings": timings, "bindings": bindings, "sketches": sketches, "profiles":profile_info, "values": values,"operation_decisions":operation_decisions,"operation_displays":operation_displays, "reference_snapshots": reference_snapshots}
 
     def measure(self, payload, first, second, matrices):
         self.evaluate(payload)

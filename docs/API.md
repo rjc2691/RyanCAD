@@ -1,8 +1,20 @@
 # Engine, document and external-agent contracts
 
+## Current reference and value policy — October 28
+
+The [simple design intent policy](SIMPLE_DESIGN_INTENT.md) supersedes the earlier live geometric-link descriptions below. Pending commands accept semantic references as before; accepted features copy external shapes and local frames into `options.reference_snapshot`. Those inputs no longer follow the picked component. Same-part edge selection and sketch-local constraints remain supported. Legacy links are captured before the next mutation, and snapshots survive native export, restart and source deletion.
+
+`Parameter.named` distinguishes explicitly created named values from private compatibility value records. `parameter.create` creates a unique design-wide named value. Numeric feature/placement/sketch inputs remain private; only deliberately named values may be explicitly reused. Client autocomplete reads named values of a compatible type. Cross-component `fit.create` is disabled and is no longer advertised. Native geometry reports provenance for known primitive edge, extent and area dimensions; the renderer does not infer links from equal numbers.
+
 ## Ownership of a live design
 
 `CadService` owns one `ProjectStore` and `Document`, a serialized mutation boundary, an event sequence and an isolated persistent native worker. UI and MCP clients submit the same reducer commands. The reducer edits an isolated candidate; schema/ownership/parameter validation, geometry validation and durable commit must succeed before publication. Native objects and meshes are derived caches, absent from the editable YAML schema.
+
+`WorkspaceManager` maps each persistent browser workspace code to a list of separate project directories. A request is bound to one service for its full lifetime, including commands, previews, jobs, geometry and exports. The UI pins each browser tab using `X-RyanCAD-Design`; navigational downloads use the `design_id` query parameter. A tab can therefore keep editing its design while another tab changes the workspace's default. The server validates design membership and preserves each project's journal and worker. Deleted entries remain recoverable and are not routed until restored. At least one design remains active. Projects with queued/running/waiting jobs cannot be deleted.
+
+`GET /api/workspace` returns the workspace code, default design and design list. `POST /api/workspace/designs` creates a design; `/designs/{id}/select`, `/rename`, `/delete` and `/restore` manage it. `/api/workspace/import` imports native data as a new project; `/copy-existing` copies the legacy project and journal without altering it. `/api/workspace/recover` switches the browser using a code; `/new` creates another workspace. Browser profiles keep a persistent cookie, while tabs remember their chosen design in session storage. The workspace code is a recovery identifier, not an account or authorization system.
+
+MCP clients can pass `--workspace CODE --design ID`; both values are available in the app's External agents panel. The adapter pins its HTTP requests, job polling and agent identity to that service. With `--workspace` alone it pins the current default at connection time; omitting both retains compatibility with the original standalone project. The local bearer connection file remains necessary for agent registration.
 
 Code boundaries:
 
@@ -16,6 +28,7 @@ Code boundaries:
 | `geometry.py`, `meshcheck.py` | OCCT construction, stable-selection guards, tessellation, measurement, validation and STL writing. |
 | `worker.py` | Supervised spawned process, cancellation/generation protection and restart. |
 | `storage.py`, `projects.py` | Durable revisions, readable snapshots, safe archive restore and single-writer protection. |
+| `workspaces.py` | Persistent browser workspaces, project routing, recoverable deletion and legacy-project copies. |
 | `service.py` | Transactions, previews, revisions, authorship, jobs, agent permissions and quantities. |
 | `api.py` | Local HTTP adapter and bundled client delivery. |
 | `mcp_server.py` | Official MCP stdio adapter to the running service. |
@@ -233,3 +246,13 @@ Sketch update also accepts `name`. Root sketches evaluate before physical compon
 ## Component groups
 
 `group.create {name, occurrences}` groups sibling occurrence IDs in an identity assembly frame. `group.add {group, occurrences}` adds siblings to an existing placed assembly, preserving world positions. `group.copy {occurrence, name?, offset?}` clones nested group structure/placement parameters and shares physical part definitions; offset defaults to [30,0,0] in the parent frame. `group.ungroup {occurrence}` preserves child poses while dissolving the placed container. Receipts expose occurrence path maps where applicable. Native modeling references are remapped in the same transaction. Group movement uses `instance.move` on the assembly occurrence and accepts origins on descendants. See GROUPS.md for rebasing, retained parameter identities and membership guards.
+
+
+## Copyable Codex setup
+
+The Agents dialog includes a Copy Codex config action and setup steps. Codex uses `config.toml`, not YAML; see the [official MCP documentation](https://developers.openai.com/codex/mcp/). `GET /api/agents/setup` generates a TOML stdio entry with the server environment's absolute Python executable, working directory and port-specific connection-file path. Arguments bind the connector to the requesting browser workspace and selected design. The service token is read from the local connection file when the connector starts, rather than embedded in the copyable configuration. Copy a new block and reconnect to target another design. Replace the existing `[mcp_servers.ryancad]` block instead of appending a duplicate table.
+
+This local stdio setup assumes Codex runs on the RyanCAD server computer. A browser on another device still displays server-machine paths; remote Codex execution requires an appropriately installed connector or SSH configuration. Keep RyanCAD running and reconnect/restart the MCP client after changing its configuration. Copy works with the Clipboard API or a selected-text fallback for HTTP LAN browsers.
+## Shared feedback API
+
+`GET/POST /api/reports`, `GET/PUT/DELETE /api/reports/{id}`, and `GET /api/reports/{id}/images/{imageId}` manage server-wide bug reports and feature requests. These routes use normal host/authentication checks but ignore workspace/design selection. Updates/deletes use per-report optimistic versions; no CAD revisions are changed. See [Bug reports](BUG_REPORTS.md) for request fields, screenshots and storage details.

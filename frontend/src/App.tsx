@@ -1,5 +1,21 @@
+import ExperimentalFeatures from "./ExperimentalFeatures";
+import BugReports from "./BugReports";
+import MeasurePanel from "./MeasurePanel";
+import {measurePoint,captureMeasurePoint,type MeasurePoint} from "./measureModel";
+import {loadExperiments,saveExperiments,ACTIVE_APPEARANCE_ID} from "./experiments";
+import MCPSetup from "./MCPSetup";
+import AccountMenu from "./AccountMenu";
+import HistoryResizeHandle from "./HistoryResizeHandle";
+import {explodedLayout} from "./explodedView";
+import SectionControls from "./SectionControls";
+import {updateSectionPlane,sectionRange,type SectionSettings} from "./sectionView";
+import FileActions from "./FileActions";
 import SketchToolbar from "./SketchToolbar";
+import ParametersWindow from "./ParametersWindow";
+import { NamedParameterProvider } from "./NumericInput";
+import WorkspaceDialog, { type WorkspaceInfo } from "./WorkspaceDialog";
 import FeatureHistory from "./FeatureHistory";
+import MobileNavigation, { useMobileLayout, type MobilePane } from "./MobileNavigation";
 import { historyLanes, historyStep } from "./historyModel";
 import type { MovementGuideData, WorldAxis } from "./movementModel";
 import GroupPanel, { type GroupPanelHandle } from "./GroupPanel";
@@ -70,6 +86,7 @@ import {
   Link2,
   LoaderCircle,
   Maximize2,
+  Menu,
   MousePointer2,
   Move3D,
   PanelLeftClose,
@@ -82,6 +99,7 @@ import {
   Ruler,
   Save,
   ScanLine,
+  Scan,
   Search,
   Settings2,
   ShieldCheck,
@@ -126,7 +144,18 @@ import {
   type OperationDraft,
   type PickSlot,
 } from "./operations/operationModel";
-import { api, ApiError, expressionLabel, numeric, waitJob } from "./api";
+import {
+  api,
+  ApiError,
+  expressionLabel,
+  numeric,
+  waitJob,
+  newRequestId,
+  currentDesignId,
+  setCurrentDesignId,
+  designHeaders,
+  designUrl,
+} from "./api";
 import type { Feature, Parameter, Selection, State, Occurrence } from "./types";
 
 // Only independent workflows; shape/motion shortcuts live inside Tool.
@@ -153,15 +182,8 @@ const toolList = [
     category: "Organize",
   },
   {
-    id: "parameter",
-    label: "New parameter",
-    icon: SlidersHorizontal,
-    category: "Properties",
-  },
-  { id: "fit", label: "Fit relationship", icon: Puzzle, category: "Inspect" },
-  {
     id: "measure",
-    label: "Measure between parts",
+    label: "Measure",
     icon: Ruler,
     category: "Inspect",
   },
@@ -243,6 +265,7 @@ export default function App() {
   operationActive.current = !!operation || !!move;
   const launchRef = useRef<(kind: string) => void>(() => {});
   const [state, setState] = useState<State | null>(null);
+  const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
   const stateRef = useRef<State | null>(null);
   const [appearance, setAppearance] = useState<{
     definition: string;
@@ -321,6 +344,12 @@ export default function App() {
   }, [state?.document.revision, groupScope]);
   const [selectedFeature, setSelectedFeature] = useState<string | null>(null);
   const [dialog, setDialog] = useState<string | null>(null);
+  const [measure,setMeasure]=useState<MeasurePoint[]|null>(null);
+  const [measureReplace,setMeasureReplace]=useState<number|null>(null);
+  const [measureNotice,setMeasureNotice]=useState('');
+  const measureActive=useRef(false);measureActive.current=measure!==null;
+  const closeMeasure=()=>{setMeasure(null);setMeasureReplace(null);setMeasureNotice('');setOperationHover(null);};
+  useEffect(()=>{setMeasure(current=>current===null?null:[]);setMeasureReplace(null);setMeasureNotice('');setOperationHover(null);},[state?.document.id,state?.document.revision]);
   const dialogRef = useRef(dialog);
   dialogRef.current = dialog;
   const [editParameter, setEditParameter] = useState<string | null>(null);
@@ -352,8 +381,6 @@ export default function App() {
   const [error, setError] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [localJob, setLocalJob] = useState<any>(null);
-  const [paramFilter, setParamFilter] = useState("roots");
-  const [paramSearch, setParamSearch] = useState("");
   const [toolSearch, setToolSearch] = useState("");
   const [parallelHistory, setParallelHistory] = useState(false);
   const [mergedHistory, setMergedHistory] = useState<Set<string>>(new Set());
@@ -364,23 +391,53 @@ export default function App() {
   const [activityAction, setActivityAction] = useState<any>(null);
   const [olderActions, setOlderActions] = useState<any[]>([]);
   const [grid, setGrid] = useState(true);
+  const [experiments,setExperiments]=useState(loadExperiments);
+  useEffect(()=>saveExperiments(experiments),[experiments]);
   const [section, setSection] = useState(false);
+  const [sectionSettings,setSectionSettings]=useState<SectionSettings>({axis:"Y",offset:0,flipped:false});
+  const sectionPlane=useRef(updateSectionPlane(sectionSettings));
+  updateSectionPlane(sectionSettings,sectionPlane.current);
+  const sectionInitialized=useRef(false);
+  const [sectionPicking,setSectionPicking]=useState(false);
+  const [sectionNotice,setSectionNotice]=useState("");
+  const sectionPickingRef=useRef(false);sectionPickingRef.current=sectionPicking;
   const [explode, setExplode] = useState(0);
+  const [showComponentBounds, setShowComponentBounds] = useState(false);
   const [historyView, setHistoryView] = useState<any>(null);
-  const escapeState = useRef({ contextMenu, appearance, editParameter, error, historyView });
-  escapeState.current = { contextMenu, appearance, editParameter, error, historyView };
+  const escapeState = useRef({
+    contextMenu,
+    appearance,
+    editParameter,
+    error,
+    historyView,
+  });
+  escapeState.current = {
+    contextMenu,
+    appearance,
+    editParameter,
+    error,
+    historyView,
+  };
   const [exports, setExports] = useState<any>(null);
   const [followAgent, setFollowAgent] = useState(true);
   const [connectionError, setConnectionError] = useState(false);
   const [leftVisible, setLeftVisible] = useState(true);
   const [rightVisible, setRightVisible] = useState(true);
+  const mobileLayout = useMobileLayout();
+  const [mobilePane, setMobilePane] = useState<MobilePane>("viewport");
+  const mobileOperation = sketch ? "Sketch" : move ? "Move" : operation ? "Tool" : grouping !== null ? "Group" : measure!==null ? "Measure" : null;
+  useEffect(() => {
+    if (mobileLayout && mobileOperation) setMobilePane("inspector");
+  }, [mobileLayout, mobileOperation]);
   const viewRef = useRef<ViewportHandle>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const runRef = useRef<any>(null);
   const lastSequence = useRef(-1);
   const statePoll = useRef(false);
+  const workspaceReady = useRef(false);
 
   const refresh = useCallback(async (force = false) => {
+    if (!workspaceReady.current) return stateRef.current;
     if (statePoll.current && !force) return stateRef.current;
     statePoll.current = true;
     try {
@@ -404,11 +461,31 @@ export default function App() {
       statePoll.current = false;
     }
   }, []);
+  const refreshWorkspace = useCallback(async () => {
+    const info = (await api("/workspace")) as WorkspaceInfo;
+    setWorkspace(info);
+    return info;
+  }, []);
   useEffect(() => {
-    refresh(true);
+    let cancelled = false;
+    void (async () => {
+      try {
+        const info = await refreshWorkspace();
+        if (cancelled) return;
+        const stored = currentDesignId();
+        setCurrentDesignId(info.designs.some((design) => design.id === stored && !design.deleted) ? stored : info.active_design);
+        workspaceReady.current = true;
+        await refresh(true);
+      } catch (error: any) {
+        if (!cancelled) {
+          setConnectionError(true);
+          setError({ message: error.message || "Could not open this workspace.", code: error.code || "request_failed" });
+        }
+      }
+    })();
     const timer = setInterval(() => refresh(), 650);
-    return () => clearInterval(timer);
-  }, [refresh]);
+    return () => { cancelled = true; clearInterval(timer); };
+  }, [refresh, refreshWorkspace]);
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 4500);
@@ -435,7 +512,7 @@ export default function App() {
             name,
             args,
             expected_revision: current.document.revision,
-            request_id: crypto.randomUUID(),
+            request_id: newRequestId(),
           }),
         });
         const result = await waitJob(submission, setLocalJob);
@@ -532,7 +609,7 @@ export default function App() {
             name,
             args,
             expected_revision: stateRef.current!.document.revision,
-            request_id: crypto.randomUUID(),
+            request_id: newRequestId(),
           }),
         }),
         setLocalJob,
@@ -545,7 +622,30 @@ export default function App() {
     }
   };
 
+  const captureSectionFace=(item:Selection|null)=>{
+    if(!state)return false;
+    const frame=frameFromSelection(item,state);
+    if(!frame||!item){setSectionNotice("Choose a planar face or a sketch plane.");return false;}
+    const offset=explodedLayout(state.occurrences,historyView?.components||state.geometry,explode).entries.get(item.occurrence)?.offset;
+    if(offset)frame.origin=frame.origin.map((n,i)=>n+offset.getComponent(i));
+    setSectionSettings({...sectionSettings,offset:0,reference:{label:`${state.document.components[item.definition]?.name || "Component"} · ${item.face?.name || "Planar face"}`,origin:frame.origin,normal:frame.normal}});
+    setSectionPicking(false);setSectionNotice("");return true;
+  };
+  const captureSectionSketch=(id:string)=>{
+    if(!state||!state.document.features[id])return;
+    const feature=state.document.features[id],frame=startSketch(state,feature).frame;
+    setSectionSettings({...sectionSettings,offset:0,reference:{label:feature.name+" · sketch plane",origin:frame.origin,normal:frame.normal}});
+    setSectionPicking(false);setSectionNotice("");
+  };
   const select = (item: Selection | null, add = false, fromTree = false) => {
+    if(sectionPicking){captureSectionFace(item);return;}
+    if(measure!==null && state){
+      if(!item)return;
+      const sample=measurePoint(item,state);
+      if(!sample){setMeasureNotice('Pick a point, edge or face in the viewport.');return;}
+      setMeasure(current=>captureMeasurePoint(current||[],sample,add,measureReplace));
+      setMeasureReplace(null);setMeasureNotice('');setOperationHover(null);return;
+    }
     if (sketchActive.current) {
       if (sketchPlanePicking && item && state) {
         const frame = frameFromSelection(item, state);
@@ -611,6 +711,8 @@ export default function App() {
     ]);
   };
   const selectSketch = (id: string) => {
+    if(sectionPicking){captureSectionSketch(id);return;}
+    if(measureActive.current){setMeasureNotice('Pick a point on a component in the viewport. Sketch point measurement is not available yet.');return;}
     if (sketchActive.current || moveActive.current || groupingActive.current)
       return;
     if (operationRef.current) {
@@ -623,9 +725,15 @@ export default function App() {
     setSelectedFeature(null);
   };
   const chooseTool = (kind: string) => {
+    setSectionPicking(false);setSectionNotice("");
     setToolSearch("");
     if (sketchActive.current) return;
     if (groupingActive.current) return;
+    if(measureActive.current && kind!=="measure")closeMeasure();
+    if(kind==="measure" && !operationActive.current){
+      setDialog(null);setContextMenu(null);setRightVisible(true);setSectionPicking(false);
+      setExplode(0);setMeasure([]);setMeasureReplace(null);setMeasureNotice('');return;
+    }
     if (kind === "assembly" && !operationActive.current && state) {
       const ids = selectionMembers(selection)
         .map(
@@ -722,6 +830,7 @@ export default function App() {
   const openSketch = (feature?: Feature, draft?: OperationDraft) => {
     const current = stateRef.current;
     if (!current || busy || moveActive.current) return;
+    if(measureActive.current)closeMeasure();
     sketchParent.current = !!operation;
     const parent = draft || operationSetup?.draft || operation;
     let frame: SketchFrame | undefined;
@@ -826,6 +935,8 @@ export default function App() {
       requestAnimationFrame(() => operationRef.current?.useSketch(id, true));
   };
   const chooseWorldOrigin = () => {
+    if(sectionPicking)return;
+    if(measureActive.current){select({worldOrigin:true,occurrence:'',definition:'root'});return;}
     if (sketchActive.current) return;
     if (!state || busy) return;
     if (moveActive.current) moveRef.current?.chooseOrigin();
@@ -853,7 +964,8 @@ export default function App() {
     }
   };
   const chooseWorldAxis = (axis: WorldAxis) => {
-    if (sketchActive.current) return;
+    if(sectionPicking){setSectionSettings({...sectionSettings,axis,offset:0,reference:undefined});setSectionPicking(false);setSectionNotice("");return;}
+    if (sketchActive.current || measureActive.current) return;
     if (!state || busy) return;
     if (moveActive.current) moveRef.current?.chooseAxis(axis);
     else if (operationActive.current) operationRef.current?.chooseAxis(axis);
@@ -970,17 +1082,19 @@ export default function App() {
     }
   };
   const loadRecipe = async (recipe: string) => {
-    if (operationActive.current) {
-      setToast("Cancel the tool operation before replacing the design.");
+    if (operationActive.current || sketch || grouping || busy) {
+      setToast("Finish or cancel the current operation before opening a reference design.");
       return;
     }
+    setLocalJob({ status: "queued", description: "Create reference design" });
     try {
-      await run("recipe.load", { recipe, replace: true });
-      setSelection(null);
-      setSelectedFeature(null);
-      setDialog(null);
-      setTimeout(() => viewRef.current?.fit(), 350);
-    } catch {}
+      const created = await api("/workspace/designs", { method: "POST", body: JSON.stringify({ name: recipe === "mold" ? "Silicone mold tooling" : "Mounting plate and pins" }) });
+      const submission = await api("/commands", { method: "POST", headers: designHeaders(created.design_id), body: JSON.stringify({ name: "recipe.load", args: { recipe }, expected_revision: 0, request_id: newRequestId() }) });
+      await waitJob(submission, setLocalJob, 120, created.design_id);
+      setCurrentDesignId(created.design_id);
+      window.location.reload();
+    } catch (error) { report(error); }
+    finally { setLocalJob(null); }
   };
   const exportSTL = async (options: Record<string, any> = {}) => {
     if (!state) return;
@@ -1027,6 +1141,7 @@ export default function App() {
     }
   };
   const computeStage = async (id: string) => {
+    if(measureActive.current)closeMeasure();
     setLocalJob({ status: "queued", description: "Evaluate history stage" });
     try {
       const result = await waitJob(
@@ -1053,12 +1168,17 @@ export default function App() {
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
+      if((event.target as HTMLElement).closest('.bug-reports-popover'))return;
+      if(measureActive.current && event.key==='Escape'){
+        event.preventDefault();event.stopImmediatePropagation();closeMeasure();return;
+      }
+      if(event.key==="Escape" && sectionPickingRef.current){event.preventDefault();event.stopImmediatePropagation();setSectionPicking(false);setSectionNotice("");return;}
       if (event.key === "Escape" && dialogRef.current === "project") {
         event.preventDefault();
         event.stopImmediatePropagation();
         setDialog(null);
         projectMenuRef.current
-          ?.querySelector<HTMLButtonElement>(".brand")
+          ?.querySelector<HTMLButtonElement>(".project-menu-toggle")
           ?.focus();
         return;
       }
@@ -1139,8 +1259,13 @@ export default function App() {
       }
       if (event.key === "Escape") {
         // Focused editors and popovers handle their own cancellation first.
-        if (escapeState.current.contextMenu || escapeState.current.appearance) return;
-        if (dialogRef.current || escapeState.current.editParameter || escapeState.current.error) {
+        if (escapeState.current.contextMenu || escapeState.current.appearance)
+          return;
+        if (
+          dialogRef.current ||
+          escapeState.current.editParameter ||
+          escapeState.current.error
+        ) {
           setDialog(null);
           setEditParameter(null);
           setError(null);
@@ -1191,7 +1316,7 @@ export default function App() {
           return;
         }
       }
-      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "g") {
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "g") {
         event.preventDefault();
         if (!event.repeat) launchRef.current("assembly");
         return;
@@ -1220,7 +1345,7 @@ export default function App() {
       }
       if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "s") {
         event.preventDefault();
-        window.open("/api/native", "_self");
+        window.open(designUrl("/api/native"), "_self");
         return;
       }
       if (event.key.toLowerCase() === "f") viewRef.current?.fit();
@@ -1228,11 +1353,15 @@ export default function App() {
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey &&
-        event.key.toLowerCase() === "g"
+        event.key.toLowerCase() === "m"
       ) {
         event.preventDefault();
-        if (event.shiftKey) setGrid((v) => !v);
-        else if (!event.repeat) launchRef.current("transform");
+        if (!event.repeat) launchRef.current("transform");
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.shiftKey && event.key.toLowerCase() === "g") {
+        event.preventDefault();
+        if (!event.repeat) setGrid(v => !v);
         return;
       }
       if (event.key === "1") viewRef.current?.view("front");
@@ -1344,35 +1473,7 @@ export default function App() {
         : id.startsWith("agent_")
           ? "External agent"
           : id);
-  const params = state ? Object.values(state.document.parameters) : [];
-  const filteredParams = params
-    .filter((p) => {
-      const info = state!.parameter_graph[p.id];
-      if (
-        paramSearch &&
-        !`${p.name} ${p.category} ${p.description}`
-          .toLowerCase()
-          .includes(paramSearch.toLowerCase())
-      )
-        return false;
-      return paramFilter === "roots"
-        ? info.root
-        : paramFilter === "shared"
-          ? p.owner === "root"
-          : paramFilter === "component"
-            ? p.owner === component?.id
-            : paramFilter === "favorites"
-              ? p.favorite
-              : paramFilter === "unused"
-                ? info.use_count === 0
-                : true;
-    })
-    .sort(
-      (a, b) =>
-        Number(b.owner === "root") - Number(a.owner === "root") ||
-        Number(b.favorite) - Number(a.favorite) ||
-        a.name.localeCompare(b.name),
-    );
+  const params = state ? Object.values(state.document.parameters).filter(p => p.named === true) : [];
   const filteredTools = toolList.filter((t) =>
     `${t.label} ${t.category}`.toLowerCase().includes(toolSearch.toLowerCase()),
   );
@@ -1664,12 +1765,14 @@ export default function App() {
     </button>
   );
   return (
+    <NamedParameterProvider parameters={state ? Object.values(state.document.parameters) : []} values={Object.fromEntries(Object.entries(state?.parameter_graph || {}).map(([id, info]) => [id, info.value]))}>
     <div
+      data-mobile-pane={mobilePane}
       className={
         "app-shell " +
         (!leftVisible ? "left-hidden " : "") +
         (!rightVisible ? "right-hidden " : "") +
-        (operation || move || sketch || grouping ? " operation-active" : "") +
+        (operation || move || sketch || grouping || measure!==null ? " operation-active" : "") +
         (parallelHistory && timelineTab === "features"
           ? " parallel-timelines"
           : "")
@@ -1682,19 +1785,21 @@ export default function App() {
     >
       <header className="app-header">
         <div className="brand-container" ref={projectMenuRef}>
+          <div className="brand">
+            <Logo />
+            <span>
+              Ryan<span>CAD</span>
+            </span>
+          </div>
           <button
-            className="brand"
+            className="project-menu-toggle"
             onClick={() => setDialog(dialog === "project" ? null : "project")}
             title="Project menu"
             aria-label="Project menu"
             aria-expanded={dialog === "project"}
             aria-controls="project-dropdown"
           >
-            <Logo />
-            <span>
-              Ryan<span>CAD</span>
-            </span>
-            <ChevronDown size={12} />
+            <Menu size={20} />
           </button>
           {dialog === "project" && (
             <div
@@ -1704,13 +1809,14 @@ export default function App() {
             >
               <button
                 onClick={() => {
-                  setDialog("new-confirm");
+                  void refreshWorkspace().catch(report);
+                  setDialog("workspace");
                 }}
               >
                 <FilePlus2 />
                 <span>
-                  <strong>New design</strong>
-                  <small>Current work stays in revision history.</small>
+                  <strong>Workspace designs</strong>
+                  <small>Create, switch, rename, and restore designs.</small>
                 </span>
               </button>
               <button
@@ -1725,14 +1831,14 @@ export default function App() {
                   <small>Import a YAML manifest or portable .rycad.zip.</small>
                 </span>
               </button>
-              <a href="/api/native" download onClick={() => setDialog(null)}>
+              <a href={designUrl("/api/native")} download onClick={() => setDialog(null)}>
                 <Save />
                 <span>
                   <strong>Download native project snapshot</strong>
                   <small>Editable model and its durable journal.</small>
                 </span>
               </a>
-              <a href="/api/manifest" download onClick={() => setDialog(null)}>
+              <a href={designUrl("/api/manifest")} download onClick={() => setDialog(null)}>
                 <GitBranch />
                 <span>
                   <strong>Download readable YAML</strong>
@@ -1749,7 +1855,7 @@ export default function App() {
             </div>
           )}
         </div>
-        <button className="command-search" onClick={() => setDialog("palette")}>
+        <button className="command-search" aria-label="Find a tool or action" onClick={() => setDialog("palette")}>
           <Search size={14} />
           <span>Find a tool or action</span>
           <kbd>Ctrl K</kbd>
@@ -1770,6 +1876,7 @@ export default function App() {
                 : "Saved locally"}
           </span>
           <button
+            aria-label="Agents"
             className={
               "button agent-button " + (state?.agents.length ? "connected" : "")
             }
@@ -1782,31 +1889,11 @@ export default function App() {
                 0}
             </small>
           </button>
-          <button
-            className="button export-button"
-            onClick={() => setDialog("export-settings")}
-            disabled={
-              !state ||
-              busy ||
-              !!operation ||
-              !!move ||
-              !!grouping ||
-              !!sketch ||
-              !state.summary.instances
-            }
-            title={
-              operation
-                ? "Apply or cancel the tool preview before exporting"
-                : "Export saved geometry"
-            }
-          >
-            <Download size={15} />
-            Export STL
-            <ChevronDown size={12} />
-          </button>
-          <div className="avatar" title="Local human session">
-            R
-          </div>
+          <FileActions state={state} disabled={!state || busy || !!operation || !!move || !!grouping || !!sketch || !!historyView}
+            onBusy={(value) => setLocalJob(value ? {status: "running", description: "Transfer design file"} : null)}
+            onNative={() => importRef.current?.click()} onSTL={() => setDialog("export-settings")}
+            onImported={async () => { await refresh(true); }} onError={report} />
+          <AccountMenu onAgents={()=>setDialog("agents")} />
         </div>
       </header>
       <nav
@@ -1829,7 +1916,7 @@ export default function App() {
           <>
             <button
               className={
-                "tool-button primary-tool " + (operation ? "active" : "")
+                "tool-button " + (operation ? "active" : "")
               }
               aria-label="Tool operation"
               title="Tool operation · T"
@@ -1843,7 +1930,7 @@ export default function App() {
             <button
               className={`tool-button ${grouping ? "active" : ""}`}
               aria-label="Group components"
-              title="Group components · Ctrl G"
+              title="Group components · G"
               disabled={
                 !state ||
                 busy ||
@@ -1856,6 +1943,7 @@ export default function App() {
             >
               <FolderPlus size={18} />
               <span>Group</span>
+              <kbd>G</kbd>
             </button>
             <button
               className={`tool-button ${sketch ? "active" : ""}`}
@@ -1888,7 +1976,7 @@ export default function App() {
                   key={t.id}
                   className={
                     "tool-button " +
-                    (t.id === "transform" && move ? "active" : "")
+                    ((t.id === "transform" && move)||(t.id==="measure"&&measure!==null) ? "active" : "")
                   }
                   onClick={() => chooseTool(t.id)}
                   aria-label={
@@ -1898,7 +1986,7 @@ export default function App() {
                   }
                   title={
                     t.id === "transform"
-                      ? "Move Component · G"
+                      ? "Move Component · M"
                       : t.id === "duplicate" && component?.kind === "assembly"
                         ? "Copy group · parts retain linked geometry"
                         : t.label
@@ -1911,7 +1999,7 @@ export default function App() {
                       ? "Copy group"
                       : toolbarLabels[t.id] || t.label}
                   </span>
-                  {t.id === "transform" && <kbd>G</kbd>}
+                  {t.id === "transform" && <kbd>M</kbd>}
                 </button>
               ))}
 
@@ -1924,6 +2012,8 @@ export default function App() {
               <SlidersHorizontal size={18} />
               <span>Parameters</span>
             </button>
+            <ExperimentalFeatures value={experiments} onChange={setExperiments} />
+            <BugReports />
             <div className="toolbar-spacer" />
             <button
               className="icon-button"
@@ -1937,20 +2027,25 @@ export default function App() {
         )}
       </nav>
 
-      {leftVisible && (
+      {(leftVisible || mobileLayout) && (
         <aside className="left-panel">
           <div className="panel-title">
-            <span className="workspace-tree-title">
+            <button className="workspace-tree-title workspace-tree-button" title="Manage workspace designs" aria-label="Manage workspace designs" onClick={() => { void refreshWorkspace().catch(report); setDialog("workspace"); }}>
               Local Workspace <ChevronRight size={12} />
-            </span>
+            </button>
             <button
               className="icon-button"
               aria-label="Hide component panel"
-              onClick={() => setLeftVisible(false)}
+              onClick={() => mobileLayout ? setMobilePane("viewport") : setLeftVisible(false)}
             >
               <PanelLeftClose size={14} />
             </button>
           </div>
+          {workspace?.legacy_available && workspace.designs.filter((design) => !design.deleted).length === 1 && state?.document.revision === 0 && (
+            <button className="workspace-legacy-notice" onClick={() => { void refreshWorkspace().catch(report); setDialog("workspace"); }}>
+              An earlier server design is available <ChevronRight size={12} />
+            </button>
+          )}
           <div
             className="structure-root"
             data-tree-drop={
@@ -2638,25 +2733,15 @@ export default function App() {
             <button
               className="design-utility-link"
               onClick={() => {
-                setParamFilter("roots");
                 setDialog("parameters");
               }}
             >
               <ChevronRight size={12} />
               <SlidersHorizontal size={15} />
-              <span>Design inputs</span>
+              <span>Parameters</span>
               <small>
                 {params.filter((p) => state!.parameter_graph[p.id].root).length}
               </small>
-            </button>
-            <button
-              className="design-utility-link"
-              onClick={() => setDialog("fits")}
-            >
-              <ChevronRight size={12} />
-              <Ruler size={15} />
-              <span>Tolerances & fits</span>
-              <small>{state?.fits.length || 0}</small>
             </button>
             <button
               className="design-utility-link"
@@ -2666,15 +2751,6 @@ export default function App() {
               <History size={15} />
               <span>Checkpoints</span>
               <small>{state?.checkpoints.length || 0}</small>
-            </button>
-          </div>
-          <div className="left-panel-bottom">
-            <button
-              className="text-button reference-designs-link"
-              onClick={() => setDialog("references")}
-            >
-              <FolderOpen size={14} />
-              Reference designs
             </button>
           </div>
         </aside>
@@ -2743,7 +2819,7 @@ export default function App() {
           onWorldAxis={chooseWorldAxis}
           editingGroup={groupScope}
           resolveHover={(item) =>
-            operation &&
+            sectionPicking || measure!==null ? item : operation &&
             operationPathPickProblem(
               operationSetup?.draft || operation,
               operationSetup?.pick || null,
@@ -2755,6 +2831,7 @@ export default function App() {
                 : item
           }
           onDoubleSelect={(item) => {
+            if(measureActive.current)return;
             if (!item && groupScope) endGroupEditing();
             else editGroup(item);
           }}
@@ -2803,6 +2880,7 @@ export default function App() {
           }))}
           units={state?.document.display_units}
           onContextMenu={(item, x, y) => {
+            if(measureActive.current)return;
             const resolved =
               state && !operation && !move && !sketch
                 ? groupSelection(item, state.occurrences, groupScope)
@@ -2812,7 +2890,9 @@ export default function App() {
           }}
           revision={state?.document.revision || 0}
           selected={
-            grouping && state
+            measure!==null
+              ? measure.length ? {...measure[0].selection,items:measure.map(p=>p.selection)} : null
+              : grouping && state
               ? (() => {
                   const items = grouping
                     .map((id) => state.occurrences.find((o) => o.id === id))
@@ -2830,9 +2910,15 @@ export default function App() {
                   : selection
           }
           onSelect={select}
+          measurePoints={measure}
           explode={sketch ? 0 : explode}
+          showBounds={showComponentBounds}
           grid={grid}
-          section={sketch ? false : section}
+          section={sketch || sectionPicking ? false : section}
+          sectionPlane={sectionPlane.current}
+          activeAppearance={experiments[ACTIVE_APPEARANCE_ID]}
+          sectionReference={sectionSettings.reference}
+          sectionOffset={sectionSettings.offset}
           historyKey={historyView?.history_key}
           operationPreview={
             sketch ? null : move ? movePreview : operationPreview
@@ -2852,7 +2938,7 @@ export default function App() {
               : undefined
           }
           operationDraft={sketch ? undefined : operationSetup?.draft}
-          referenceHover={operation || move ? operationHover : null}
+          referenceHover={operation || move || measure!==null ? operationHover : null}
           pickSlot={operationSetup?.pick}
           onSketchPoint={(point) => operationRef.current?.sketchPoint(point)}
         />
@@ -2900,7 +2986,6 @@ export default function App() {
           <div className="viewport-view-navigation">
             <ViewOrientation
               ref={orientationRef}
-              units={unit}
               onAxis={chooseWorldAxis}
               onOrigin={chooseWorldOrigin}
               selectedAxis={
@@ -3044,14 +3129,24 @@ export default function App() {
             Reconnecting to your local CAD engine… Saved edits remain on disk.
           </div>
         )}
+        {section && !sketch && <SectionControls settings={sectionSettings} onChange={setSectionSettings} onClose={()=>{setSection(false);setSectionPicking(false);setSectionNotice("");}}
+          picking={sectionPicking} notice={sectionNotice} pickDisabled={!!operation||!!move||!!sketch||grouping!==null||measure!==null}
+          onCancelPick={()=>{setSectionPicking(false);setSectionNotice("");}}
+          onPick={()=>{setSectionNotice("");if(selectedSketch){captureSectionSketch(selectedSketch);return;}if(selection?.face&&captureSectionFace(selection))return;setSectionPicking(true);}}
+          occurrences={viewportOccurrences} geometry={historyView?.components || state?.geometry || {}} explode={explode} />}
         <div className="viewport-bottom">
           <div className="navigation-hint">
             <MousePointer2 size={12} />
-            <span>
+            <span className="desktop-navigation-hint">
               {sketch && !sketchPlanePicking
                 ? "Shift + right-drag to orbit"
                 : "Left-drag to orbit"}{" "}
               <b>·</b> Right-drag to pan <b>·</b> Scroll to zoom
+            </span>
+            <span className="touch-navigation-hint">
+              {sketch && !sketchPlanePicking
+                ? "Tap to draw · Two fingers to pan / zoom"
+                : "Tap to select · Drag to orbit · Two fingers to pan / zoom"}
             </span>
           </div>
           <div className="viewport-options">
@@ -3079,8 +3174,10 @@ export default function App() {
 
             <button
               className={section ? "active" : ""}
-              title="Toggle display section"
-              onClick={() => setSection((v) => !v)}
+              title="Section view"
+              aria-label="Section view"
+              aria-pressed={section}
+              onClick={() => {if(!section && !sectionInitialized.current){setSectionSettings({...sectionSettings,offset:sectionRange(sectionSettings,viewportOccurrences,historyView?.components || state?.geometry || {},explode).center});sectionInitialized.current=true;}if(section){setSectionPicking(false);setSectionNotice("");}setSection(!section);}}
             >
               <ScanLine size={16} />
             </button>
@@ -3097,16 +3194,27 @@ export default function App() {
             >
               <Expand size={16} />
             </button>
+            <button
+              className={showComponentBounds ? "active" : ""}
+              aria-label="Show selected component bounds and centers"
+              aria-pressed={showComponentBounds}
+              title="Show selected component bounding boxes and centers"
+              onClick={() => setShowComponentBounds((v) => !v)}
+            >
+              <Scan size={16} />
+            </button>
             <span />
-            <label title="Exploded display only; does not alter placements">
+            <label title="Exploded view: scale distances from the assembly center; placements stay unchanged">
               <Boxes size={15} />
               <input
                 aria-label="Exploded display"
                 type="range"
                 min="0"
-                max="45"
+                max="200"
+                step="1"
                 value={explode}
-                disabled={!!operation || !!move}
+                aria-valuetext={`${explode}% separation`}
+                disabled={!!operation || !!move || measure!==null}
                 onChange={(e) => setExplode(Number(e.target.value))}
               />
             </label>
@@ -3205,14 +3313,18 @@ export default function App() {
           }}
         />
       )}
-      {rightVisible && !operation && !move && !sketch && !grouping && (
+      {measure!==null&&state&&<MeasurePanel points={measure} replace={measureReplace} notice={measureNotice} units={state.document.display_units}
+        onReplace={setMeasureReplace} onRemove={index=>{setMeasure(points=>points?.filter((_,i)=>i!==index)||[]);setMeasureReplace(null);setOperationHover(null);}}
+        onClear={()=>{setMeasure([]);setMeasureReplace(null);setMeasureNotice('');setOperationHover(null);}}
+        onHover={setOperationHover} onClose={closeMeasure}/>}
+      {(rightVisible || mobileLayout) && !operation && !move && !sketch && !grouping && measure===null && (
         <aside className="inspector-panel">
           <div className="panel-title">
             <span>INSPECTOR</span>
             <button
               className="icon-button"
               aria-label="Hide inspector"
-              onClick={() => setRightVisible(false)}
+              onClick={() => mobileLayout ? setMobilePane("viewport") : setRightVisible(false)}
             >
               <PanelRightClose size={14} />
             </button>
@@ -3448,12 +3560,11 @@ export default function App() {
                 <section className="inspector-section">
                   <div className="section-heading">
                     <h3>
-                      {feature ? "Feature dimensions" : "Design dimensions"}
+                      {feature ? "Feature dimensions" : "Component dimensions"}
                     </h3>
                     <button
                       title="Open parameter workspace"
                       onClick={() => {
-                        setParamFilter("component");
                         setDialog("parameters");
                       }}
                     >
@@ -3462,7 +3573,7 @@ export default function App() {
                   </div>
                   {(feature
                     ? Object.entries(feature.parameters)
-                    : params
+                    : Object.values(state!.document.parameters)
                         .filter((p) => p.owner === component.id)
                         .slice(0, 7)
                         .map((p) => [p.name, p.id])
@@ -3504,11 +3615,10 @@ export default function App() {
                   <button
                     className="text-button"
                     onClick={() => {
-                      setParamFilter("component");
                       setDialog("parameters");
                     }}
                   >
-                    All component parameters
+                    Named parameters
                     <ArrowRight size={12} />
                   </button>
                 </section>
@@ -3645,51 +3755,6 @@ export default function App() {
                     </strong>
                   </div>
                 </section>
-                <section className="inspector-section">
-                  <div className="section-heading">
-                    <h3>Fit relationships</h3>
-                    <button onClick={() => chooseTool("fit")}>
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                  {state?.fits.length ? (
-                    state.fits.map((f) => (
-                      <div className="fit-card" key={f.id}>
-                        <div>
-                          <span
-                            className={
-                              "status-orb small " +
-                              (f.status === "interference" ? "warning" : "")
-                            }
-                          />
-                          <strong>{f.name}</strong>
-                          <Ruler size={13} />
-                        </div>
-                        <p>
-                          {numeric(f.nominal, 3)}{" "}
-                          <small>mm {f.convention} clearance</small>
-                        </p>
-                        <span>
-                          {f.limits
-                            ? "Limits " +
-                              f.limits
-                                .map((v: number) => numeric(v, 3))
-                                .join(" to ") +
-                              " mm"
-                            : "Manufacturing tolerances unspecified"}
-                        </span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="empty-copy">No fits defined.</p>
-                  )}
-                  {!!state?.fits.length && (
-                    <div className="subtle-note">
-                      Fit values describe nominal geometry and specified
-                      tolerances.
-                    </div>
-                  )}
-                </section>
                 {state?.document.notes.trim() && (
                   <section className="inspector-section">
                     <div className="section-heading">
@@ -3718,7 +3783,9 @@ export default function App() {
         </aside>
       )}
 
+      {mobileLayout && <MobileNavigation pane={mobilePane} onChange={setMobilePane} operation={mobileOperation} />}
       <section className="timeline-panel">
+        <HistoryResizeHandle />
         <header>
           <div className="timeline-tabs">
             <button
@@ -3848,6 +3915,7 @@ export default function App() {
         {timelineTab === "features" ? (
           <FeatureHistory
             lanes={lanes}
+            activeComponent={component?.id || null}
             count={featureOrder.length}
             split={parallelHistory}
             onMerge={(id) =>
@@ -4028,7 +4096,7 @@ export default function App() {
         onChange={async (e) => {
           const file = e.target.files?.[0];
           if (!file) return;
-          if (operationActive.current) {
+          if (operationActive.current || sketch || grouping || busy) {
             setToast(
               "Cancel the tool operation before opening a different design.",
             );
@@ -4037,18 +4105,15 @@ export default function App() {
           }
           setLocalJob({ status: "queued", description: "Open native design" });
           try {
-            const response = await fetch("/api/import", {
+            const response = await fetch("/api/workspace/import", {
               method: "POST",
               body: await file.arrayBuffer(),
               headers: { "Content-Type": "application/octet-stream" },
             });
             const data = await response.json();
             if (!response.ok) throw new ApiError(data.error);
-            await waitJob(data, setLocalJob);
-            await refresh(true);
-            setDialog(null);
-            setSelection(null);
-            setTimeout(() => viewRef.current?.fit(), 350);
+            setCurrentDesignId(data.design_id);
+            window.location.reload();
           } catch (error) {
             report(error);
           } finally {
@@ -4058,14 +4123,6 @@ export default function App() {
         }}
       />
 
-      {state && dialog === "measure" && (
-        <MeasureDialog
-          state={state}
-          initial={selection?.occurrence}
-          onClose={() => setDialog(null)}
-          onError={report}
-        />
-      )}
       {state &&
         dialog === "push-pull" &&
         selection?.face?.controlling_parameter && (
@@ -4080,7 +4137,7 @@ export default function App() {
       {state &&
         dialog &&
         toolList.some((t) => t.id === dialog) &&
-        !["sketch", "measure"].includes(dialog) && (
+        !["sketch"].includes(dialog) && (
           <ToolDialog
             kind={dialog}
             state={state}
@@ -4112,156 +4169,7 @@ export default function App() {
           />
         </div>
       )}
-      {state && dialog === "parameters" && (
-        <Modal
-          title="Parameters"
-          eyebrow="PARAMETER WORKSPACE"
-          wide
-          onClose={() => setDialog(null)}
-        >
-          <div className="parameter-toolbar">
-            <div className="search-field">
-              <Search size={15} />
-              <input
-                placeholder="Search dimensions, purpose or category…"
-                value={paramSearch}
-                onChange={(e) => setParamSearch(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <button
-              className="button secondary small"
-              onClick={() => chooseTool("parameter")}
-            >
-              <Plus size={14} />
-              New parameter
-            </button>
-          </div>
-          <div className="filter-tabs">
-            {[
-              ["roots", "Root inputs"],
-              ["shared", "Shared"],
-              ["component", "This component"],
-              ["favorites", "Favorites"],
-              ["all", "All"],
-              ["unused", "Unused"],
-            ].map(([id, label]) => (
-              <button
-                className={paramFilter === id ? "active" : ""}
-                onClick={() => setParamFilter(id)}
-                key={id}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          <div className="parameter-table-wrap">
-            <table className="parameter-table">
-              <thead>
-                <tr>
-                  <th />
-                  <th>Dimension / purpose</th>
-                  <th>Value</th>
-                  <th>Role</th>
-                  <th>Uses</th>
-                  <th>Ownership</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredParams.map((p) => {
-                  const info = state.parameter_graph[p.id];
-                  return (
-                    <tr key={p.id}>
-                      <td>
-                        <button
-                          className={
-                            "star-button " + (p.favorite ? "active" : "")
-                          }
-                          aria-label={"Favorite " + p.name}
-                          onClick={() =>
-                            run("parameter.set", {
-                              id: p.id,
-                              favorite: !p.favorite,
-                            }).catch(() => {})
-                          }
-                        >
-                          <Star size={13} />
-                        </button>
-                      </td>
-                      <td>
-                        <button onClick={() => setEditParameter(p.id)}>
-                          <strong>{p.name}</strong>
-                          <small>{p.category}</small>
-                        </button>
-                      </td>
-                      <td>
-                        <button
-                          className="table-value"
-                          onClick={() => setEditParameter(p.id)}
-                        >
-                          {numeric(info.value, 4)}
-                          <small>
-                            {p.kind === "length"
-                              ? "mm"
-                              : p.kind === "angle"
-                                ? "°"
-                                : ""}
-                          </small>
-                          {p.tolerance && (
-                            <em>
-                              −{p.tolerance.minus} / +{p.tolerance.plus}
-                            </em>
-                          )}
-                        </button>
-                      </td>
-                      <td>
-                        <span
-                          className={
-                            "parameter-role " + (info.root ? "root" : "derived")
-                          }
-                        >
-                          {info.root ? (
-                            "Root input"
-                          ) : (
-                            <>
-                              <Link2 size={10} />
-                              Derived
-                            </>
-                          )}
-                        </span>
-                      </td>
-                      <td>{info.use_count}</td>
-                      <td>
-                        {state.document.components[p.owner]?.name || "Shared"}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-            {!filteredParams.length && (
-              <p className="empty-copy">No dimensions match this view.</p>
-            )}
-          </div>
-          <div className="inline-note parameter-note">
-            <GitBranch size={15} />
-            Root inputs have no upstream parameter dependencies. Open any
-            dimension to trace its consumers and root inputs.
-          </div>
-          <footer>
-            <span>
-              {filteredParams.length} of {params.length} parameters · mm and
-              degrees internally
-            </span>
-            <button
-              className="button secondary"
-              onClick={() => setDialog(null)}
-            >
-              Done
-            </button>
-          </footer>
-        </Modal>
-      )}
+      {state && dialog === "parameters" && <ParametersWindow state={state} run={run} onClose={() => setDialog(null)} />}
       {dialog === "activity-detail" && activityAction && (
         <Modal
           title={activityAction.description}
@@ -4372,29 +4280,9 @@ export default function App() {
           </div>
         </Modal>
       )}
-      {dialog === "new-confirm" && (
-        <Modal title="Start a new design?" onClose={() => setDialog(null)}>
-          <p className="dialog-copy">
-            The current design is autosaved. You can download a portable
-            snapshot or undo this action to restore it.
-          </p>
-          <footer>
-            <button
-              className="button secondary"
-              onClick={() => setDialog(null)}
-            >
-              Keep current design
-            </button>
-            <button
-              className="button primary"
-              onClick={() => loadRecipe("blank")}
-            >
-              Create new design
-              <Plus size={15} />
-            </button>
-          </footer>
-        </Modal>
-      )}
+      {dialog === "workspace" && <WorkspaceDialog workspace={workspace} activeDesign={currentDesignId()}
+        canSwitch={!busy && !operationActive.current && !sketch && !grouping}
+        onClose={() => setDialog(null)} reload={async () => { await refreshWorkspace(); await refresh(true); }} onError={report} />}
       {dialog === "references" && (
         <Modal
           title="Reference designs"
@@ -4435,8 +4323,7 @@ export default function App() {
             </button>
           </div>
           <div className="inline-note">
-            Opening a reference replaces the current working design and is
-            undoable. Download a native snapshot to keep a separate copy.
+            Each reference opens as a separate design in this workspace.
           </div>
         </Modal>
       )}
@@ -4450,17 +4337,7 @@ export default function App() {
             An agent uses the same modeling operations as you. Each accepted
             action is visible, attributed and autosaved in this live document.
           </p>
-          <div className="connection-instructions">
-            <span>Connect from your MCP client</span>
-            <code>
-              python -m ryancad.mcp_server --connection runtime/connection.json
-              --name "CAD agent"
-            </code>
-            <small>
-              Run in the project environment. The local connection file supplies
-              the service address and capability token.
-            </small>
-          </div>
+          <MCPSetup />
           <label className="check-field">
             <input
               type="checkbox"
@@ -4591,59 +4468,6 @@ export default function App() {
           </div>
         </Modal>
       )}
-      {state && dialog === "fits" && (
-        <Modal
-          title="Tolerances and fit intent"
-          eyebrow="FIT RELATIONSHIPS"
-          onClose={() => setDialog(null)}
-        >
-          {state.fits.map((f) => (
-            <div className="fit-detail" key={f.id}>
-              <h3>{f.name}</h3>
-              <div className="property-row">
-                <span>Nominal {f.convention} clearance</span>
-                <strong>{numeric(f.nominal, 4)} mm</strong>
-              </div>
-              <div className="property-row">
-                <span>Tolerance envelope</span>
-                <strong>
-                  {f.limits
-                    ? f.limits.map((v: number) => numeric(v, 4)).join(" to ") +
-                      " mm"
-                    : "Unspecified"}
-                </strong>
-              </div>
-              <div className="field-grid">
-                <button
-                  className="button secondary small"
-                  onClick={() => setEditParameter(f.pin_parameter)}
-                >
-                  Edit pin dimension
-                </button>
-                <button
-                  className="button secondary small"
-                  onClick={() => setEditParameter(f.socket_parameter)}
-                >
-                  Edit socket dimension
-                </button>
-              </div>
-              <p>{f.assumptions}</p>
-            </div>
-          ))}
-          <footer>
-            <button
-              className="button secondary"
-              onClick={() => chooseTool("fit")}
-            >
-              <Plus size={14} />
-              Define a fit
-            </button>
-            <button className="button primary" onClick={() => setDialog(null)}>
-              Done
-            </button>
-          </footer>
-        </Modal>
-      )}
       {state && dialog === "export-settings" && (
         <ExportDialog
           state={state}
@@ -4671,12 +4495,12 @@ export default function App() {
           <div className="export-files">
             {exports.receipt.files.map((f: any) => (
               <a
-                href={
+                href={designUrl(
                   "/api/exports/" +
                   exports.export_id +
                   "/" +
                   encodeURIComponent(f.filename)
-                }
+                )}
                 download
                 key={f.filename}
               >
@@ -4698,14 +4522,14 @@ export default function App() {
           <footer>
             <a
               className="button secondary"
-              href={"/api/exports/" + exports.export_id + "/receipt.json"}
+              href={designUrl("/api/exports/" + exports.export_id + "/receipt.json")}
               download
             >
               Download receipt
             </a>
             <a
               className="button primary"
-              href={"/api/exports/" + exports.export_id}
+              href={designUrl("/api/exports/" + exports.export_id)}
               download
             >
               <Download size={15} />
@@ -4961,6 +4785,7 @@ export default function App() {
         </Modal>
       )}
     </div>
+    </NamedParameterProvider>
   );
 }
 
@@ -5114,113 +4939,6 @@ function ExportDialog({
         >
           <Download size={14} />
           {busy ? "Validating…" : "Validate and export"}
-        </button>
-      </footer>
-    </Modal>
-  );
-}
-
-function MeasureDialog({
-  state,
-  initial,
-  onClose,
-  onError,
-}: {
-  state: State;
-  initial?: string;
-  onClose: () => void;
-  onError: (error: any) => void;
-}) {
-  const parts = state.occurrences.filter(
-    (o) =>
-      o.kind !== "assembly" &&
-      state.document.components[o.definition]?.purpose !== "tool" &&
-      !o.suppressed,
-  );
-  const [first, setFirst] = useState(initial || parts[0]?.id || "");
-  const [second, setSecond] = useState(
-    parts.find((o) => o.id !== (initial || parts[0]?.id))?.id || "",
-  );
-  const [result, setResult] = useState<any>(null);
-  const [busy, setBusy] = useState(false);
-  return (
-    <Modal
-      title="Measure between parts"
-      eyebrow="EXACT ASSEMBLY PLACEMENTS"
-      onClose={onClose}
-    >
-      <div className="field-grid">
-        {[
-          ["First component", first, setFirst],
-          ["Second component", second, setSecond],
-        ].map(([label, value, setter]: any) => (
-          <label className="field" key={label}>
-            <span>{label}</span>
-            <select
-              value={value}
-              onChange={(e) => {
-                setter(e.target.value);
-                setResult(null);
-              }}
-            >
-              {parts.map((o, index) => (
-                <option value={o.id} key={o.id}>
-                  {state.document.components[o.definition].name} · instance{" "}
-                  {index + 1}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </div>
-      {result && (
-        <div className="measurement-result">
-          <div className="property-row">
-            <span>Minimum separation</span>
-            <strong>{numeric(result.distance, 6)} mm</strong>
-          </div>
-          <div className="property-row">
-            <span>Overlapping solid volume</span>
-            <strong>{numeric(result.intersection_volume, 6)} mm³</strong>
-          </div>
-          <p>
-            {result.intersection_volume > 1e-6
-              ? "The placed components intersect."
-              : "No volumetric interference in this static placement."}
-          </p>
-          <small>
-            Revision {result.revision}. Minimum distance includes all surfaces;
-            contact can be zero even when a pin/socket has radial clearance.
-          </small>
-        </div>
-      )}
-      <footer>
-        <button className="button secondary" onClick={onClose}>
-          Done
-        </button>
-        <button
-          className="button primary"
-          disabled={!first || !second || first === second || busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              setResult(
-                await waitJob(
-                  await api("/measure", {
-                    method: "POST",
-                    body: JSON.stringify({ first, second }),
-                  }),
-                ),
-              );
-            } catch (error) {
-              onError(error);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <Ruler size={14} />
-          {busy ? "Measuring…" : "Calculate"}
         </button>
       </footer>
     </Modal>

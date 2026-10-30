@@ -4,7 +4,6 @@ import { shortcutAttributes, shortcutLabel } from "./toolbarShortcuts";
 import { FlaskConical, X, RotateCcw, ChevronRight } from "lucide-react";
 import {
   ACTIVE_APPEARANCE_ID,
-  SIDEBAR_TOOLBAR_LAYOUT_ID,
   defaultAppearance,
   type Experiments,
 } from "./experiments";
@@ -112,7 +111,7 @@ export default function ExperimentalFeatures({
       document.removeEventListener("keydown", key);
       window.removeEventListener("resize", place);
     };
-  }, [open, value[SIDEBAR_TOOLBAR_LAYOUT_ID].enabled]);
+  }, [open]);
   return (
     <>
       <button
@@ -127,7 +126,7 @@ export default function ExperimentalFeatures({
       >
         <FlaskConical size={18} />
         <span>Experimental features</span>
-        {(setting.enabled || value[SIDEBAR_TOOLBAR_LAYOUT_ID].enabled) && (
+        {setting.enabled && (
           <i className="experiment-enabled-dot" />
         )}
       </button>
@@ -252,60 +251,6 @@ export default function ExperimentalFeatures({
               >
                 <RotateCcw size={13} />
                 Reset this experiment
-              </button>
-            </ExperimentSection>
-            <ExperimentSection
-              id={SIDEBAR_TOOLBAR_LAYOUT_ID}
-              title="Toolbar between sidebars"
-              enabled={value[SIDEBAR_TOOLBAR_LAYOUT_ID].enabled}
-              onToggle={() =>
-                onChange({
-                  ...value,
-                  [SIDEBAR_TOOLBAR_LAYOUT_ID]: {
-                    ...value[SIDEBAR_TOOLBAR_LAYOUT_ID],
-                    enabled: !value[SIDEBAR_TOOLBAR_LAYOUT_ID].enabled,
-                  },
-                })
-              }
-            >
-              <code>{SIDEBAR_TOOLBAR_LAYOUT_ID}</code>
-              <label>
-                Layout
-                <select
-                  aria-label="Sidebar toolbar layout mode"
-                  value={value[SIDEBAR_TOOLBAR_LAYOUT_ID].mode || "between"}
-                  onChange={(e) =>
-                    onChange({
-                      ...value,
-                      [SIDEBAR_TOOLBAR_LAYOUT_ID]: {
-                        ...value[SIDEBAR_TOOLBAR_LAYOUT_ID],
-                        mode: e.target.value as "between" | "inset-buttons",
-                      },
-                    })
-                  }
-                >
-                  <option value="between">Sidebars beside toolbar</option>
-                  <option value="inset-buttons">
-                    Full-width bar, inset buttons
-                  </option>
-                </select>
-              </label>
-              <p>
-                {value[SIDEBAR_TOOLBAR_LAYOUT_ID].mode === "inset-buttons"
-                  ? "Keep the toolbar full width, with its buttons inset between the sidebar boundaries. Sidebars begin below the toolbar."
-                  : "Extend both sidebars up to the header, with the tool toolbar between them above the viewport."}{" "}
-                Applies to desktop widths; mobile keeps its panel layout.
-              </p>
-              <button
-                className="text-button"
-                onClick={() =>
-                  onChange({
-                    ...value,
-                    [SIDEBAR_TOOLBAR_LAYOUT_ID]: { enabled: false },
-                  })
-                }
-              >
-                <RotateCcw size={13} /> Reset this experiment
               </button>
             </ExperimentSection>
             <footer>

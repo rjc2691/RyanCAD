@@ -77,7 +77,10 @@ def create_operation(document, actor, args):
         raise CadError("unsupported_path", "A multi-edge path requires Sweep. Use one straight edge for an axis or direction.")
     if spec.profile!="sketch": spec.sketch=None;spec.sketch_occurrence=None
     if spec.profile in {"fillet","chamfer"}:
-        spec.motion="sweep";spec.plane="perpendicular";spec.direction="edge";spec.extent="distance";spec.result="add"
+        if "motion" in args and spec.motion!="sweep":raise CadError("unsupported_path","This generated profile follows the selected edges. Choose Sweep, or another profile for a different path type.")
+        spec.motion="sweep";spec.plane="perpendicular";spec.direction="edge";spec.extent="distance"
+        spec.result=args.get("result", "cut")
+        if spec.result=="new":raise CadError("unsupported_effect","This generated profile uses the active component's edges. Choose add, remove or intersect, or use another profile for a new component.")
         if spec.path_extent=="full":spec.reverse=False
     if spec.motion!="linear" and spec.extent!="distance":raise CadError("unsupported_extent","Symmetric and through-all extents apply to straight travel. Sweeps support distance or percentage in one direction.")
     if spec.path_extent!="full":
@@ -159,6 +162,7 @@ def create_operation(document, actor, args):
                 feature.parameters[field]=parameter(document,actor,owner,f"{feature.name} · point {i+1} {axis}",point[j],category="Tool profile")
     document.features[feature.id]=feature
     feature.options["recipe_version"]=4 if spec.path_extent=="target" or (spec.path_extent=="full" and spec.path_reference and spec.motion in {"linear","helix"}) else 3 if spec.path_extent=="percent" or (spec.motion=="sweep" and spec.path_extent=="distance") else 2 if spec.path_references or spec.profile_references else 1
+    if spec.profile in {"fillet","chamfer"}:feature.options["corner_effect_version"]=1
     document.feature_order.append(feature.id);component.feature_ids.append(feature.id);component.modified_by=actor.id
     if spec.motion in {"linear","sweep","revolve","helix"} and spec.profile not in {"fillet","chamfer"}: component.kind="solid"
     return {**created,"feature_id":feature.id},[owner,feature.id],f"{feature.name} · {component.name}"
@@ -252,7 +256,7 @@ def prepare(feature, document, values, shape, body_key, resolve, profiles, profi
 def execute(feature, q, shape, context):
     from build123d import Axis, Edge, Face, Location, Plane, Solid, Vector, Wire
     from OCP.gp import gp_Trsf
-    from .geometry import edge_selector
+    from .geometry import edge_selector, intersection
     o=feature.options
     if o.get("recipe_version",1) not in {1,2,3,4}: raise CadError("unsupported_operation_version","This operation recipe needs a newer engine.")
     def transform(source,matrix):
@@ -321,8 +325,30 @@ def execute(feature, q, shape, context):
             travel_info(start,start+direction*distance,distance,target)
         try:
             from .operation_display import finish_section
-            context.setdefault("display",{})["finish_section"]=finish_section(shape,result,selected[0],world,station)
+            section=finish_section(shape,result,selected[0],world,station)
+            context.setdefault("display",{})["finish_section"]=section
+            context["display"]["tool_profile"]={**section,"id":f"generated:{feature.id}","name":"Round corner profile" if profile_kind=="fillet" else "Bevel corner profile","temporary":True}
         except Exception as exc:context.setdefault("display",{})["finish_section"]={"unavailable":str(exc)[:200]}
+        # Old files used result=add as an ignored placeholder. Preserve their
+        # geometry; new/edited recipes apply their explicit Boolean effect.
+        if o.get("corner_effect_version"):
+            removed=shape.cut(result);added=result.cut(shape)
+            has_removed=bool(removed.solids()) and removed.volume>1e-9
+            has_added=bool(added.solids()) and added.volume>1e-9
+            mode=o["result"]
+            if has_removed and has_added:raise CadError("mixed_effects","These paths require both adding and removing material. Select paths with the same material effect.")
+            if mode=="auto":
+                mode="cut" if has_removed else "add"
+                context["decision"]={"mode":mode,"overlap_fraction":1. if has_removed else 0.}
+            if mode=="cut":
+                if not has_removed:raise CadError("no_geometry_change","This corner profile adds material. Choose Add material for this path.")
+                result=shape.cut(removed)
+            elif mode=="add":
+                if not has_added:raise CadError("no_geometry_change","This corner profile removes material. Choose Remove material for this path.")
+                result=shape.fuse(added)
+            elif mode=="intersect":
+                if not has_removed:raise CadError("no_geometry_change","This profile has no material inside the active component to intersect.")
+                result=intersection(shape,removed)
         return result
     axis_world={"X":(1,0,0),"Y":(0,1,0),"Z":(0,0,1)}
     normal=vec((0,0,1),context["inverse"],False);u=vec((1,0,0),context["inverse"],False)

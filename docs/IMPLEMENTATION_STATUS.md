@@ -503,3 +503,52 @@ The shared `feature.update` command edits the original feature in place and reta
 Validation: 11 historical-edit backend tests and 61 affected API/geometry/sketch/design-intent regression tests passed; all 168 frontend tests passed; TypeScript, production build and distributable wheel passed. The isolated desktop/phone browser check verified changing an earlier plate while rebuilding its later hole, original feature IDs/order/count, preview/cancel/Enter/Escape, invalid geometry, concurrent edits, stage stepping and sketch reopening, without JavaScript errors. No test operations were made in user designs. Evidence: `artifacts/edit-history-feature.png`.
 
 Historical reference-card follow-up: saved profiles, paths, origins and travel targets now use the main form's colored cards and icons, with locks in place of pick controls. Grouped references retain order, implicit paths/planes stay explicit, and copied external geometry does not borrow current topology names. Both forms now use Effect → Profile → Path → Origin. Offset inputs are removed from the basic UI while preserving saved placement values. Four additional model tests and the expanded isolated browser workflow check reference labels, section order, read-only selectors, removed inputs and unchanged nonzero offsets after a real edit.
+
+## Generated corner profiles in the universal operation — October 29
+
+Removed the special Refine edge effect and native-corner profile/path labels from new and historical operation panels. Round/bevel presets default to cut and normal selected-edge Sweep controls. A shared generated-profile card draws the exact native-derived perpendicular section and area used by the viewport, with a stable feature-derived ID and Temporary indicator. Updating the size updates both views. The state API exposes derived `operation_displays` so history can display the existing profile before a new edit is requested.
+
+New corner recipes honor their explicit Boolean result instead of overwriting it: cut removes the generated tool volume, add supports concave profiles, intersect returns its overlap, and auto resolves the appropriate mode. Incompatible effects fail clearly; mixed adding/removing edge sets must use separate operations. Saved pre-change recipes preserve their original shape without a data migration, and an explicit history edit upgrades that recipe to the normal effect semantics. The geometry kernel remains responsible for correct tangent corner construction; its implementation choice no longer appears as another UI operation category.
+
+Validation: 90 affected backend checks passed (including convex/concave profiles, effects, grouped/partial paths, old recipes, history edits and API previews), plus all 174 frontend tests and TypeScript/production build. The isolated browser test picked a real edge, verified Remove/Sweep defaults, checked profile-card and viewport outlines, rejected incompatible Add, previewed Intersect, changed the radius and committed/reopened/edited the same feature. Evidence: `artifacts/unified-corner-profile.png`.
+
+
+## Parts and layouts update
+
+See [Parts and layouts](PARTS_AND_LAYOUTS.md) for the implemented definition/placement distinction, editor scopes, linked parameter variations, migration, and remaining decisions. This supersedes the earlier requirement for globally unique component names: part names are unique within a design; component names may repeat.
+
+
+## Live sketch interaction pass
+
+Removed plane dropdown and sidebar relationship-creation fields. Added hover targeting, selected-object Delete/Backspace, immediate solve-before-accept for relationships, endpoint Connect/Disconnect and signed Angle tools, real snapped line connections, and editable viewport measurement labels. Length/angle solves share one draft preview adapter, preserving named-value expressions and leaving document revisions unchanged until Finish. Connected coordinate seeds are freed as a chain; explicit constraints remain respected. Other relationship types remain readable/removable and retain backend support pending their viewport tools.
+
+Validation: TypeScript and production UI build passed; all 182 frontend unit tests and 25 backend sketch tests passed. Isolated browser coverage verifies plane-picker-only setup, line hover, immediate Connect/Disconnect geometry, live length and signed-angle editing, invalid value recovery, Delete/undo, and persisted relationship integrity. Screenshot: artifacts/sketch-live-relationships.png.
+
+Dimension tool consolidation: D handles one selected line as length and two as angle. Shift selection supports preselecting a pair, and picking a second line during a tentative length switches to angle without persisting that tentative length. Removed the separate Angle toolbar entry/hotkey. Browser coverage includes both entry paths and cancellation.
+
+Sketch point/move pass: independent anchor selection and highlighting, Shift selection of points/lines, M for solver-backed sketch-plane translation with preview/exact U/V destinations, and Space to cancel the current suboperation and return to Select. Temporary solver targets are removed before the sketch is saved; fixed-point relationships and dimensional constraints remain enforced.
+
+Validation for sketch movement: TypeScript/production build passed, 186 frontend tests passed, and isolated browser tests verified independent endpoint selection, connected/dimensioned endpoint movement, standalone point movement, whole-line translation, Space cancelling previews/drawing/inline dimensions, and no persisted temporary fixed targets. Unified Dimension/Connect/Disconnect/Delete regression workflow also passed.
+
+
+Sketch selection and angle follow-up: Ctrl-click is removal-only for sketch points/lines and main viewport selections, with Shift retaining toggle selection. Polygon measurements and editable constraints use positive interior angles, including reflex corners in unambiguous closed line loops. Endpoint rays and winding are stored on new dimensions; legacy signed constraints remain compatible and convert when edited. Solver conversion preserves the chosen side rather than merely taking an absolute value.
+
+Dimension also accepts a sketch line plus a world X/Y/Z axis, picked in the viewport or corner control. Zero/90-degree values provide axis alignment. A world-axis angle is a persistent sketch constraint with no added sketch entity. Tilted planes use true 3D angles and reject impossible ranges; perpendicular axes explain why they cannot control in-plane direction. Axis labels reopen the same inline dimension editor, and the selected axis highlights during configuration.
+
+
+Validation for the selection/angle pass: 192 frontend unit tests and 56 native solver/API tests passed. TypeScript, production frontend build, and wheel packaging passed. Isolated browser checks cover removal-only Ctrl-click, positive polygon angles, save/reopen/re-edit, axis angle creation and editing at 0 and 30 degrees, rejection of perpendicular axes, and existing sketch movement. The relationship creation/editing regression also passed.
+
+
+Design overview inspector: replaced the generic Entire design heading and legacy root/shared-parameter statistics with the design name, blueprint icon, visual Layouts/3D Parts/2D Sketches inventory, unique component counts, active-layout summary, and named parameter count. Reuses document notes as an editable description via the durable `document.describe` command, and exposes existing per-design display units. Engine geometry and default numeric inputs remain canonical mm/degrees. Unselected measurement totals now exclude part library and alternate-layout occurrences, matching the active layout. Description settings use the normal authored revision/undo/persistence path; metadata editing is disabled during history inspection.
+
+Validation for the design inspector: 195 frontend tests and six backend metadata/persistence tests passed; TypeScript, production build, and wheel packaging passed. Isolated browser coverage verifies blank and populated counts, active-layout-only volume, description save/cancel/undo/redo/reload, unit persistence without rescaling, and mobile inspector access. Visual inspection: artifacts/design-inspector.png and artifacts/design-inspector-mobile.png.
+
+
+Promoted toolbar-between-sidebars to the permanent desktop layout and removed its experiment controls/settings. An observer measures actual toolbar buttons and available center-column width; the toolbar takes the full row when needed, with sidebar headers below, then returns between sidebars when space permits. A small sizing dead band prevents threshold flicker. Remaining overflow scrolls horizontally. Legacy experiment values are ignored while active-appearance settings survive. Mobile layout stays unchanged. Also fixed panel-reopen buttons being intercepted by the viewport axis widget and the 1000px desktop boundary clipping the toolbar.
+
+Validation: all 195 frontend tests, TypeScript, production build and wheel packaging passed. Browser coverage verifies wide/compact/1000px/phone widths, real settings-button access through overflow, hide/show panels, operation alignment, sketch toolbar replacement, reload, legacy preference migration, shortcut editing/conflicts, and drag reordering. Visuals: artifacts/toolbar-adaptive-wide.png and artifacts/toolbar-adaptive-compact.png.
+
+
+Movement context follow-up: idle world-axis clicks no longer implicitly launch movement. Axis references remain available during active move, Tool, sketch-dimension and section-plane workflows. Movement labels now derive from the same editor context as the viewport: Move Part in Layout Editor, Move Component inside Part/Component Editor. Toolbar labels, tooltips, command search, shortcut settings, movement panel labels/help, preview labels and action messages follow that context. Layout movement resolves picked geometry to the editable part/group placement and limits target choices to the current layout scope, excluding internal bodies/library copies. M and saved shortcut bindings are unchanged.
+
+Validation: all 196 frontend tests, TypeScript, production build and wheel packaging passed. Isolated browser tests verify idle/selected axis clicks, active direction picks, contextual labels across all three editors, layout target restrictions, committed axis-arrow part translation, and persisted sketch/world-axis dimensions.

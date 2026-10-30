@@ -65,5 +65,5 @@ test('endpoints and midpoints are distinct selectable references',()=>{
 test('sketch tool shortcuts clear an unfinished chain without losing geometry or snap settings',()=>{
  const d={...startSketch(state),pending:[[1,2]],cursor:[3,4],gridSnapEnabled:false};
  const next=chooseSketchTool(d,SKETCH_TOOL_KEYS.r);assert.equal(next.tool,'rectangle');assert.deepEqual(next.pending,[]);assert.equal(next.cursor,null);assert.equal(next.entities,d.entities);assert.equal(next.gridSnapEnabled,false);
- assert.equal(new Set(Object.values(SKETCH_TOOL_KEYS)).size,8);
+ assert.equal(new Set(Object.values(SKETCH_TOOL_KEYS)).size,11);
 });

@@ -23,6 +23,8 @@ export interface SketchDimensionEditor {
   line: string;
   value: string;
   error?: string;
+  kind?:"length"|"angle";
+  second?:string|null;
   onChange: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -33,8 +35,9 @@ export default forwardRef<
     draft?: SketchDraft | null;
     dimensionEditor?: SketchDimensionEditor | null;
     gridOnly?: boolean;
+    onMeasurement?:(id:string)=>void;
   }
->(function SketchGuide({ draft, dimensionEditor, gridOnly }, ref) {
+>(function SketchGuide({ draft, dimensionEditor, gridOnly,onMeasurement }, ref) {
   const root = useRef<SVGSVGElement>(null),
     latest = useRef(draft),
     editorRoot = useRef<HTMLDivElement>(null),
@@ -239,10 +242,10 @@ export default forwardRef<
             qy = cy + radius * vy;
           line.setAttribute(
             "d",
-            `M${px},${py} A${radius},${radius} 0 0 ${cross > 0 ? 1 : 0} ${qx},${qy}`,
+            `${item.axis?`M${cx},${cy}L${qx+(qx-cx)*.6},${qy+(qy-cy)*.6} `:""}M${px},${py} A${radius},${radius} 0 ${item.reflex?1:0} ${(cross > 0)!==!!item.reflex ? 1 : 0} ${qx},${qy}`,
           );
-          const bx = ux + vx,
-            by = uy + vy,
+          const bx = (ux + vx)*(item.reflex?-1:1),
+            by = (uy + vy)*(item.reflex?-1:1),
             bl = Math.hypot(bx, by) || 1;
           label.setAttribute("x", String(cx + ((radius + 13) * bx) / bl));
           label.setAttribute("y", String(cy + ((radius + 13) * by) / bl));
@@ -282,7 +285,7 @@ export default forwardRef<
           });
         } else if (d.tool === "line") preview = [a, p];
       }
-      set("preview", "d", path(preview));
+      set("preview", "d", d.tool==="move"&&d.moveOrigin&&p?path([d.moveOrigin,p]):path(preview));
       if (p) {
         const [x, y] = project(p);
         set("cursor", "transform", `translate(${x} ${y})`);
@@ -296,7 +299,8 @@ export default forwardRef<
       if (label) {
         let text = "",
           anchor: SketchPoint | undefined;
-        if (a && p && d.tool !== "select" && d.tool !== "project") {
+        if(d.tool==="move"&&d.moveOrigin&&p){anchor=p;text=`ΔU ${(p[0]-d.moveOrigin[0]).toFixed(2)} · ΔV ${(p[1]-d.moveOrigin[1]).toFixed(2)} mm`;}
+        else if (a && p && d.tool !== "select" && d.tool !== "project") {
           anchor = p;
           const du = p[0] - a[0],
             dv = p[1] - a[1];
@@ -328,6 +332,11 @@ export default forwardRef<
             String(Math.min(height - 24, Math.max(24, y - 14))),
           );
         }
+      }
+      if(editor?.kind==="angle"&&editorRoot.current&&editor.second){
+        const annotation=latestMeasurements.current.find(m=>m.kind==="angle"&&(m.id===`angle:${editor.line}:${editor.second}`||m.id===`angle:${editor.second}:${editor.line}`));
+        const text=annotation&&svg.querySelector(`[data-measurement="${annotation.id}"] text`);
+        if(text){const x=Number(text.getAttribute('x')),y=Number(text.getAttribute('y'));editorRoot.current.style.transform=`translate(${Math.max(8,Math.min(width-178,x-85))}px, ${Math.max(8,Math.min(height-76,y-18))}px)`;}
       }
       const scale = svg.querySelector('[data-sketch="scale"]');
       if (scale)
@@ -362,7 +371,7 @@ export default forwardRef<
               <path
                 key={e.id}
                 data-sketch={e.id}
-                className={`sketch-entity ${e.construction ? "construction" : ""} ${e.id === draft.selected ? "selected" : ""}`}
+                className={`sketch-entity ${e.construction ? "construction" : ""} ${(!draft.selectedAnchor&&e.id === draft.selected)||draft.selectedEntities?.includes(e.id)||e.id===draft.relationshipFirst?.entity ? "selected" : ""} ${e.id===draft.hovered?"hovered":""}`}
               />
             ))}
             {sketchAnchors(draft).map((a) => (
@@ -370,7 +379,7 @@ export default forwardRef<
                 key={a.id}
                 data-sketch={a.id}
                 aria-label={`${a.entity} ${a.kind === "mid" ? "midpoint" : a.kind}`}
-                className={`sketch-anchor ${a.kind} ${draft.selectedAnchor?.id === a.id ? "selected" : ""} ${draft.cursor && Math.hypot(draft.cursor[0] - a.point[0], draft.cursor[1] - a.point[1]) < 1e-6 ? "hovered" : ""}`}
+                className={`sketch-anchor ${a.kind} ${draft.selectedAnchor?.id === a.id||draft.selectedPoints?.includes(a.id) ? "selected" : ""} ${draft.hoveredAnchor===a.id ? "hovered" : ""} ${draft.constraints.some(c=>c.type==="coincident"&&[c.a,c.b].includes(a.kind==="point"?a.entity:`${a.entity}.${a.kind}`))?"connected":""}`}
               >
                 {a.kind === "mid" ? (
                   <path d="M0 -4L4 0L0 4L-4 0Z" />
@@ -384,11 +393,13 @@ export default forwardRef<
                 key={m.id}
                 data-measurement={m.id}
                 className={`sketch-measurement ${m.constrained ? "constrained" : "reference"}`}
+                onClick={()=>onMeasurement?.(m.id)}
+                onPointerDown={e=>e.stopPropagation()}
                 aria-label={`${m.constrained ? "Constrained dimension" : "Reference measurement"} ${m.label}`}
               >
                 {m.parameterName && <title>{`Parameter: ${m.parameterName}`}</title>}
                 <path />
-                <text textAnchor="middle">{m.label}</text>
+                <text style={{pointerEvents:draft.tool==="select"?"auto":"none"}} textAnchor="middle">{m.constrained?"◆ ":""}{m.label}</text>
               </g>
             ))}
             <path data-sketch="preview" className="sketch-rubberband" />
@@ -416,10 +427,10 @@ export default forwardRef<
           onPointerUp={(e) => e.stopPropagation()}
         >
           <label>
-            <span className="sketch-dimension-inline-label">Length</span>
-            <NumericInput kind="length"
+            <span className="sketch-dimension-inline-label">{dimensionEditor.kind==="angle"?dimensionEditor.second?.startsWith("world:")?`Angle to ${dimensionEditor.second.slice(6)}`:"Angle":"Length"}</span>
+            <NumericInput kind={dimensionEditor.kind==="angle"?"angle":"length"}
               ref={editorInput}
-              aria-label="Viewport dimension length"
+              aria-label={dimensionEditor.kind==="angle"?"Viewport dimension angle":"Viewport dimension length"}
               type="text"
               value={dimensionEditor.value}
               onChange={(e) => dimensionEditor.onChange(e.target.value)}
@@ -435,7 +446,7 @@ export default forwardRef<
                 }
               }}
             />
-            <span className="sketch-dimension-inline-unit">mm</span>
+            <span className="sketch-dimension-inline-unit">{dimensionEditor.kind==="angle"?"°":"mm"}</span>
           </label>
           {dimensionEditor.error && (
             <div role="status" className="sketch-dimension-inline-error">

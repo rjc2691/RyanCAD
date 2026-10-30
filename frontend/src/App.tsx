@@ -1,10 +1,19 @@
+import {editorContext} from "./editorContext";
+import {useAdaptiveToolbar} from "./useAdaptiveToolbar";
+import DesignOverview from "./DesignOverview";
+import ToolBodyIcon from "./ToolBodyIcon";
+import {layoutContextActions} from "./layoutContextActions";
+import WorkspaceDesignTree from "./WorkspaceDesignTree";
+import {useDeleteConfirmation} from "./useDeleteConfirmation";
+import LayoutList from "./LayoutList";
+import ProjectStructure from "./ProjectStructure";
 import ExperimentalFeatures from "./ExperimentalFeatures";
-import {dispatchToolbarShortcut,shortcutAttributes,shortcutLabel,getToolbarPreferences,subscribeToolbar,reorderToolbar} from './toolbarShortcuts';
+import {bindingFor,dispatchToolbarShortcut,shortcutAttributes,shortcutLabel,getToolbarPreferences,subscribeToolbar,reorderToolbar} from './toolbarShortcuts';
 import ToolbarSettings from './ToolbarSettings';
 import BugReports from "./BugReports";
 import MeasurePanel from "./MeasurePanel";
 import {measurePoint,captureMeasurePoint,type MeasurePoint} from "./measureModel";
-import {loadExperiments,saveExperiments,ACTIVE_APPEARANCE_ID,SIDEBAR_TOOLBAR_LAYOUT_ID} from "./experiments";
+import {loadExperiments,saveExperiments,ACTIVE_APPEARANCE_ID} from "./experiments";
 import MCPSetup from "./MCPSetup";
 import AccountMenu from "./AccountMenu";
 import HistoryResizeHandle from "./HistoryResizeHandle";
@@ -128,6 +137,7 @@ import {
   worldSketchFrame,
   sketchBasis,
   startSketch,
+  sketchClick, snapSketchPoint,
   type SketchDraft,
   type SketchFrame,
 } from "./sketchModel";
@@ -297,6 +307,10 @@ export default function App() {
       () => palette[Math.floor(Math.random() * palette.length)],
     );
   });
+  const {confirmDelete,deleteDialog}=useDeleteConfirmation();
+  const [sketchMenu,setSketchMenu]=useState<{id:string;x:number;y:number}|null>(null);
+  const [renamingSketch,setRenamingSketch]=useState<string|null>(null);
+  const [sketchName,setSketchName]=useState("");
   const [contextMenu, setContextMenu] = useState<{
     selection: Selection | null;
     x: number;
@@ -306,6 +320,13 @@ export default function App() {
   const selectedMembers = selectionMembers(selection);
   const [selectionSet, setSelectionSet] = useState<string[]>([]);
   const [groupScope, setGroupScope] = useState("");
+  const [partWorkbench, setPartWorkbench] = useState<string|null>(null);
+  const layoutScope = state?.occurrences.find(o=>o.parent==="root" && o.definition===state.document.active_layout)?.id || "";
+  useEffect(()=>{
+    if(state?.document.structure_version){
+      setPartWorkbench(null);setGroupScope(layoutScope);setSelection(null);setSelectionSet([]);
+    }
+  },[state?.document.id,state?.document.active_layout,layoutScope]);
   const treePointer = useRef<{
     id: string;
     x: number;
@@ -358,6 +379,8 @@ export default function App() {
   const [dialog, setDialog] = useState<string | null>(null);
   const [toolbarPrefs,setToolbarPrefs]=useState(getToolbarPreferences);
   useEffect(()=>subscribeToolbar(()=>setToolbarPrefs(getToolbarPreferences())),[]);
+  const appShellRef=useRef<HTMLDivElement>(null),toolbarContentRef=useRef<HTMLDivElement>(null);
+  const fullWidthToolbar=useAdaptiveToolbar(appShellRef,toolbarContentRef);
   const toolbarDrag=useRef<string|null>(null),toolbarDragEnd=useRef(0);
   const [measure,setMeasure]=useState<MeasurePoint[]|null>(null);
   const [measureReplace,setMeasureReplace]=useState<number|null>(null);
@@ -374,6 +397,8 @@ export default function App() {
     line: string;
     value: string;
     error?: string;
+    kind?:"length"|"angle";
+    second?:string|null;
   } | null>(null);
   const sketchActive = useRef(false);
   sketchActive.current = !!sketch;
@@ -430,6 +455,8 @@ export default function App() {
   const [rightVisible, setRightVisible] = useState(true);
   const mobileLayout = useMobileLayout();
   const [mobilePane, setMobilePane] = useState<MobilePane>("viewport");
+  const editor=editorContext(state,groupScope,toolWorkbench);
+  const moveLabel=editor==="Layout Editor"?"Move Part":"Move Component";
   const mobileOperation = sketch ? "Sketch" : featureEdit ? "Edit feature" : move ? "Move" : operation ? "Tool" : grouping !== null ? "Group" : measure!==null ? "Measure" : null;
   useEffect(() => {
     if (mobileLayout && mobileOperation) setMobilePane("inspector");
@@ -642,8 +669,16 @@ export default function App() {
     setSectionSettings({...sectionSettings,offset:0,reference:{label:feature.name+" · sketch plane",origin:frame.origin,normal:frame.normal}});
     setSectionPicking(false);setSectionNotice("");
   };
-  const select = (item: Selection | null, add = false, fromTree = false) => {
+  const select = (item: Selection | null, add = false, fromTree = false, removeOnly=false) => {
     if (featureEditActive.current) return;
+    if(removeOnly){
+      if(sketchActive.current||operationActive.current||moveActive.current||measureActive.current||sectionPicking)return;
+      const picked=state&&!fromTree?groupSelection(item,state.occurrences,groupScope):item;
+      if(grouping!==null){if(picked)setGrouping(ids=>ids?.filter(id=>id!==picked.occurrence)||[]);return;}
+      const next=mergeSelection(selection,picked,false,true);setSelection(next);setSelectionSet([...new Set(selectionMembers(next).map(s=>s.occurrence))]);
+      if(next!==selection)setSelectedFeature(null);return;
+    }
+
     if(item?.worldPlane){
       const plane=item.worldPlane;
       if(sectionPicking){setSectionSettings({...sectionSettings,axis:plane==='XY'?'Z':plane==='XZ'?'Y':'X',offset:0,reference:undefined});setSectionPicking(false);setSectionNotice('');return;}
@@ -723,7 +758,8 @@ export default function App() {
       ...new Set(selectionMembers(next).map((s) => s.occurrence)),
     ]);
   };
-  const selectSketch = (id: string) => {
+  const selectSketch = (id: string,removeOnly=false) => {
+    if(removeOnly){if(!featureEditActive.current&&!sectionPicking&&!measureActive.current&&!sketchActive.current&&!moveActive.current&&!groupingActive.current&&!operationActive.current&&selectedSketch===id)setSelectedSketch(null);return;}
     if (featureEditActive.current) return;
     if(sectionPicking){captureSectionSketch(id);return;}
     if(measureActive.current){setMeasureNotice('Pick a point on a component in the viewport. Sketch point measurement is not available yet.');return;}
@@ -781,11 +817,18 @@ export default function App() {
     if (moveActive.current) {
       if (kind !== "transform")
         setToast(
-          "Apply or cancel Move Component before opening another editing tool.",
+          `Apply or cancel ${moveLabel} before opening another editing tool.`,
         );
       return;
     }
     if (OPERATION_TOOLS.has(kind) && stateRef.current) {
+      if(selection && stateRef.current.document.components[selection.definition]?.read_only){
+        setToast("Edit the base part to change a variation. Imported bodies are read-only.");return;
+      }
+      if(stateRef.current.document.structure_version && selection && !selection.worldPlane && !selectedSketch &&
+         groupScope !== selection.occurrence && stateRef.current.document.components[selection.definition]?.kind !== "assembly"){
+        setGroupScope(selection.occurrence);
+      }
       if (
         !selectedSketch &&
         selection &&
@@ -835,9 +878,8 @@ export default function App() {
       setRightVisible(true);
       setExplode(0);
       setSelectedFeature(null);
-      const target = selection && !selection.worldPlane
-        ? { occurrence: selection.occurrence, definition: selection.definition }
-        : null;
+      const picked=selection&&!selection.worldPlane?(editor==="Layout Editor"&&stateRef.current?groupSelection(selection,stateRef.current.occurrences,groupScope):selection):null;
+      const target = picked ? {occurrence:picked.occurrence,definition:picked.definition} : null;
       setMove({ target });
       setMovePreview(null);
       setPreviewRendered(null);
@@ -985,18 +1027,11 @@ export default function App() {
   };
   const chooseWorldAxis = (axis: WorldAxis) => {
     if(sectionPicking){setSectionSettings({...sectionSettings,axis,offset:0,reference:undefined});setSectionPicking(false);setSectionNotice("");return;}
-    if (sketchActive.current || measureActive.current) return;
+    if(sketchActive.current){sketchRef.current?.chooseAxis(axis);return;}
+    if(measureActive.current)return;
     if (!state || busy) return;
     if (moveActive.current) moveRef.current?.chooseAxis(axis);
     else if (operationActive.current) operationRef.current?.chooseAxis(axis);
-    else {
-      chooseTool("transform");
-      setMove((current) =>
-        current
-          ? { ...current, axisRequest: { axis, id: performance.now() } }
-          : current,
-      );
-    }
   };
   launchRef.current = chooseTool;
   const editGroup = (item: Selection | null, fromTree = false) => {
@@ -1013,8 +1048,11 @@ export default function App() {
       : groupSelection(item, state.occurrences, groupScope);
     if (
       chosen &&
-      state.document.components[chosen.definition]?.kind === "assembly"
+      (state.document.components[chosen.definition]?.kind === "assembly" || !!state.document.structure_version)
     ) {
+      if(state.document.components[chosen.definition]?.read_only || state.occurrences.find(o=>o.id===chosen.occurrence)?.variation){
+        setToast("Edit the base part to change a variation. Imported bodies are read-only.");return;
+      }
       setGroupScope(chosen.occurrence);
       setSelection(null);
       setSelectionSet([]);
@@ -1024,7 +1062,9 @@ export default function App() {
   const endGroupEditing = () => {
     const id = groupScopeRef.current,
       o = stateRef.current?.occurrences.find((o) => o.id === id);
-    setGroupScope(parentPath(id));
+    if(stateRef.current?.document.structure_version && (!parentPath(id) || id===layoutScope)){
+      setPartWorkbench(null);setGroupScope(layoutScope);
+    }else setGroupScope(parentPath(id));
     setSelection(o ? { occurrence: o.id, definition: o.definition } : null);
     setSelectionSet(o ? [o.id] : []);
   };
@@ -1061,7 +1101,7 @@ export default function App() {
     operationCommit.current = pending;
     setLocalJob({
       status: "queued",
-      description: editing ? "Apply feature changes" : moving ? "Apply Move Component" : "Apply tool operation",
+      description: editing ? "Apply feature changes" : moving ? `Apply ${moveLabel}` : "Apply tool operation",
     });
     try {
       const submission = await api(`/previews/${report.preview_token}/commit`, {
@@ -1186,6 +1226,10 @@ export default function App() {
     setSelectionSet(target ? [target.occurrence] : []);
     setOperationPreview(null);
     setPreviewRendered(null);
+    if(state.document.structure_version && occurrence){
+      const library=state.occurrences.find(o=>o.parent==="root"&&o.library&&occurrence.id.startsWith(o.id+"/"));
+      setPartWorkbench(library?.id||null);setGroupScope(occurrence.id);
+    }
     setFeatureEdit({feature, target});
   };
   const computeStage = async (id: string) => {
@@ -1217,6 +1261,9 @@ export default function App() {
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
       if((event.target as HTMLElement).closest('[data-shortcut-capture]'))return;
+      if(sketchActive.current&&event.code==="Space"&&bindingFor("sketch_select")?.code==="Space"&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.isComposing&&(event.target as HTMLElement).closest('.sketch-dimension-inline')){
+        event.preventDefault();event.stopImmediatePropagation();sketchRef.current?.selectTool();return;
+      }
       if(dispatchToolbarShortcut(event))return;
       if((event.target as HTMLElement).closest('.experimental-popover,.bug-reports-popover,.file-action-menu,.account-dropdown'))return;
       if((event.target as HTMLElement).closest('[role=dialog]')&&!['Escape','Enter'].includes(event.key))return;
@@ -1255,7 +1302,8 @@ export default function App() {
             !event.metaKey &&
             !sketchPlanePickingRef.current
           ) {
-            if (key === "f") {
+            if(key==="delete"||key==="backspace"){event.preventDefault();event.stopImmediatePropagation();if(!event.repeat)sketchRef.current?.deleteSelection();}
+            else if (key === "f") {
               event.preventDefault();
               if (!event.repeat) viewRef.current?.fit();
             } else if (key === "s") {
@@ -1408,7 +1456,7 @@ export default function App() {
             ? "One part"
             : measurements.scope === "assembly"
               ? "Group totals"
-              : "Design totals"}
+              : state?.document.structure_version ? "Active layout totals" : "Design totals"}
         </small>
       </div>
       <div
@@ -1481,7 +1529,8 @@ export default function App() {
           ? "External agent"
           : id);
   const params = state ? Object.values(state.document.parameters).filter(p => p.named === true) : [];
-  const filteredTools = toolList.filter((t) =>
+  const editorTools=toolList.map(t=>t.id==="transform"?{...t,label:moveLabel}:t);
+  const filteredTools = editorTools.filter((t) =>
     `${t.label} ${t.category}`.toLowerCase().includes(toolSearch.toLowerCase()),
   );
   const featureOrder = state?.document.feature_order || [];
@@ -1618,7 +1667,10 @@ export default function App() {
   const viewportOccurrences = (state?.occurrences || []).filter((o) =>
     toolWorkbench
       ? o.definition === toolWorkbench
-      : state?.document.components[o.definition]?.purpose !== "tool",
+      : state?.document.components[o.definition]?.purpose !== "tool" &&
+        (!state?.document.structure_version || (partWorkbench
+          ? o.id===partWorkbench || o.id.startsWith(partWorkbench+"/")
+          : o.layout===state.document.active_layout)),
   );
   const treeEditingDisabled =
     !state ||
@@ -1765,8 +1817,8 @@ export default function App() {
     <NamedParameterProvider parameters={state ? Object.values(state.document.parameters) : []} values={Object.fromEntries(Object.entries(state?.parameter_graph || {}).map(([id, info]) => [id, info.value]))}>
     <div
       data-mobile-pane={mobilePane}
-      data-sidebar-toolbar-layout={experiments[SIDEBAR_TOOLBAR_LAYOUT_ID].enabled||undefined}
-      data-sidebar-toolbar-mode={experiments[SIDEBAR_TOOLBAR_LAYOUT_ID].mode||'between'}
+      ref={appShellRef}
+      data-toolbar-layout={fullWidthToolbar?"full-width":"between"}
       className={
         "app-shell " +
         (!leftVisible ? "left-hidden " : "") +
@@ -1839,14 +1891,14 @@ export default function App() {
         onDragEnd={()=>{toolbarDrag.current=null;toolbarDragEnd.current=Date.now();}}
         onClickCapture={e=>{if(Date.now()-toolbarDragEnd.current<300){e.preventDefault();e.stopPropagation();}}}
       >
-        <div className="tool-strip-content">
+        <div className="tool-strip-content" ref={toolbarContentRef}>
         {sketch ? (
           <SketchToolbar
             draft={sketch}
             busy={busy}
             disabled={busy || sketchPlanePicking}
             onTool={(tool) =>
-              setSketch((d) => (d ? chooseSketchTool(d, tool) : d))
+              tool==="select"?sketchRef.current?.selectTool():setSketch((d) => (d ? chooseSketchTool(d, tool) : d))
             }
             onUndo={() => sketchRef.current?.undo()}
             onFinish={() => sketchRef.current?.finish()}
@@ -1899,7 +1951,7 @@ export default function App() {
               <span>Sketch</span>
               <kbd>{shortcutLabel('sketch')}</kbd>
             </button>
-            {toolList
+            {editorTools
               .filter((t) =>
                 [
                   "transform",
@@ -1925,12 +1977,12 @@ export default function App() {
                   onClick={() => chooseTool(t.id)}
                   aria-label={
                     t.id === "duplicate" && component?.kind === "assembly"
-                      ? "Copy group"
+                      ? (component?.structure_role === "part" ? "Repeat part" : "Copy group")
                       : t.label
                   }
                   title={
                     t.id === "transform"
-                      ? "Move Component · M"
+                      ? `${moveLabel} · ${shortcutLabel("transform")}`
                       : t.id === "duplicate" && component?.kind === "assembly"
                         ? "Copy group · parts retain linked geometry"
                         : `${t.label} · ${shortcutLabel(t.id)}`
@@ -1940,7 +1992,7 @@ export default function App() {
                   <t.icon size={18} />
                   <span>
                     {t.id === "duplicate" && component?.kind === "assembly"
-                      ? "Copy group"
+                      ? (component?.structure_role === "part" ? "Repeat part" : "Copy group")
                       : toolbarLabels[t.id] || t.label}
                   </span>
                   <kbd>{shortcutLabel(t.id)}</kbd>
@@ -1979,7 +2031,7 @@ export default function App() {
         <aside className="left-panel">
           <div className="panel-title">
             <button className="workspace-tree-title workspace-tree-button" title="Manage workspace designs" aria-label="Manage workspace designs" onClick={() => { void refreshWorkspace().catch(report); setDialog("workspace"); }}>
-              Local Workspace <ChevronRight size={12} />
+              <FolderOpen size={15} /> Designs - Local Workspace
             </button>
             <button
               className="icon-button"
@@ -1989,13 +2041,10 @@ export default function App() {
               <PanelLeftClose size={14} />
             </button>
           </div>
-          {workspace?.legacy_available && workspace.designs.filter((design) => !design.deleted).length === 1 && state?.document.revision === 0 && (
-            <button className="workspace-legacy-notice" onClick={() => { void refreshWorkspace().catch(report); setDialog("workspace"); }}>
-              An earlier server design is available <ChevronRight size={12} />
-            </button>
-          )}
-          <div
-            className="structure-root"
+          <WorkspaceDesignTree workspace={workspace} activeId={currentDesignId()} disabled={treeEditingDisabled} onError={report}
+            activeRow={<>          <div
+            className="structure-root current-design-row"
+            aria-current="page"
             data-tree-drop={
               draggedComponent && treeDrop?.parent === ""
                 ? treeDrop.problem
@@ -2025,20 +2074,7 @@ export default function App() {
               void dropTreeItem("");
             }}
           >
-            <svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M4 4h16v16H4zM4 13h6m4 0h6M13 4v5m0 4v7M10 13v-3" />
-              <path d="M10 10a3 3 0 0 1 3 3M2 2v3m0-3h3M22 19v3h-3" />
-            </svg>
+            <DesignIcon />
             {editingDesignName !== null ? (
               <input
                 autoFocus
@@ -2095,26 +2131,36 @@ export default function App() {
                 >
                   {documentName}
                 </button>
-                <button
-                  className="icon-button design-rename"
-                  aria-label="Rename design"
-                  title="Rename design"
-                  disabled={
-                    !state ||
-                    busy ||
-                    !!historyView ||
-                    !!featureEdit || !!operation ||
-                    !!move ||
-                    !!sketch ||
-                    !!grouping
-                  }
-                  onClick={() => setEditingDesignName(state!.document.name)}
-                >
-                  <Pencil size={12} />
-                </button>
+                
               </>
             )}
           </div>
+          </>}
+            activeLayouts={<>          {state?.document.structure_version ? <LayoutList state={state} run={run} disabled={treeEditingDisabled}
+            onLayout={()=>{setPartWorkbench(null);setGroupScope(stateRef.current?.occurrences.find(o=>o.parent==="root" && o.definition===stateRef.current?.document.active_layout)?.id||"");setSelection(null);setSelectionSet([]);}} /> : null}
+          </>} />
+
+
+          {state && !state.document.structure_version && <button className="sidebar-add-row structure-enable" disabled={treeEditingDisabled} onClick={()=>void run("structure.enable").catch(()=>{})}>Organize into Parts & Layouts</button>}
+          {state?.document.structure_version ? <ProjectStructure onMove={()=>chooseTool("transform")} state={state} run={run} disabled={treeEditingDisabled} scope={groupScope} selection={selection}
+            onSelect={(item,remove)=>{
+              if(remove){select(item,false,true,true);return;}
+              if(!treeEditingDisabled){
+                const root=state.occurrences.find(o=>o.parent==="root"&&o.library&&(item.occurrence===o.id||item.occurrence.startsWith(o.id+"/")));
+                if(root){setPartWorkbench(root.id);if(!groupScope.startsWith(root.id))setGroupScope(root.id);}
+                else if(partWorkbench){setPartWorkbench(null);setGroupScope(layoutScope);}
+              }
+              select(item,false,true);
+            }}
+            onEdit={row=>{
+              if(treeEditingDisabled)return;
+              setToolWorkbench(null);setHistoryView(null);
+              const root=state.occurrences.find(o=>o.parent==="root" && o.library && (row.id===o.id||row.id.startsWith(o.id+"/")));
+              setPartWorkbench(root?.id||null);setGroupScope(row.id);
+              setSelection(row.kind==="assembly"?null:{occurrence:row.id,definition:row.definition});setSelectionSet([]);
+            }}
+            onLayout={()=>{setPartWorkbench(null);setGroupScope(stateRef.current?.occurrences.find(o=>o.parent==="root" && o.definition===stateRef.current?.document.active_layout)?.id||"");setSelection(null);setSelectionSet([]);}}
+ /> : <>
           <div className="structure-section design-category">
             <button
               className="component-color-mode"
@@ -2436,27 +2482,7 @@ export default function App() {
                           </button>
                         </div>
                       )}
-                      <button
-                        className="tree-rename"
-                        aria-label={"Rename " + c.name}
-                        title="Rename component · F2"
-                        disabled={busy || !!historyView}
-                        onClick={(e) => {
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setAppearance({
-                            definition: o.definition,
-                            x:
-                              (e.currentTarget
-                                .closest(".left-panel")
-                                ?.getBoundingClientRect().right || rect.right) +
-                              8,
-                            y: rect.top,
-                            focusName: true,
-                          });
-                        }}
-                      >
-                        <Pencil size={12} />
-                      </button>
+                      
                       <button
                         className="tree-eye"
                         title={
@@ -2485,6 +2511,57 @@ export default function App() {
               </div>
             )}
           </div>
+          </>}
+          <details open className="tool-body-library sidebar-library" aria-label="3D Tool Bodies">
+            <summary className="structure-section design-category">
+              <ChevronRight className="library-chevron" size={12}/>
+              <ToolBodyIcon size={15} />
+              <span>3D Tool Bodies</span>
+              <small>{toolBodies.length}</small>
+
+            </summary>
+            {toolBodies.map((body) => (
+              <div
+                className={`tool-library-row ${toolWorkbench === body.id ? "selected" : ""}`}
+                key={body.id}
+                onContextMenu={e=>{
+                  e.preventDefault();e.stopPropagation();
+                  const row=state?.occurrences.find(o=>o.definition===body.id);
+                  if(row)setContextMenu({selection:{occurrence:row.id,definition:body.id},x:e.clientX,y:e.clientY});
+                }}
+              >
+                <button
+                  title="Edit in the tool workbench"
+                  onClick={() => openToolBody(body.id)}
+                  disabled={
+                    busy || !!featureEdit || !!operation || !!move || !!sketch || !!grouping
+                  }
+                >
+                  <ToolBodyIcon size={14} />
+                  <span>{body.name}</span>
+                </button>
+                
+
+              </div>
+            ))}
+              <button
+                className="create-part sidebar-add-row"
+                aria-label="New 3D tool body"
+                title="New tool body"
+                disabled={
+                  !state ||
+                  busy ||
+                  !!featureEdit || !!operation ||
+                  !!move ||
+                  !!sketch ||
+                  !!grouping ||
+                  !!historyView
+                }
+                onClick={() => void newToolBody()}
+              >
+                <Plus size={14} /><span>add tool</span>
+              </button>
+          </details>
           <div className="sketch-tree" aria-label="Design sketches">
             <div className="structure-section">
               <SquareDashed size={15} />
@@ -2518,8 +2595,9 @@ export default function App() {
               <div
                 key={f.id}
                 className={`sketch-tree-row ${selectedSketch === f.id ? "selected" : ""}`}
+                onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!treeEditingDisabled){selectSketch(f.id);setSketchMenu({id:f.id,x:e.clientX,y:e.clientY});}}}
               >
-                <button
+                {renamingSketch===f.id?<form onSubmit={e=>{e.preventDefault();if(sketchName.trim())void run("feature.rename",{id:f.id,name:sketchName.trim()}).then(()=>setRenamingSketch(null)).catch(()=>{});}}><input autoFocus aria-label="Sketch name" value={sketchName} onChange={e=>setSketchName(e.target.value)} onKeyDown={e=>{if(e.key==="Escape"){e.stopPropagation();setRenamingSketch(null);}}}/></form>:<button
                   className="sketch-tree-name"
                   onClick={() => {
                     if (sketch) return;
@@ -2529,15 +2607,8 @@ export default function App() {
                 >
                   <SquareDashed size={14} />
                   <span>{f.name}</span>
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`Edit ${f.name}`}
-                  disabled={!!sketch || busy}
-                  onClick={() => openSketch(f)}
-                >
-                  <Pencil size={12} />
-                </button>
+                </button>}
+                
                 <button
                   className="icon-button"
                   aria-label={`${hiddenSketches.has(f.id) ? "Show" : "Hide"} sketch ${f.name}`}
@@ -2558,34 +2629,6 @@ export default function App() {
                 </button>
               </div>
             ))}
-            {selectedSketch &&
-              state?.document.features[selectedSketch] &&
-              !sketch && (
-                <div className="sketch-tree-actions">
-                  <button
-                    onClick={() =>
-                      openSketch(state.document.features[selectedSketch])
-                    }
-                  >
-                    Edit sketch
-                  </button>
-                  <button
-                    disabled={busy}
-                    onClick={() => {
-                      if (operationRef.current)
-                        operationRef.current.useSketch(selectedSketch);
-                      else {
-                        chooseTool("tool");
-                        requestAnimationFrame(() =>
-                          operationRef.current?.useSketch(selectedSketch),
-                        );
-                      }
-                    }}
-                  >
-                    Use as tool profile
-                  </button>
-                </div>
-              )}
               <button
                 className="create-part sidebar-add-row"
                 aria-label="New sketch"
@@ -2595,77 +2638,6 @@ export default function App() {
                 <Plus size={14} /><span>add sketch</span>
               </button>
           </div>
-          <section className="tool-body-library" aria-label="3D Tool Bodies">
-            <div className="structure-section design-category">
-              <Cuboid size={15} />
-              <span>3D Tool Bodies</span>
-              <small>{toolBodies.length}</small>
-
-            </div>
-            {toolBodies.map((body) => (
-              <div
-                className={`tool-library-row ${toolWorkbench === body.id ? "selected" : ""}`}
-                key={body.id}
-              >
-                <button
-                  title="Edit in the tool workbench"
-                  onClick={() => openToolBody(body.id)}
-                  disabled={
-                    busy || !!featureEdit || !!operation || !!move || !!sketch || !!grouping
-                  }
-                >
-                  <Cuboid size={14} />
-                  <span>{body.name}</span>
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`Rename tool body ${body.name}`}
-                  disabled={busy || !!featureEdit || !!operation || !!move || !!sketch}
-                  onClick={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect();
-                    setAppearance({
-                      definition: body.id,
-                      x: r.right + 8,
-                      y: r.top,
-                      focusName: true,
-                    });
-                  }}
-                >
-                  <Pencil size={12} />
-                </button>
-                <button
-                  className="icon-button"
-                  aria-label={`Remove tool body ${body.name}`}
-                  title="Remove tool body · referenced tools are protected"
-                  disabled={busy || !!featureEdit || !!operation || !!move || !!sketch}
-                  onClick={() => {
-                    void run("component.delete", { id: body.id }).catch(
-                      () => {},
-                    );
-                  }}
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ))}
-              <button
-                className="create-part sidebar-add-row"
-                aria-label="New 3D tool body"
-                title="New tool body"
-                disabled={
-                  !state ||
-                  busy ||
-                  !!featureEdit || !!operation ||
-                  !!move ||
-                  !!sketch ||
-                  !!grouping ||
-                  !!historyView
-                }
-                onClick={() => void newToolBody()}
-              >
-                <Plus size={14} /><span>add tool</span>
-              </button>
-          </section>
           <div className="design-utilities" aria-label="Design utilities">
             <button
               className="design-utility-link"
@@ -2673,7 +2645,6 @@ export default function App() {
                 setDialog("parameters");
               }}
             >
-              <ChevronRight size={12} />
               <SlidersHorizontal size={15} />
               <span>Parameters</span>
               <small>
@@ -2684,7 +2655,6 @@ export default function App() {
               className="design-utility-link"
               onClick={() => setDialog("checkpoints")}
             >
-              <ChevronRight size={12} />
               <History size={15} />
               <span>Checkpoints</span>
               <small>{state?.checkpoints.length || 0}</small>
@@ -2759,10 +2729,16 @@ export default function App() {
           sketchObjects={savedSketchObjects}
           selectedSketch={selectedSketch}
           onSelectSketch={selectSketch}
-          onSketchInput={(p, t, s) => sketchRef.current?.point(p, t, s)}
-          onSketchCursor={(cursor) =>
-            setSketch((d) => (d ? { ...d, cursor } : d))
-          }
+          onSketchInput={(p, t, s, add, remove) => sketchRef.current?.point(p, t, s, add, remove)}
+          onSketchMeasurement={id=>sketchRef.current?.editMeasurement(id)}
+          onSketchCursor={(point,tolerance=0.5)=>setSketch(d=>{
+            if(!d)return d;
+            if(!point)return {...d,cursor:null,hovered:null,hoveredAnchor:null};
+            const shown={...d,entities:d.solvedEntities||d.entities,tool:"select" as const},hit=sketchClick(shown,point,tolerance);
+            const moving=new Set([...(d.selectedEntities||[]),...(d.selectedPoints||[]).map(id=>id.split(":")[0])]);
+            const snap=d.tool==="move"?{...shown,entities:d.entities.filter(e=>!moving.has(e.id))}:shown;
+            return {...d,cursor:!["select","dimension","angle","connect","disconnect"].includes(d.tool)?snapSketchPoint(snap,point,tolerance):point,hovered:hit.selectedAnchor?null:hit.selected,hoveredAnchor:hit.selectedAnchor?.id||null};
+          })}
           ref={viewRef}
           geometry={historyView?.components || state?.geometry || {}}
           occurrences={viewportOccurrences.map((o) => ({
@@ -2814,7 +2790,7 @@ export default function App() {
                   ? operationReference
                   : selection
           }
-          onSelect={select}
+          onSelect={(item,add,remove)=>select(item,add,false,remove)}
           measurePoints={measure}
           explode={sketch ? 0 : explode}
           showBounds={showComponentBounds}
@@ -2831,6 +2807,8 @@ export default function App() {
           placementTarget={move?.target}
           featureEditTarget={featureEdit?.target}
           movementGuide={move ? moveGuide : null}
+          onMoveDistance={value=>moveRef.current?.setDistance(value)}
+          onMoveAxisSlide={(axis,distance)=>moveRef.current?.slideAxis(axis,distance)}
           orientationRef={orientationRef}
           onOperationPreviewReady={setPreviewRendered}
           operationFrame={
@@ -2858,10 +2836,10 @@ export default function App() {
                 : historyView
                   ? "HISTORY INSPECTION"
                   : move
-                    ? "MOVE COMPONENT · UNAPPLIED PREVIEW"
+                    ? `${moveLabel.toUpperCase()} · UNAPPLIED PREVIEW`
                     : operation
                       ? "TOOL SETUP · UNAPPLIED PREVIEW"
-                      : "ASSEMBLY WORKSPACE"}
+                      : (toolWorkbench ? "Component Editor · tool body" : editor)}
             </span>
             {(!sketch || sketchPlanePicking) && (
               <div>
@@ -2875,7 +2853,7 @@ export default function App() {
                       : "Orthographic"}
               </div>
             )}
-            {groupScope && !sketch && (
+            {groupScope && groupScope!==layoutScope && !sketch && (
               <div className="group-edit-banner">
                 <FolderOpen size={14} />
                 <span>
@@ -2897,6 +2875,7 @@ export default function App() {
               onAxis={chooseWorldAxis}
               onOrigin={chooseWorldOrigin}
               selectedAxis={
+                sketch&&dimensionEditor?.second?.startsWith("world:")?dimensionEditor.second.slice(6) as WorldAxis:
                 move
                   ? moveGuide?.worldAxis
                   : operationSetup &&
@@ -3190,9 +3169,12 @@ export default function App() {
           ref={moveRef}
           state={state}
           target={move.target}
+          entityName={editor==="Layout Editor"?"part":"component"}
+          scope={groupScope||layoutScope}
           axisRequest={move.axisRequest}
           renderedToken={previewRendered}
           onTarget={(target) => {
+            if(target&&editor==="Layout Editor")target=groupSelection(target,state.occurrences,groupScope);
             setMove({ target });
             setSelection(target);
             setSelectionSet(target ? [target.occurrence] : []);
@@ -3253,7 +3235,7 @@ export default function App() {
                   <div>
                     <span className="eyebrow">
                       {component.kind === "assembly"
-                        ? "GROUP"
+                        ? (component.structure_role === "part" ? "PART" : component.structure_role === "layout" ? "DESIGN LAYOUT" : "PART GROUP")
                         : component.kind === "planar"
                           ? "PLANAR PART"
                           : component.purpose === "tool"
@@ -3273,7 +3255,7 @@ export default function App() {
                 <div className="component-status">
                   <span className="status-orb small" />
                   {component.kind === "assembly"
-                    ? "Component group"
+                    ? (component.structure_role === "part" ? "Linked part definition" : "Part Group")
                     : geometry?.status === "valid"
                       ? "Valid solid"
                       : geometry?.status === "planar"
@@ -3284,12 +3266,12 @@ export default function App() {
                   <span>
                     {
                       state!.occurrences.filter(
-                        (i) => i.definition === component.id,
+                        (i) => i.definition === component.id && (!state!.document.structure_version || !i.library),
                       ).length
                     }{" "}
                     instance
                     {state!.occurrences.filter(
-                      (i) => i.definition === component.id,
+                      (i) => i.definition === component.id && (!state!.document.structure_version || !i.library),
                     ).length === 1
                       ? ""
                       : "s"}
@@ -3298,13 +3280,13 @@ export default function App() {
                 {measurementSection}
                 {component.kind === "assembly" && (
                   <section className="inspector-section group-inspector-actions">
-                    <button onClick={() => editGroup(selection)}>
+                    <button onClick={() => editGroup(selection, true)}>
                       <FolderOpen size={14} />
-                      Edit group
+                      {component.structure_role === "part" ? "Edit part" : "Edit group"}
                     </button>
-                    <button onClick={() => chooseTool("transform")}>
+                    <button disabled={component.structure_role === "group" || (!!state?.document.structure_version && occurrence?.parent === "root")} onClick={() => chooseTool("transform")}>
                       <Move3D size={14} />
-                      Move group
+                      {component.structure_role === "part" ? "Move placement" : "Move group"}
                     </button>
                     <button
                       onClick={() =>
@@ -3314,16 +3296,14 @@ export default function App() {
                       }
                     >
                       <Copy size={14} />
-                      Copy group
+                      {component.structure_role === "part" ? "Repeat part" : "Copy group"}
                     </button>
                     <button
                       onClick={() =>
-                        run("group.ungroup", {
-                          occurrence: selection?.occurrence,
-                        }).catch(() => {})
+                        run(component.structure_role === "part" ? "structure.remove" : "group.ungroup", component.structure_role === "part" ? {instance: occurrence?.source_id} : {occurrence: selection?.occurrence}).catch(() => {})
                       }
                     >
-                      Ungroup
+                      {component.structure_role === "part" ? "Remove placement" : "Ungroup"}
                     </button>
                   </section>
                 )}
@@ -3625,7 +3605,7 @@ export default function App() {
                     className="text-button"
                     onClick={() => chooseTool("transform")}
                   >
-                    Move Component
+                    {moveLabel}
                     <ArrowRight size={12} />
                   </button>
                 </section>
@@ -3644,47 +3624,7 @@ export default function App() {
                 </section>
               </>
             ) : (
-              <>
-                <div className="design-overview-heading">
-                  <h2>Entire design</h2>
-                </div>
-                {measurementSection}
-                <section className="inspector-section">
-                  <div className="section-heading">
-                    <h3>Parameters</h3>
-                  </div>
-                  <div className="property-row">
-                    <span>Root design inputs</span>
-                    <strong>
-                      {
-                        params.filter((p) => state!.parameter_graph[p.id].root)
-                          .length
-                      }
-                    </strong>
-                  </div>
-                  <div className="property-row">
-                    <span>Shared dimensions</span>
-                    <strong>
-                      {params.filter((p) => p.owner === "root").length}
-                    </strong>
-                  </div>
-                </section>
-                {state?.document.notes.trim() && (
-                  <section className="inspector-section">
-                    <div className="section-heading">
-                      <h3>Notes</h3>
-                    </div>
-                    <p className="design-notes">{state.document.notes}</p>
-                  </section>
-                )}
-                <button
-                  className="button secondary inspector-parameters"
-                  onClick={() => setDialog("parameters")}
-                >
-                  <GitBranch size={15} />
-                  Open parameters
-                </button>
-              </>
+              state&&<DesignOverview key={state.document.id} state={state} run={run} disabled={busy||!!historyView} measurements={measurementSection} onParameters={()=>setDialog("parameters")}/>
             )}
           </div>
           <div className="inspector-footer">
@@ -4484,6 +4424,14 @@ export default function App() {
           }
         />
       )}
+      {deleteDialog}
+      {sketchMenu&&state?.document.features[sketchMenu.id]&&<ContextMenu x={sketchMenu.x} y={sketchMenu.y} title={state.document.features[sketchMenu.id].name} onClose={()=>setSketchMenu(null)} actions={[
+        {label:"Edit sketch",disabled:treeEditingDisabled,action:()=>openSketch(state.document.features[sketchMenu.id])},
+        {label:"Rename",disabled:treeEditingDisabled,action:()=>{setRenamingSketch(sketchMenu.id);setSketchName(state.document.features[sketchMenu.id].name);}},
+        {label:"Use as tool profile",disabled:treeEditingDisabled,action:()=>{selectSketch(sketchMenu.id);chooseTool("tool");requestAnimationFrame(()=>operationRef.current?.useSketch(sketchMenu.id));}},
+        {label:hiddenSketches.has(sketchMenu.id)?"Show":"Hide",action:()=>setHiddenSketches(prev=>{const next=new Set(prev);if(next.has(sketchMenu.id))next.delete(sketchMenu.id);else next.add(sketchMenu.id);return next;})},
+        {label:"Delete sketch",disabled:treeEditingDisabled,action:()=>confirmDelete(state.document.features[sketchMenu.id].name,"Delete this sketch and its drawing geometry?",()=>void run("sketch.delete",{id:sketchMenu.id}).then(()=>setSelectedSketch(null)).catch(()=>{}))}
+      ]}/>}
       {contextMenu &&
         (() => {
           const item = contextMenu.selection;
@@ -4492,6 +4440,11 @@ export default function App() {
             item && state?.occurrences.find((o) => o.id === item.occurrence);
           const editingDisabled = treeEditingDisabled;
           const actions: ContextAction[] = [];
+          if(state?.document.structure_version && occurrence?.layout && !occurrence.library && part && !state.occurrences.some(o=>o.structure_role==="part"&&(o.id===groupScope||groupScope.startsWith(o.id+"/")))){
+            const actions=layoutContextActions(occurrence,editingDisabled,run,()=>chooseTool("transform"),()=>confirmDelete(part.name,"Remove this item from the layout? The reusable definition is retained.",()=>void run("structure.remove",{instance:occurrence.source_id}).catch(()=>{})));
+            return <ContextMenu x={contextMenu.x} y={contextMenu.y} title={part.name} actions={actions} onClose={()=>setContextMenu(null)}/>;
+          }
+
           if (part && occurrence) {
             if (part.kind === "assembly") {
               actions.push({
@@ -4548,7 +4501,7 @@ export default function App() {
                   setEditParameter(item.face!.controlling_parameter!),
               });
             actions.push({
-              label: "Move Component",
+              label: moveLabel,
               disabled: editingDisabled,
               action: () => chooseTool("transform"),
             });
@@ -4561,6 +4514,11 @@ export default function App() {
                   visible: !occurrence.visible,
                 }).catch(() => {});
               },
+            });
+            actions.push({
+              label: "Delete tool body",
+              disabled: editingDisabled || part.purpose!=="tool",
+              action:()=>confirmDelete(part.name,"Delete this tool body and its features?",()=>void run("component.delete",{id:part.id}).catch(()=>{})),
             });
             actions.push({
               label: "Component organization…",
@@ -4667,7 +4625,7 @@ export default function App() {
               explicit units or canonical mm/degrees.
             </small>
           </label>
-          <ToolbarSettings />
+          <ToolbarSettings moveLabel={moveLabel} />
           <div className="inline-note">
             <Save size={16} />
             Every accepted action is committed durably before Saved is shown.
@@ -4700,11 +4658,11 @@ function ExportDialog({
     (o) =>
       o.kind !== "assembly" &&
       state.document.components[o.definition]?.purpose !== "tool" &&
-      !o.suppressed,
+      !o.suppressed && (!state.document.structure_version || o.layout === state.document.active_layout),
   );
   const [chosen, setChosen] = useState(
     selected.length
-      ? selected
+      ? parts.filter(o=>selected.some(id=>o.id===id||o.id.startsWith(id+"/"))).map(o=>o.id)
       : parts.filter((o) => o.kind === "solid").map((o) => o.id),
   );
   const [frame, setFrame] = useState("part");
@@ -5008,7 +4966,7 @@ function ComponentActions({
           <span>
             <strong>
               {component.kind === "assembly"
-                ? "Copy group"
+                ? (component?.structure_role === "part" ? "Repeat part" : "Copy group")
                 : "Repeat linked component"}
             </strong>
             <small>
@@ -5076,4 +5034,21 @@ function ComponentActions({
       </div>
     </Modal>
   );
+}
+
+function DesignIcon() {
+  return (<svg
+              width="17"
+              height="17"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M4 4h16v16H4zM4 13h6m4 0h6M13 4v5m0 4v7M10 13v-3" />
+              <path d="M10 10a3 3 0 0 1 3 3M2 2v3m0-3h3M22 19v3h-3" />
+            </svg>);
 }

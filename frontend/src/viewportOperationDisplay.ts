@@ -63,6 +63,7 @@ export function syncOperationAppearance(
     occurrences: Occurrence[];
     selected: Selection | null;
     operationDraft?: OperationDraft;
+    movementGuide?: {liveDelta?:number[]}|null;
     placementTarget?: Selection | null;
     featureEditTarget?: Selection | null;
     section: boolean;
@@ -86,6 +87,13 @@ export function syncOperationAppearance(
       base = baseOccurrences.get(o?.id);
     if (!base) continue;
     const candidate = props.placementTarget ? proposed.get(o.id) : undefined;
+    const target=props.placementTarget?.occurrence,delta=props.movementGuide?.liveDelta;
+    if(target&&delta&&(o.id===target||o.id.startsWith(target+"/"))){
+      group.matrix.set(...base.matrix.flat() as Parameters<THREE.Matrix4["set"]>);
+      group.matrix.elements[12]+=delta[0];group.matrix.elements[13]+=delta[1];group.matrix.elements[14]+=delta[2];
+      group.matrixWorldNeedsUpdate=true;group.userData.placementPreview=true;moved.add(o.id);continue;
+    }
+
     if (candidate || group.userData.placementPreview) {
       group.matrix.set(
         ...((candidate || base).matrix.flat() as Parameters<

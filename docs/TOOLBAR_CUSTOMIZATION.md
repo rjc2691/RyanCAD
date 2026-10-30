@@ -25,13 +25,10 @@ Header defaults: Import Shift+I, Export Shift+E, Agents Shift+N, Account Shift+U
 
 Drag a modeling toolbar button onto another button to place it before that button. The resulting order is also the keyboard/DOM order. Drags do not invoke the dragged action. The utility section still receives flexible space before its first button. On touch devices, or for keyboard access, use the earlier/later controls under **Settings → Toolbar order**. The divider beside Parameters has been removed.
 
-## Sidebar layout experiment
+## Adaptive sidebar layout
 
-**Experimental features → Toolbar between sidebars** (`sidebar-toolbar-layout`) offers two layouts:
+The toolbar-between-sidebars layout is permanent. On desktop, sidebars reach the header while the toolbar fits in the center column. Actual button widths determine fit, including custom shortcut labels and sketch tools. When that row needs more room, the toolbar uses the full window width and sidebars begin below it. If the full row is still too narrow, buttons scroll horizontally. It returns between the sidebars when room is available, with a small dead band to avoid resize flicker. Hidden sidebars and operation panels participate in sizing. Mobile keeps its existing full-width toolbar and panel layout.
 
-- **Sidebars beside toolbar** (`between`): both sidebars extend up to the header; the toolbar occupies the center column.
-- **Full-width bar, inset buttons** (`inset-buttons`): the toolbar background spans the screen, with its independently scrolling button row inset to align with the viewport; sidebars begin below the toolbar.
+The old `sidebar-toolbar-layout` experiment and both of its controls have been removed; stored values are ignored. Active component appearance preferences are preserved.
 
-The mode persists independently of its On/Off toggle. Turning the experiment off restores the standard toolbar. Both alternatives apply at desktop widths; mobile retains its existing layout. They support custom button order, hidden sidebars and operation panels.
-
-Verification: `scripts/toolbar_shortcuts.test.mjs`, `scripts/ui_toolbar_shortcuts_check.mjs`, `scripts/ui_toolbar_preferences_check.mjs` and `scripts/ui_layout_experiment_check.mjs`.
+Verification: `scripts/toolbar_shortcuts.test.mjs`, `scripts/ui_toolbar_shortcuts_check.mjs`, `scripts/ui_toolbar_preferences_check.mjs` and `scripts/ui_adaptive_toolbar_check.mjs`.

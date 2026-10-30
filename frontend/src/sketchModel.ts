@@ -1,3 +1,4 @@
+import {connectNewSketchLines} from "./sketchRelationships.ts";
 import * as THREE from "three";
 import { parameterNames } from "./parameterNames.ts";
 import { expressionLabel } from "./api.ts";
@@ -10,15 +11,19 @@ import {
 export type SketchPoint = [number, number];
 export type SketchTool =
   | "select"
+  | "move"
   | "line"
   | "rectangle"
   | "circle"
   | "arc"
   | "point"
   | "project"
-  | "dimension";
+  | "dimension"
+  | "connect"
+  | "disconnect";
 export const SKETCH_TOOL_KEYS: Record<string, SketchTool> = {
-  v: "select",
+  " ": "select",
+  m: "move",
   l: "line",
   r: "rectangle",
   c: "circle",
@@ -26,12 +31,14 @@ export const SKETCH_TOOL_KEYS: Record<string, SketchTool> = {
   p: "point",
   j: "project",
   d: "dimension",
+  k: "connect",
+  u: "disconnect",
 };
 export function chooseSketchTool(
   d: SketchDraft,
   tool: SketchTool,
 ): SketchDraft {
-  return { ...d, tool, pending: [], cursor: null, message: "" };
+  return { ...d, tool, pending: [], cursor: null, relationshipFirst:null,moveOrigin:null, message: "" };
 }
 export interface SketchAnchor {
   id: string;
@@ -96,9 +103,15 @@ export interface SketchDraft {
   pending: SketchPoint[];
   cursor: SketchPoint | null;
   selected: string | null;
+  selectedEntities?:string[];
+  selectedPoints?:string[];
+  moveOrigin?:SketchPoint|null;
   snap: number;
   gridSnapEnabled: boolean;
   selectedAnchor?: SketchAnchor | null;
+  hovered?:string|null;
+  hoveredAnchor?:string|null;
+  relationshipFirst?:{entity:string;anchor?:SketchAnchor|null}|null;
   construction: boolean;
   fixed: boolean;
   showComponents: boolean;
@@ -283,6 +296,7 @@ function addEntities(
     entities: [...d.entities, ...entities],
     selectedAnchor: null,
     selected: entities.at(-1)?.id || null,
+    selectedEntities:entities.length?[entities.at(-1)!.id]:[],selectedPoints:[],
     message: "",
   };
 }
@@ -374,7 +388,7 @@ export function sketchClick(
   if (d.tool === "select") {
     const anchor = sketchAnchors(d)
       .filter(
-        (a) => Math.hypot(a.point[0] - p[0], a.point[1] - p[1]) <= tolerance,
+        (a) => Math.hypot(a.point[0] - p[0], a.point[1] - p[1]) <= tolerance*(a.kind==="point"?1:0.55),
       )
       .sort(
         (a, b) =>
@@ -418,19 +432,19 @@ export function sketchClick(
     return { ...d, message: "Choose a different point." };
   if (d.tool === "line") {
     const closed=closesLineOutline(d,a,p);
-    return {
+    return connectNewSketchLines(d,{
       ...addEntities(d, [
         { type: "line", x1: a[0], y1: a[1], x2: p[0], y2: p[1] },
       ]),
       pending: closed?[]:[p],
       cursor:closed?null:p,
-    };
+    });
   }
   if (d.tool === "rectangle") {
     if (Math.abs(p[0] - a[0]) < 1e-6 || Math.abs(p[1] - a[1]) < 1e-6)
       return { ...d, message: "Rectangle width and height must be nonzero." };
     const corners = [a, [p[0], a[1]], p, [a[0], p[1]], a];
-    return {
+    return connectNewSketchLines(d,{
       ...addEntities(
         d,
         corners.slice(0, 4).map((c, i) => ({
@@ -442,7 +456,7 @@ export function sketchClick(
         })),
       ),
       pending: [],
-    };
+    });
   }
   const radius = Math.hypot(p[0] - a[0], p[1] - a[1]);
   if (d.tool === "circle")

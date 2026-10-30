@@ -14,6 +14,7 @@ export function inspectorMeasurements(
       o.kind !== "assembly" &&
       (part || state.document.components[o.definition]?.purpose !== "tool") &&
       !o.suppressed &&
+      (component || !state.document.structure_version || (!o.library && o.layout===state.document.active_layout)) &&
       (!component || part || o.id.startsWith(`${selection?.occurrence}/`)),
   );
   const definitions = part

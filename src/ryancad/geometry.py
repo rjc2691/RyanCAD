@@ -167,8 +167,8 @@ class Evaluator:
         self.profile_display_cache = {}
         self.maximum_cache = 300
 
-    def evaluate(self, payload, rollback=None, tessellation=.08):
-        from build123d import Align, Axis, Box, Cylinder, Edge, Face, Location, Plane, Solid, Wire
+    def evaluate(self, payload, rollback=None, tessellation=.08, _variations=True, _component_ids=None):
+        from build123d import Align, Axis, Box, Cylinder, Edge, Face, Location, Plane, Solid, Sphere, Wire
         from .sketches import solve_sketch
         document = Document.model_validate(payload)
         values = evaluate_parameters(document)
@@ -255,6 +255,10 @@ class Evaluator:
                         elif feature.type == "mesh":
                             from .file_formats import mesh_solid
                             tool = mesh_solid(feature.options)
+                        elif feature.type == "sphere":
+                            if q["diameter"] <= 1e-5:
+                                raise CadError("invalid_dimension", "Diameter must be positive.")
+                            tool = Sphere(q["diameter"] / 2).translate((q["x"], q["y"], q["z"]))
                         elif feature.type in {"box", "rectangle"}:
                             if min(q["length"], q["width"]) <= 1e-5:
                                 raise CadError("invalid_dimension", "Length and width must be positive.")
@@ -452,7 +456,7 @@ class Evaluator:
         self.shapes = {}
         resolve_component("root")
         for identifier, component in document.components.items():
-            if component.kind == "assembly":
+            if component.kind == "assembly" or (_component_ids is not None and identifier not in _component_ids):
                 continue
             shape, key = resolve_component(identifier)
             if shape is None:
@@ -556,6 +560,21 @@ class Evaluator:
             else: profile_info[identifier]={"status":"open"}
         if len(self.profile_display_cache)>self.maximum_cache:
             self.profile_display_cache={k:self.profile_display_cache[k] for k in list(self.profile_display_cache)[-self.maximum_cache:]}
+        # Evaluate each parameter context against the same feature definitions.
+        # Only body outputs are namespaced; no feature/parameter copies are saved.
+        if _variations and document.variations:
+            from .project_structure import descendants, variation_values, variation_definition
+            all_shapes = dict(self.shapes)
+            for variant in document.variations.values():
+                candidate, _ = variation_values(document, variant)
+                variant_result = self.evaluate(candidate.model_dump(mode="json"), rollback, tessellation, _variations=False, _component_ids=descendants(document, variant.part))
+                for identifier in descendants(document, variant.part):
+                    if identifier in variant_result["components"]:
+                        key = variation_definition(variant.id, identifier)
+                        output[key] = variant_result["components"][identifier]
+                        if identifier in self.shapes:
+                            all_shapes[key] = self.shapes[identifier]
+            self.shapes = all_shapes
         return {"components": output, "timings": timings, "bindings": bindings, "sketches": sketches, "profiles":profile_info, "values": values,"operation_decisions":operation_decisions,"operation_displays":operation_displays, "reference_snapshots": reference_snapshots}
 
     def measure(self, payload, first, second, matrices):

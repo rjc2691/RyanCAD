@@ -20,7 +20,8 @@ export const TOOLBAR_SHORTCUTS: Record<
   agents: { label: "Shift+N", code: "KeyN", shift: true },
   account: { label: "Shift+U", code: "KeyU", shift: true },
   search: { label: "Ctrl/⌘+K", code: "KeyK", command: true },
-  sketch_select: { label: "V", code: "KeyV" },
+  sketch_select: { label: "Space", code: "Space" },
+  sketch_move:{label:"M",code:"KeyM"},
   sketch_line: { label: "L", code: "KeyL" },
   sketch_rectangle: { label: "R", code: "KeyR" },
   sketch_circle: { label: "C", code: "KeyC" },
@@ -28,6 +29,8 @@ export const TOOLBAR_SHORTCUTS: Record<
   sketch_point: { label: "P", code: "KeyP" },
   sketch_project: { label: "J", code: "KeyJ" },
   sketch_dimension: { label: "D", code: "KeyD" },
+  sketch_connect: {label:"K",code:"KeyK"},
+  sketch_disconnect: {label:"U",code:"KeyU"},
 };
 export type Binding = (typeof TOOLBAR_SHORTCUTS)[string];
 export const MODEL_TOOLBAR_ORDER = [
@@ -63,6 +66,7 @@ export const ACTION_NAMES: Record<string, string> = {
   account: "Account menu",
   search: "Command search",
   sketch_select: "Sketch Select",
+  sketch_move:"Sketch Move",
   sketch_line: "Sketch Line",
   sketch_rectangle: "Sketch Rectangle",
   sketch_circle: "Sketch Circle",
@@ -70,6 +74,8 @@ export const ACTION_NAMES: Record<string, string> = {
   sketch_point: "Sketch Point",
   sketch_project: "Sketch Project",
   sketch_dimension: "Sketch Dimension",
+  sketch_connect:"Sketch Connect",
+  sketch_disconnect:"Sketch Disconnect",
 };
 const GLOBAL = new Set(["import", "export", "agents", "account", "search"]);
 export const shortcutScope = (id: string) =>
@@ -87,7 +93,7 @@ export function normalizeToolbarPreferences(raw: any): ToolbarPreferences {
     else if (
       b &&
       typeof b.code === "string" &&
-      /^(Key[A-Z]|Digit[0-9]|F[1-9][0-2]?|Comma|Period|Slash|Semicolon|Quote|BracketLeft|BracketRight|Backslash|Minus|Equal)$/.test(
+      /^(Key[A-Z]|Digit[0-9]|F[1-9][0-2]?|Space|Comma|Period|Slash|Semicolon|Quote|BracketLeft|BracketRight|Backslash|Minus|Equal)$/.test(
         b.code,
       )
     )

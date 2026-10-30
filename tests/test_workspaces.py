@@ -120,8 +120,8 @@ def test_existing_project_is_copied_deliberately_and_native_import_preserves_his
         archive = request(client, "GET", "/api/native", cookie, copied).content
         imported = request(client, "POST", "/api/workspace/import", cookie, content=archive).json()["design_id"]
         state = request(client, "GET", "/api/state", cookie, imported).json()
-        assert state["document"]["name"] == "Existing mold"
-        assert state["document"]["revision"] == 1
+        assert state["document"]["name"] == "Existing mold 2"
+        assert state["document"]["revision"] == 2
         assert state["can_undo"]
         # Deletion cannot race an HTTP request bound to this design.
         manager = client.app.state.workspaces
@@ -175,3 +175,27 @@ def test_parallel_designs_keep_geometry_jobs_and_downloads_scoped(tmp_path):
         assert request(client, "GET", f"/api/exports/{export_id}?design_id={a}", first).status_code == 200
         assert request(client, "GET", f"/api/exports/{export_id}", first, another).status_code == 400
         assert request(client, "GET", f"/api/exports/{export_id}?design_id={a}", second).status_code == 400
+
+
+def test_design_names_are_unique_across_creation_and_direct_rename(tmp_path):
+    from ryancad.workspaces import WorkspaceManager
+    from ryancad.service import CadService
+    from ryancad.model import Command, Actor
+    from ryancad.errors import CadError
+    legacy=CadService(tmp_path/"legacy")
+    manager=WorkspaceManager(tmp_path/"workspace",legacy)
+    try:
+        code="w"*48
+        manager.ensure(code)
+        first=manager.create(code,"Bracket")
+        second=manager.create(code,"  bracket  ")
+        assert manager._name(code,second)=="bracket 2"
+        _,current=manager.service(code,second)
+        with pytest.raises(CadError,match="unique"):
+            current._command(Actor(),command=Command(name="document.rename",args={"name":" BRACKET "},expected_revision=current.document.revision),signature="duplicate")
+        assert current.document.name=="bracket 2"
+        manager.delete(code,first)
+        with pytest.raises(CadError,match="unique"):
+            manager.unique_design_name(code,"bracket")
+    finally:
+        manager.close();legacy.close()

@@ -275,7 +275,7 @@ export function initialOperation(
                 ? "face"
                 : "rectangle",
     motion: selection?.edge ? "sweep" : "linear",
-    result: selection ? "auto" : "new",
+    result: selection?.edge ? "cut" : selection ? "auto" : "new",
     target: selection,
     origin: "reference",
     reference: ref,
@@ -349,6 +349,7 @@ export function applyPreset(d: OperationDraft, preset: string): OperationDraft {
       ...common,
       name: preset === "fillet" ? "Round edge" : "Bevel edge",
       profile: preset,
+      result: "cut",
       motion: "sweep",
       plane: "perpendicular",
       direction: "edge",
@@ -646,7 +647,7 @@ function inferSingleSelection(
           ? { origin: "reference", reference: path }
           : {}),
         ...(missingProfile
-          ? { profile: "fillet", motion: "sweep", plane: "perpendicular" }
+          ? { profile: "fillet", motion: "sweep", plane: "perpendicular", result: "cut" }
           : {}),
         ...(d.motion === "linear" && selection.edge.type !== "LINE"
           ? { motion: "sweep" }
@@ -1144,8 +1145,12 @@ export function operationFrame(
     }
   }
   if (isFinish(d)) {
-    profileLoops = (display?.finish_section?.loops || []).map(
-      (loop: number[][]) => loop.map((p) => new THREE.Vector3().fromArray(p)),
+    const section = display?.tool_profile || display?.finish_section;
+    const placement = section?.origin
+      ? origin.clone().sub(new THREE.Vector3().fromArray(section.origin))
+      : new THREE.Vector3();
+    profileLoops = (section?.loops || []).map(
+      (loop: number[][]) => loop.map((p) => new THREE.Vector3().fromArray(p).add(placement)),
     );
     profileRegions = profileLoops.length ? [profileLoops] : [];
   }
@@ -1324,7 +1329,7 @@ export function operationFrame(
     projectedTarget: display?.travel?.end
       ? new THREE.Vector3().fromArray(display.travel.end)
       : travelPath.at(-1),
-    sectionEffect: display?.finish_section?.effect,
+    sectionEffect: display?.tool_profile?.effect || display?.finish_section?.effect,
     origin,
     baseOrigin: base,
     profileRadius: n("diameter") / 2,

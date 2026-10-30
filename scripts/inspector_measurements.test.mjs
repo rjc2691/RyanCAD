@@ -11,6 +11,16 @@ const fixture=()=>({document:{components:{p:{kind:'solid'},q:{kind:'solid'},a:{k
 test('design totals count linked and hidden instances, excluding suppressed parts',()=>{
  const m=inspectorMeasurements(fixture(),null);assert.equal(m.scope,'design');assert.equal(m.volume,25);assert.equal(m.area,48);assert.equal(m.count,3);
 });
+
+test('structured design totals use only the active layout, without authoring or alternate-layout copies',()=>{
+ const s=fixture();s.document.structure_version=1;s.document.active_layout='layout1';
+ s.occurrences=s.occurrences.map(o=>({...o,layout:'layout1'}));
+ s.occurrences.push({id:'library',definition:'p',kind:'solid',library:true},{id:'alternate',definition:'p',kind:'solid',layout:'layout2'});
+ assert.equal(inspectorMeasurements(s,null).volume,25);
+ assert.equal(inspectorMeasurements(s,{definition:'p',occurrence:'library'}).volume,10);
+ s.document.active_layout='layout2';assert.equal(inspectorMeasurements(s,null).volume,10);
+ s.document.active_layout='empty';assert.equal(inspectorMeasurements(s,null).volume,0);
+});
 test('selected part shows one component instead of every linked use',()=>{
  const m=inspectorMeasurements(fixture(),{definition:'p',occurrence:'a/p'});assert.equal(m.scope,'component');assert.equal(m.volume,10);assert.equal(m.area,20);assert.equal(m.count,1);
 });

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 import copy
+from contextlib import nullcontext
 import hashlib
 import json
 import math
@@ -21,9 +22,12 @@ from .worker import GeometryWorker
 
 
 from .placements import local_matrix, flatten_instances, pattern_delta
+from .project_structure import public_document, part_parameters
 
 
 def validate_document(document):
+    from .project_structure import validate_structure
+    validate_structure(document)
     if "root" not in document.components or document.components["root"].kind != "assembly":
         raise CadError("invalid_document", "A document requires a root assembly.")
     if set(document.feature_order) != set(document.features) or len(document.feature_order) != len(document.features):
@@ -86,6 +90,8 @@ def validate_document(document):
 
 class CadService:
     def __init__(self, directory: Path):
+        self.design_name_guard = None
+        self.design_name_lock = None
         self.store = ProjectStore(directory)
         self.document = self.store.load()
         validate_document(self.document)
@@ -337,6 +343,8 @@ class CadService:
                 redo = []
             from .simple_values import simplify_values
             simplify_values(candidate)
+            from .project_structure import normalize_structure
+            normalize_structure(candidate, actor)
             validate_document(candidate)
             from .parameters import dependencies
             changed_parameters = {identifier for identifier, p in candidate.parameters.items() if identifier in self.document.parameters and
@@ -383,6 +391,7 @@ class CadService:
                                   ownership_change={"reason": "disconnected_addition", "from": previous.id, "to": component.id})
                     affected += [component.id, instance.id]
                     description = f"Create separate component · {component.name}"
+                    normalize_structure(candidate, actor)
                     validate_document(candidate)
                     evaluated = self.geometry.call("evaluate", payload=candidate.model_dump(mode="json"))
             finally:
@@ -416,9 +425,12 @@ class CadService:
                                    for entry, label in zip(command.args.get("commands", []), result.get("descriptions", []))] if command.name == "batch" else [])
             result = {**result, "revision": candidate.revision, "document_id": candidate.id, "description": description,
                       "affected": affected, "saved": True, "action_id": action.id}
-            self.store.commit(candidate, action, command.request_id, signature, result, undo, redo, checkpoint)
-            with self.state_lock:
-                self.document, self.evaluation = candidate, evaluated
+            with self.design_name_lock if self.design_name_lock is not None else nullcontext():
+                if self.design_name_guard and (candidate.name != self.document.name or command.name == "document.rename"):
+                    candidate.name = self.design_name_guard(candidate.name)
+                self.store.commit(candidate, action, command.request_id, signature, result, undo, redo, checkpoint)
+                with self.state_lock:
+                    self.document, self.evaluation = candidate, evaluated
             self.history_cache.clear()
             if preview_token:
                 self.previews.pop(preview_token, None)
@@ -438,14 +450,16 @@ class CadService:
                 values = evaluate(document)
             occurrences = flatten_instances(document, values)
             parameter_graph = graph(document, values)
-            physical = [i for i in occurrences if i["kind"] != "assembly" and i.get("purpose")!="tool" and not i["suppressed"]]
+            physical = [i for i in occurrences if i["kind"] != "assembly" and i.get("purpose")!="tool" and not i["suppressed"] and (not document.structure_version or i.get("layout") == document.active_layout)]
             summary = {"instances": len(physical), "definitions": len({i["definition"] for i in physical}),
                        "volume_mm3": sum(evaluation["components"].get(i["definition"], {}).get("volume") or 0 for i in physical),
                        "area_mm2": sum(evaluation["components"].get(i["definition"], {}).get("area") or 0 for i in physical)}
             undo, redo = self.store.stacks()
-            return {"document": document.model_dump(mode="json"), "geometry": self._public_geometry(evaluation),
+            return {"document": public_document(document), "geometry": self._public_geometry(evaluation),
                     "parameter_graph": parameter_graph["parameters"], "fits": parameter_graph["fits"], "occurrences": occurrences,
                     "summary": summary, "timings": evaluation.get("timings", {}), "sketches": evaluation.get("sketches", {}), "profiles": evaluation.get("profiles", {}),
+                    "operation_displays": evaluation.get("operation_displays", {}),
+                    "part_parameters": {c.id: part_parameters(document, c.id) for c in document.components.values() if c.structure_role == "part"},
                     "actions": self.store.actions(), "checkpoints": self.store.checkpoints(), "can_undo": bool(undo), "can_redo": bool(redo),
                     "save_status": "snapshot_warning" if (self.store.error or self.store.snapshot_error) else "saved", "save_error": self.store.error or self.store.snapshot_error,
                     "worker_status": self.geometry.status, "sequence": self.sequence,
@@ -459,7 +473,7 @@ class CadService:
             if payload.get("expected_revision") != self.document.revision:
                 raise CadError("stale_revision", "Refresh the design before exporting the current revision.")
             document = self.document.model_dump(mode="json")
-            occurrences = [i for i in flatten_instances(self.document, evaluate(self.document)) if i["kind"] != "assembly" and i.get("purpose")!="tool" and not i["suppressed"]]
+            occurrences = [i for i in flatten_instances(self.document, evaluate(self.document)) if i["kind"] != "assembly" and i.get("purpose")!="tool" and not i["suppressed"] and (not self.document.structure_version or i.get("layout") == self.document.active_layout)]
             wanted = payload["instance_ids"] if payload.get("instance_ids") is not None else [i["id"] for i in occurrences]
             selected = [i for i in occurrences if i["id"] in wanted]
             if len(selected) != len(set(wanted)) or not selected:
@@ -470,7 +484,7 @@ class CadService:
             destination = root / export_id
             selections = []
             for index, instance in enumerate(selected):
-                label = re.sub(r"[^\w .-]", "_", self.document.components[instance["definition"]].name, flags=re.UNICODE).strip(" .")[:70] or "part"
+                label = re.sub(r"[^\w .-]", "_", self.document.components[instance.get("source_definition", instance["definition"])].name, flags=re.UNICODE).strip(" .")[:70] or "part"
                 selections.append({"definition": instance["definition"], "instance_id": instance["id"], "filename": f"{index + 1:02d}_{label}.stl",
                                    "frame": payload.get("frame", "part"), "matrix": instance["matrix"] if payload.get("frame") == "assembly" else None})
             receipt = self.geometry.call("export", payload=document, selections=selections, destination=str(destination),

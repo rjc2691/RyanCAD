@@ -85,6 +85,8 @@ def test_corner_section_and_target_extent_survive_native_preview_commit(client):
     ref={"component":first["component_id"],"occurrence":first["instance_id"],"edge":edge["signature"],"anchor":"start"}
     preview=wait(client,client.post("/api/previews",json={"name":"operation.create","expected_revision":1,"args":{"target":first["component_id"],"target_occurrence":first["instance_id"],"profile":"chamfer","path_reference":ref,"travel_target":{**ref,"anchor":"mid"},"values":{"amount":2}}}))["result"]
     assert preview["operation_display"]["finish_section"]["area"]==pytest.approx(2)
+    assert preview["operation_display"]["tool_profile"]["temporary"]
+    assert preview["operation_display"]["tool_profile"]["loops"]==preview["operation_display"]["finish_section"]["loops"]
     assert preview["operation_display"]["travel"]["distance"]==pytest.approx(5)
     assert client.get("/api/state").json()["document"]["revision"]==1
     wait(client,client.post(f"/api/previews/{preview['preview_token']}/commit"))

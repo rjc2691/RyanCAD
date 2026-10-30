@@ -4,6 +4,7 @@ import { ParameterInput } from "./Forms";
 import type { Feature, State } from "./types";
 import { FEATURE_EDIT_SECTION_ORDER, PATH_TYPE_LABELS, PROFILE_SHAPE_LABELS, featureEditChanges, featureEditValues, featureFieldLabel, featureFieldSection, featureFieldVisible, featureSavedReferences, type SavedFeatureReference } from "./featureEditModel";
 import { useOperationPreview } from "./operations/useOperationPreview";
+import GeneratedProfileReference from "./GeneratedProfileReference";
 
 export interface FeatureEditHandle { confirm: () => void; cancel: () => void }
 
@@ -62,8 +63,10 @@ export default forwardRef<FeatureEditHandle, {
   const sections = feature.type === "operation" ? ["Tool Profile", "Tool Path", "Tool Origin"] : [...new Set(Object.keys(values).filter(featureFieldVisible).map(field => featureFieldSection(feature, field)))];
   sections.sort((a, b) => FEATURE_EDIT_SECTION_ORDER.indexOf(a) - FEATURE_EDIT_SECTION_ORDER.indexOf(b));
   const finish = ["fillet", "chamfer"].includes(feature.options.profile);
+  const display = preview.report?.operation_display || state.operation_displays?.[feature.id];
+  const generatedProfile = display?.tool_profile || display?.finish_section;
   const effectKey = feature.type === "operation" ? "result" : "operation";
-  const effect = options[effectKey] ?? feature.options[effectKey];
+  const effect = options[effectKey] ?? (finish && !feature.options.corner_effect_version ? generatedProfile?.effect === "added" ? "add" : "cut" : feature.options[effectKey]);
   const showEffect = feature.type === "operation" || effect !== undefined;
   const first = state.document.components[feature.owner]?.feature_ids[0] === feature.id;
   const status = problem || error || preview.error || (committing ? "Applying changes…" : !changes ? "No changes" : ready ? "Preview validated" : preview.pending ? "Rebuilding design…" : "Loading preview…");
@@ -72,12 +75,12 @@ export default forwardRef<FeatureEditHandle, {
     <div className="operation-fields">
       <p className="feature-edit-context">{state.document.components[feature.owner]?.name} · Feature {state.document.feature_order.indexOf(feature.id) + 1} of {state.document.feature_order.length}</p>
       <p className="feature-edit-help">Changes rebuild this feature and all later features. Original profile and references are retained.</p>
-      {showEffect && <section className="operation-section" data-tool-section="effect"><h3>Tool Effect</h3><label className="field"><select aria-label="Tool Effect Type" disabled={finish} value={finish ? "finish" : effect || "add"} onChange={e => setOptions(o => ({...o, [effectKey]: e.target.value}))}>
-        {finish ? <option value="finish">Refine edge</option> : <>{first && <option value="new">New component</option>}{feature.type === "operation" && <option value="auto">Auto · detect add / remove</option>}<option value="add">Add material</option><option value="cut">Remove material</option><option value="intersect">Keep intersection</option></>}
+      {showEffect && <section className="operation-section" data-tool-section="effect"><h3>Tool Effect</h3><label className="field"><select aria-label="Tool Effect Type" value={effect || "add"} onChange={e => setOptions(o => ({...o, [effectKey]: e.target.value}))}>
+        {first && !finish && <option value="new">New component</option>}{feature.type === "operation" && <option value="auto">Auto · detect add / remove</option>}<option value="add">Add material</option><option value="cut">Remove material</option><option value="intersect">Keep intersection</option>
       </select></label></section>}
       {sections.map(section => <section className="operation-section" key={section} data-tool-section={section.replace("Tool ", "").toLowerCase()}><h3>{section}</h3>
-        {section === "Tool Profile" && <><label className="field"><span>Tool Profile Shape</span><select aria-label="Tool Profile Shape" disabled value={feature.options.profile}><option value={feature.options.profile}>{PROFILE_SHAPE_LABELS[feature.options.profile] || feature.options.profile}</option></select></label><SavedReferences role="profile" title="Tool Profile" references={featureSavedReferences(feature, state, "profile")} /></>}
-        {section === "Tool Path" && <><label className="field"><span>Tool Path Type</span><select aria-label="Tool Path Type" disabled value={feature.options.motion}><option value={feature.options.motion}>{finish ? "Native edge finish" : PATH_TYPE_LABELS[feature.options.motion] || feature.options.motion}</option></select></label><SavedReferences role="path" title="Tool Path" references={featureSavedReferences(feature, state, "path")} />{featureSavedReferences(feature, state, "target").length > 0 && <SavedReferences role="path" title="Travel target point" references={featureSavedReferences(feature, state, "target")} />}</>}
+        {section === "Tool Profile" && <><label className="field"><span>Tool Profile Shape</span><select aria-label="Tool Profile Shape" disabled value={feature.options.profile}><option value={feature.options.profile}>{PROFILE_SHAPE_LABELS[feature.options.profile] || feature.options.profile}</option></select></label>{finish ? <GeneratedProfileReference shape={feature.options.profile} profile={generatedProfile} updating={preview.pending} /> : <SavedReferences role="profile" title="Tool Profile" references={featureSavedReferences(feature, state, "profile")} />}</>}
+        {section === "Tool Path" && <><label className="field"><span>Tool Path Type</span><select aria-label="Tool Path Type" disabled value={feature.options.motion}><option value={feature.options.motion}>{PATH_TYPE_LABELS[feature.options.motion] || feature.options.motion}</option></select></label><SavedReferences role="path" title="Tool Path" references={featureSavedReferences(feature, state, "path")} />{featureSavedReferences(feature, state, "target").length > 0 && <SavedReferences role="path" title="Travel target point" references={featureSavedReferences(feature, state, "target")} />}</>}
         {section === "Tool Origin" && <SavedReferences role="origin" title="Tool Origin" references={featureSavedReferences(feature, state, "origin")} />}
         {Object.keys(values).some(field => featureFieldVisible(field) && featureFieldSection(feature, field) === section) && <div className="field-grid">{Object.keys(values).filter(field => featureFieldVisible(field) && featureFieldSection(feature, field) === section).map(field => <ParameterInput key={field} state={state} label={featureFieldLabel(feature, field)} value={values[field]} kind={state.document.parameters[feature.parameters[field]].kind} unitLabel={field === "path_percent" ? "%" : undefined} onChange={value => {setError(""); setValues(v => ({...v, [field]: value}));}} />)}</div>}
         {section === "Tool Path" && !finish && feature.options.motion !== "none" && <>

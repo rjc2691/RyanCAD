@@ -1,3 +1,4 @@
+import {resolveNumericText} from "./NumericInput";
 import {
   forwardRef,
   useEffect,
@@ -43,6 +44,8 @@ export interface MoveComponentHandle {
   cancel: () => void;
   capture: (selection: Selection | null) => void;
   chooseAxis: (axis: WorldAxis) => void;
+  slideAxis: (axis:WorldAxis,distance:number)=>void;
+  setDistance:(value:string)=>void;
   canChooseAxis: () => boolean;
   chooseOrigin: () => void;
 }
@@ -51,6 +54,8 @@ export default forwardRef<
   {
     state: State;
     target: Selection | null;
+    entityName?:"part"|"component";
+    scope?:string;
     axisRequest?: { axis: WorldAxis; id: number };
     renderedToken: string | null;
     onTarget: (target: Selection | null) => void;
@@ -64,6 +69,8 @@ export default forwardRef<
   {
     state,
     target,
+    entityName="component",
+    scope,
     axisRequest,
     renderedToken,
     onTarget,
@@ -75,6 +82,8 @@ export default forwardRef<
   },
   ref,
 ) {
+  const title=`Move ${entityName==="part"?"Part":"Component"}`,noun=entityName;
+  const candidates=state.occurrences.filter(o=>!o.suppressed&&(entityName!=="part"||!state.document.structure_version||(!o.library&&o.layout===state.document.active_layout&&["part","group"].includes(o.structure_role||"")&&(!scope||o.id.slice(0,o.id.lastIndexOf("/"))===scope))));
   const occurrence = state.occurrences.find((o) => o.id === target?.occurrence);
   const initial = () =>
     Object.fromEntries(
@@ -183,9 +192,15 @@ export default forwardRef<
       (!pick || pick === "direction"),
     cancel: onClose,
     chooseAxis,
+    slideAxis(axis,distance){
+      if(committingRef.current||!occurrence||method==="rotate")return;
+      setMethod("reference");setRefs(r=>({...r,direction:worldAxisReference(axis)}));setPick(null);setReverse(false);
+      setValues(v=>({...v,distance:String(distance)}));setConfirmIntent("");setNotice("");
+    },
+    setDistance(value){if(!committingRef.current)change("distance",value);},
     chooseOrigin() {
       if (!occurrence) {
-        setNotice("Choose a component before selecting its movement points.");
+        setNotice(`Choose a ${noun} before selecting its movement points.`);
         return;
       }
       const slot = pick === "origin" ? "origin" : "target";
@@ -216,7 +231,7 @@ export default forwardRef<
         setNotice(
           method === "rotate"
             ? "Select a straight edge for the rotation axis."
-            : "Choose a component or edit the XYZ fields.",
+            : `Choose a ${noun} or edit the XYZ fields.`,
         );
         return;
       }
@@ -226,7 +241,7 @@ export default forwardRef<
         selection.occurrence !== occurrence.id &&
         !selection.occurrence.startsWith(occurrence.id + "/")
       ) {
-        setNotice("Pick the origin on the active component.");
+        setNotice(`Pick the origin on the active ${noun}.`);
         return;
       }
       const reference = moveReference(
@@ -247,7 +262,7 @@ export default forwardRef<
     confirm() {
       if (committingRef.current) return;
       if (!args || preview.error) {
-        setNotice(problem || preview.error || "Select a component to move.");
+        setNotice(problem || preview.error || `Select a ${noun} to move.`);
         return;
       }
       if (ready) void accept();
@@ -271,6 +286,9 @@ export default forwardRef<
     const guide: MovementGuideData = preview.ready
       ? { ...preview.report?.changes?.movement }
       : {};
+    guide.slideAvailable=!!occurrence && method==="reference" && !committing;
+    guide.distanceValue=values.distance || automaticDistance;
+    guide.slideDistance=Number(values.distance)||0;
     guide.worldAxis = method !== "axes" ? refs.direction?.worldAxis : undefined;
     if (refs.origin && method === "reference")
       guide.origin = worldMovePoint(refs.origin, state);
@@ -290,11 +308,26 @@ export default forwardRef<
         }
       }
     }
+    if(occurrence&&method==="reference"){
+      const origin=refs.origin?worldMovePoint(refs.origin,state):worldMovePoint(moveReference({occurrence:occurrence.id,definition:occurrence.definition},state),state);
+      const target=refs.target?worldMovePoint(refs.target,state):null;
+      let direction:number[]|undefined;
+      if(refs.direction){const a=worldMovePoint({...refs.direction,anchor:"start"},state),b=worldMovePoint({...refs.direction,anchor:"end"},state);if(a&&b)direction=b.map((v,i)=>v-a[i]);}
+      else if(origin&&target)direction=target.map((v,i)=>v-origin[i]);
+      const distance=resolveNumericText(guide.distanceValue||"0",Object.values(state.document.parameters),Object.fromEntries(Object.entries(state.parameter_graph).map(([id,p])=>[id,p.value])),"length");
+      if(origin&&direction&&Number.isFinite(distance)){
+        const length=Math.hypot(...direction);
+        if(length>1e-9){guide.liveDelta=direction.map(v=>v/length*distance*(refs.direction&&reverse?-1:1));guide.origin=origin;guide.destination=origin.map((v,i)=>v+guide.liveDelta![i]);}
+      }
+      guide.slideDistance=distance||0;
+    }
     onGuide(guide);
   }, [
     refs,
     method,
     reverse,
+    values.distance,
+    committing,
     preview.ready,
     preview.report,
     state.document.revision,
@@ -339,7 +372,7 @@ export default forwardRef<
                 : slot === "direction"
                   ? "Pick a straight edge"
                   : slot === "origin"
-                    ? "Pick on active component"
+                    ? `Pick on active ${noun}`
                     : "Pick in design"}
             </span>
             <MousePointer2 size={13} />
@@ -446,13 +479,13 @@ export default forwardRef<
   return (
     <aside
       className="right-panel operation-panel move-component-panel"
-      aria-label="Move Component workspace"
+      aria-label={`${title} workspace`}
     >
       <header className="operation-header">
-        <h2>Move Component</h2>
+        <h2>{title}</h2>
         <button
           className="icon-button"
-          aria-label="Cancel Move Component"
+          aria-label={`Cancel ${title}`}
           disabled={committing}
           onClick={onClose}
         >
@@ -482,16 +515,16 @@ export default forwardRef<
           </label>
         </section>
         <section className="operation-section">
-          <h3>Component</h3>
+          <h3>{entityName==="part"?"Part":"Component"}</h3>
           {occurrence ? (
             <>
               <div className="move-component-choice">
                 <button
                   className="move-target"
-                  aria-label="Change component"
+                  aria-label={`Change ${noun}`}
                   onClick={() => {
                     setPick("component");
-                    setNotice("Click the component to move.");
+                    setNotice(`Click the ${noun} to move.`);
                   }}
                 >
                   <strong>
@@ -507,8 +540,8 @@ export default forwardRef<
                 </button>
                 <button
                   className="icon-button"
-                  aria-label="Clear component"
-                  title="Clear component"
+                  aria-label={`Clear ${noun}`}
+                  title={`Clear ${noun}`}
                   onClick={() => onTarget(null)}
                 >
                   <X size={14} />
@@ -522,16 +555,16 @@ export default forwardRef<
               )}
               {occurrence.pattern_mode && (
                 <p className="operation-help">
-                  Moves the component pattern placement; copies keep their
+                  Moves the {noun} pattern placement; copies keep their
                   pattern spacing.
                 </p>
               )}
             </>
           ) : (
             <label className="field">
-              <span>Component to move</span>
+              <span>{entityName==="part"?"Part":"Component"} to move</span>
               <select
-                aria-label="Component to move"
+                aria-label={`${entityName==="part"?"Part":"Component"} to move`}
                 value=""
                 onChange={(e) => {
                   const o = state.occurrences.find(
@@ -542,10 +575,9 @@ export default forwardRef<
                 }}
               >
                 <option value="">
-                  Pick a component in the viewport or choose here
+                  Pick a {noun} in the viewport or choose here
                 </option>
-                {state.occurrences
-                  .filter((o) => !o.suppressed)
+                {candidates
                   .map((o) => (
                     <option key={o.id} value={o.id}>
                       {state.document.components[o.definition]?.name || o.name}{" "}
@@ -591,7 +623,7 @@ export default forwardRef<
                   <p className="operation-help">
                     Distances are offsets from the starting placement in the
                     parent frame. Rotation increments add to its X/Y/Z angles
-                    about the component origin.
+                    about the {noun} origin.
                   </p>
                 </section>
               </>
@@ -605,7 +637,7 @@ export default forwardRef<
                     {referenceField("origin", "Origin point")}
                     {!refs.origin && (
                       <small className="operation-help">
-                        Uses the component origin until a point is selected.
+                        Uses the {noun} origin until a point is selected.
                       </small>
                     )}
                     {referenceField("target", "Target point")}
@@ -632,7 +664,7 @@ export default forwardRef<
                       </button>
                     )}
                     <p className="operation-help">
-                      A point on this component sets the origin. A point
+                      A point on this {noun} sets the origin. A point
                       elsewhere sets the target. An edge sets direction. Exact
                       distance overrides target alignment.
                     </p>
@@ -752,7 +784,7 @@ export default forwardRef<
                 problem ||
                 preview.error ||
                 (!occurrence
-                  ? "Select a component to move"
+                  ? `Select a ${noun} to move`
                   : preview.pending
                     ? "Preparing move preview…"
                     : ready

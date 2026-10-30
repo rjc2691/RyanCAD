@@ -21,6 +21,7 @@ def references_component(value, component):
 
 FEATURE_FIELDS = {
     "mesh": {},
+    "sphere": {"diameter": ("length", 20), "x": ("length", 0), "y": ("length", 0), "z": ("length", 0)},
     "box": {"length": ("length", 40), "width": ("length", 30), "height": ("length", 10),
             "x": ("length", 0), "y": ("length", 0), "z": ("length", 0)},
     "cylinder": {"diameter": ("length", 10), "height": ("length", 20),
@@ -96,7 +97,7 @@ def create_component(document, actor, name, kind="solid", parent="root", color=N
         raise CadError("document_limit", "This release supports at most 250 component definitions.")
     base=str(name).strip()[:110] or "Part"
     label=base;index=2;names={c.name.strip().casefold() for c in document.components.values() if c.id!='root'}
-    while label.casefold() in names:label=f"{base} {index}";index+=1
+    while not document.structure_version and label.casefold() in names:label=f"{base} {index}";index+=1
     component = Component(id=uid("part" if kind != "assembly" else "asm"), name=label, kind=kind,
         color=color or PALETTE[(len(document.components) - 1) % len(PALETTE)], created_by=actor.id, modified_by=actor.id)
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", component.color):
@@ -140,7 +141,20 @@ def create_feature(document, actor, owner, feature_type, values=None, options=No
 
 def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dict, list[str], str]:
     """Mutate an isolated candidate; evaluator/persistence decide whether it can commit."""
+    from .project_structure import STRUCTURE_COMMANDS, structure_command
+    if name in STRUCTURE_COMMANDS:
+        return structure_command(document, actor, name, args)
+    if document.structure_version:
+        owner = args.get("target") if name == "operation.create" else args.get("owner") if name == "feature.create" else None
+        if name == "feature.update":
+            edited = document.features.get(args.get("id"))
+            owner = edited.owner if edited else None
+        if owner and ("__" in owner or document.components.get(owner) and document.components[owner].read_only):
+            raise CadError("read_only_part", "Edit the base part to change a variation. Imported bodies are read-only.")
     if name == "operation.create":
+        if document.structure_version:
+            from .project_structure import resolve_operation_occurrences
+            args = resolve_operation_occurrences(document, args)
         from .operations import create_operation
         return create_operation(document, actor, args)
     if name == "feature.update":
@@ -149,6 +163,12 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
     if name == "document.rename":
         document.name = str(args.get("name", "Untitled design"))[:180]
         return {}, [], f"Rename design to {document.name}"
+    if name == "document.describe":
+        description = args.get("description", "")
+        if not isinstance(description, str) or len(description) > 4000:
+            raise CadError("invalid_description", "Design descriptions must be text containing at most 4000 characters.")
+        document.notes = description.strip()
+        return {}, [], "Update design description"
     if name == "document.units":
         if args.get("units") not in {"mm", "in"}:
             raise CadError("unsupported_unit", "Display units are mm or in.")
@@ -181,7 +201,7 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
         component = require(document.components, args["id"], "component")
         label=str(args["name"]).strip()[:120]
         if not label:raise CadError("invalid_name","Give the component a name.")
-        if label!=component.name and any(c.id not in {component.id,'root'} and c.name.strip().casefold()==label.casefold() for c in document.components.values()):
+        if (not document.structure_version or component.structure_role in {"part", "layout"}) and label!=component.name and any(c.id not in {component.id,'root'} and (not document.structure_version or c.structure_role==component.structure_role) and c.name.strip().casefold()==label.casefold() for c in document.components.values()):
             raise CadError("duplicate_name","That component name is already in use. Choose a unique name.")
         component.name = label
         component.modified_by = actor.id
@@ -446,6 +466,16 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
         return {}, [feature.id], f"Repair selection for {feature.name}"
     if name == "fit.create":
         raise CadError("unsupported_feature", "Cross-component fit constraints are disabled. Use independent dimensions or explicitly named values.")
+    if name == "sketch.delete":
+        feature = require(document.features, args.get("id"), "sketch")
+        if feature.type != "sketch":
+            raise CadError("invalid_selection", "Choose a sketch.")
+        if any(f.id != feature.id and feature.id in str(f.references) for f in document.features.values()):
+            raise CadError("sketch_in_use", "Other features still reference this sketch.")
+        document.components[feature.owner].feature_ids.remove(feature.id)
+        document.feature_order.remove(feature.id)
+        del document.features[feature.id]
+        return {}, [feature.id], f"Delete sketch · {feature.name}"
     if name.startswith("sketch."):
         from .sketches import edit_sketch
         return edit_sketch(document, actor, name, args)
@@ -510,6 +540,7 @@ COMMANDS = {
     "sketch.update": "Edit a sketch's geometry and constraints atomically, preserving surviving entity/parameter identities.",
     "sketch.remove_constraint": "Remove a sketch constraint by ID.",
     "batch": "Apply a bounded atomic command sequence; staged work commits together.",
+    "document.describe": "Edit the design description, stored in native document notes.",
     "document.rename": "Rename the design.", "document.units": "Change display units without changing physical geometry.",
     "recipe.load": "Load a native reference design: mold, plate or blank; replace requires explicit intent.",
     "history.undo": "Undo the latest transaction, preserving the audit trail.",
@@ -517,3 +548,8 @@ COMMANDS = {
     "checkpoint.create": "Create a named durable checkpoint.",
     "checkpoint.restore": "Restore a named checkpoint as a new audited revision.",
 }
+
+from .project_structure import STRUCTURE_COMMANDS
+COMMANDS.update(STRUCTURE_COMMANDS)
+
+COMMANDS["sketch.delete"] = "Delete an unreferenced sketch; undo remains available."

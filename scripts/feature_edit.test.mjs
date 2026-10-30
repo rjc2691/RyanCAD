@@ -55,6 +55,6 @@ test('implicit planes, world directions, origins, saved sketches and travel targ
  assert.equal(featureSavedReferences(f,s,'origin')[0].label,'World origin');
  assert.equal(featureSavedReferences(f,s,'target')[0].label,'Midpoint · Edge 4 · Plate');
  f.options.profile='sketch';f.options.reference_snapshot={profile:'copied-brep'};assert.equal(featureSavedReferences(f,s,'profile')[0].label,'Saved sketch profile');
- f.options.profile='fillet';assert.equal(featureSavedReferences(f,s,'profile')[0].label,'Native corner section');
+ f.options.profile='fillet';assert.equal(featureSavedReferences(f,s,'profile')[0].label,'Round corner profile');
  assert.equal(featureSavedReferences(f,s,'origin')[0].label,'From Tool Path');
 });

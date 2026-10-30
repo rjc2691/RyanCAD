@@ -14,6 +14,10 @@ export interface MoveReference {
   label: string;
 }
 export interface MovementGuideData {
+  liveDelta?: number[];
+  distanceValue?: string;
+  slideAvailable?: boolean;
+  slideDistance?: number;
   worldAxis?: WorldAxis;
   origin?: number[];
   destination?: number[];

@@ -57,7 +57,7 @@ export function featureSavedReferences(feature: Feature, state: State, role: "or
     return [{label: "Saved origin", detail: "Original placement retained"}];
   }
   if (role === "profile") {
-    if (finish) return [{label: "Native corner section", detail: "Perpendicular to the selected Tool Path"}];
+    if (finish) return [{label: options.profile === "fillet" ? "Round corner profile" : "Bevel corner profile", detail: "Temporary profile · perpendicular to Tool Path"}];
     const profile = refs.profile && state.document.features[refs.profile];
     if (profile) return [{label: profile.name, detail: "Original sketch profile · read only"}];
     if (options.profile === "sketch" || snapshot?.profile) return [{label: "Saved sketch profile", detail: "Copied profile geometry · read only"}];

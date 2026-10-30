@@ -1,4 +1,5 @@
 import { referenceLabel } from "../geometryLabels";
+import GeneratedProfileReference from "../GeneratedProfileReference";
 import {
   referenceMembers,
   groupedSelectionProblem,
@@ -244,7 +245,7 @@ export default forwardRef<
     chooseOrigin() {
       if (isFinish(draft) && pick !== "travelTarget") {
         setNotice(
-          "Native corner finishes start on the selected edge. Use a travel target to limit a straight finish.",
+          "This profile starts on the selected path. Use a travel target to limit its travel.",
         );
         return;
       }
@@ -642,16 +643,12 @@ export default forwardRef<
           <label className="field">
             <select
               aria-label="Tool Effect Type"
-              value={isFinish(draft) ? "finish" : draft.result}
-              disabled={isFinish(draft)}
+              value={draft.result}
               onChange={(e) =>
                 patch({ result: e.target.value as OperationDraft["result"] })
               }
             >
-              {isFinish(draft) ? (
-                <option value="finish">Refine edge</option>
-              ) : (
-                [
+              {[
                   ["auto", "Auto · detect add / remove"],
                   ["new", "New component"],
                   ["add", "Add material"],
@@ -661,12 +658,11 @@ export default forwardRef<
                   <option
                     key={id}
                     value={id}
-                    disabled={id !== "new" && !draft.target}
+                    disabled={(id !== "new" && !draft.target) || (isFinish(draft) && id === "new")}
                   >
                     {label}
                   </option>
-                ))
-              )}
+                ))}
             </select>
           </label>
           {draft.target &&
@@ -677,7 +673,7 @@ export default forwardRef<
                 Edits affect all linked instances.
               </p>
             )}
-          {draft.result === "auto" && !isFinish(draft) && (
+          {draft.result === "auto" && (
             <div
               className="operation-auto-decision"
               role="note"
@@ -735,6 +731,7 @@ export default forwardRef<
                 }
                 patch({
                   profile: id as any,
+                  ...(["fillet", "chamfer"].includes(id) ? { result: "cut" as const } : {}),
                   ...(["circle", "rectangle", "polygon"].includes(id) &&
                   draft.pathReference?.selection.edge &&
                   draft.direction === "edge"
@@ -889,10 +886,7 @@ export default forwardRef<
                 referenceMembers(draft, "profile")[0],
               )}
             {isFinish(draft) && (
-              <div className="operation-reference-derived">
-                <strong>Native corner section</strong>
-                <small>Perpendicular to the selected Tool Path</small>
-              </div>
+              <GeneratedProfileReference embedded shape={draft.profile} profile={preview.report?.operation_display?.tool_profile || preview.report?.operation_display?.finish_section} updating={preview.pending} />
             )}
             {!["face", "sketch", "body", "fillet", "chamfer"].includes(
               draft.profile,
@@ -918,17 +912,6 @@ export default forwardRef<
                 "amount",
                 draft.profile === "fillet" ? "Radius" : "Bevel distance",
               )}
-              <p className="operation-help">
-                Native perpendicular{" "}
-                {preview.report?.operation_display?.finish_section?.effect ||
-                  "corner"}{" "}
-                section
-                {preview.ready &&
-                preview.report?.operation_display?.finish_section?.area
-                  ? ` · ${preview.report.operation_display.finish_section.area.toFixed(3)} mm²`
-                  : ""}
-                . Partial straight finishes have planar end caps.
-              </p>
             </>
           ) : (
             <>
@@ -1040,14 +1023,6 @@ export default forwardRef<
           aria-labelledby="tool-path-title"
         >
           <h3 id="tool-path-title">Tool Path</h3>
-          {isFinish(draft) ? (
-            <label className="field">
-              <span>Tool Path Type</span>
-              <select aria-label="Tool Path Type" disabled value="finish">
-                <option value="finish">Native edge finish</option>
-              </select>
-            </label>
-          ) : (
             <label className="field">
               <span>Tool Path Type</span>
               <select
@@ -1055,30 +1030,21 @@ export default forwardRef<
                 value={draft.motion}
                 onChange={(e) => patch({ motion: e.target.value as any })}
               >
-                <option value="linear">Straight travel / extrusion</option>
+                <option value="linear" disabled={isFinish(draft)}>Straight travel / extrusion</option>
                 <option value="sweep">Follow a design edge / sweep</option>
-                <option value="revolve">Rotate about an axis</option>
-                <option value="helix">Rotate and travel / helix</option>
-                <option value="none">No motion / placed Boolean</option>
-                <option value="mirror">Mirror about a plane</option>
-                <option value="pattern">
+                <option value="revolve" disabled={isFinish(draft)}>Rotate about an axis</option>
+                <option value="helix" disabled={isFinish(draft)}>Rotate and travel / helix</option>
+                <option value="none" disabled={isFinish(draft)}>No motion / placed Boolean</option>
+                <option value="mirror" disabled={isFinish(draft)}>Mirror about a plane</option>
+                <option value="pattern" disabled={isFinish(draft)}>
                   Connected repeat along direction
                 </option>
               </select>
             </label>
-          )}
           <div
             className="operation-reference-control"
             data-reference-role="path"
           >
-            {isFinish(draft) ? (
-              <>
-                <div className="operation-reference-derived">
-                  <strong>Native edge finish</strong>
-                </div>
-                {slotButton("path", "Tool Path reference", draft.pathReference)}
-              </>
-            ) : (
               <>
                 {!["mirror", "none"].includes(draft.motion) && (
                   <>
@@ -1096,11 +1062,11 @@ export default forwardRef<
                           })
                         }
                       >
-                        <option value="normal">Profile normal</option>
+                        <option value="normal" disabled={isFinish(draft)}>Profile normal</option>
                         <option value="edge">Picked edge direction</option>
-                        <option value="X">World X</option>
-                        <option value="Y">World Y</option>
-                        <option value="Z">World Z</option>
+                        <option value="X" disabled={isFinish(draft)}>World X</option>
+                        <option value="Y" disabled={isFinish(draft)}>World Y</option>
+                        <option value="Z" disabled={isFinish(draft)}>World Z</option>
                       </select>
                     </label>
                     {draft.direction === "edge" || draft.motion === "sweep" ? (
@@ -1148,7 +1114,6 @@ export default forwardRef<
                   </div>
                 )}
               </>
-            )}
             {(isFinish(draft) ||
               draft.direction === "edge" ||
               draft.motion === "sweep") &&

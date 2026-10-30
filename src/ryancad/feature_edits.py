@@ -13,6 +13,7 @@ def update_feature(document, actor, args):
     values, options = args.get("values", {}), args.get("options", {})
     if not isinstance(values, dict) or not isinstance(options, dict):
         raise CadError("invalid_value", "Feature values and options must be objects.")
+    options = dict(options)
     unknown = set(values) - set(feature.parameters)
     if unknown:
         raise CadError("unknown_field", f"This feature has no inputs named {', '.join(sorted(unknown))}.")
@@ -23,8 +24,8 @@ def update_feature(document, actor, args):
         result = options["result"]
         if result not in {"new", "auto", "add", "cut", "intersect"}:
             raise CadError("invalid_operation", "Choose new, auto, add, cut or intersect.")
-        if feature.options.get("profile") in {"fillet", "chamfer"} and result != feature.options.get("result"):
-            raise CadError("unsupported_edit", "A corner finish retains its native material-removal effect.")
+        if feature.options.get("profile") in {"fillet", "chamfer"} and result == "new":
+            raise CadError("unsupported_edit", "This generated profile uses the active component's edges. Choose add, remove or intersect.")
         if result == "new" and document.components[feature.owner].feature_ids[0] != feature.id:
             raise CadError("invalid_operation", "Only the first feature can create this component's initial body.")
     if "operation" in options and options["operation"] not in {"new", "add", "cut", "intersect"}:
@@ -54,6 +55,10 @@ def update_feature(document, actor, args):
             replacement = previous.id
         feature.parameters[field] = replacement
         affected.append(replacement)
+    if feature.type == "operation" and feature.options.get("profile") in {"fillet", "chamfer"}:
+        if not feature.options.get("corner_effect_version"):
+            options.setdefault("result", "auto")
+        feature.options["corner_effect_version"] = 1
     feature.options.update(options)
     if "suppressed" in args:
         if type(args["suppressed"]) is not bool:

@@ -13,7 +13,8 @@ import {
   bindingLabel,
   type Binding,
 } from "./toolbarShortcuts";
-export default function ToolbarSettings() {
+export default function ToolbarSettings({moveLabel="Move Component"}:{moveLabel?:string}) {
+  const actionName=(id:string)=>id==="transform"?moveLabel:ACTION_NAMES[id];
   const [prefs, setPrefs] = useState(getToolbarPreferences),
     [editing, setEditing] = useState<string | null>(null),
     [pending, setPending] = useState<Binding | null>(null),
@@ -102,7 +103,7 @@ export default function ToolbarSettings() {
             if (conflicts.length) {
               setPending(b);
               setWarning(
-                `${b.label} is assigned to ${conflicts.map((id) => ACTION_NAMES[id]).join(", ")}. Replace it? Those actions will become unassigned.`,
+                `${b.label} is assigned to ${conflicts.map((id) => actionName(id)).join(", ")}. Replace it? Those actions will become unassigned.`,
               );
             } else {
               assignShortcut(editing, b);
@@ -110,7 +111,7 @@ export default function ToolbarSettings() {
             }
           }}
         >
-          <strong>Press new shortcut for {ACTION_NAMES[editing]}</strong>
+          <strong>Press new shortcut for {actionName(editing)}</strong>
           <p>Esc cancels. Modifier keys alone are ignored.</p>
           {warning && <p role="alert">{warning}</p>}
           {pending && (
@@ -134,7 +135,7 @@ export default function ToolbarSettings() {
         {Object.keys(TOOLBAR_SHORTCUTS).map((id) => (
           <div key={id}>
             <span>
-              {ACTION_NAMES[id]}
+              {actionName(id)}
               <small>
                 {shortcutScope(id) === "sketch"
                   ? "Sketch"
@@ -146,7 +147,7 @@ export default function ToolbarSettings() {
             <button
               type="button"
               className="shortcut-edit-button"
-              aria-label={`Edit shortcut for ${ACTION_NAMES[id]}`}
+              aria-label={`Edit shortcut for ${actionName(id)}`}
               onClick={() => {
                 setEditing(id);
                 setPending(null);
@@ -176,10 +177,10 @@ export default function ToolbarSettings() {
       <div className="toolbar-order-list">
         {prefs.order.map((id, i) => (
           <div key={id}>
-            <span>{ACTION_NAMES[id]}</span>
+            <span>{actionName(id)}</span>
             <button
               type="button"
-              aria-label={`Move ${ACTION_NAMES[id]} earlier`}
+              aria-label={`Move ${actionName(id)} earlier`}
               disabled={i === 0}
               onClick={() => {
                 const order = [...prefs.order];
@@ -191,7 +192,7 @@ export default function ToolbarSettings() {
             </button>
             <button
               type="button"
-              aria-label={`Move ${ACTION_NAMES[id]} later`}
+              aria-label={`Move ${actionName(id)} later`}
               disabled={i === prefs.order.length - 1}
               onClick={() => {
                 const order = [...prefs.order];

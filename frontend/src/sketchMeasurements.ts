@@ -1,4 +1,5 @@
 import type { SketchDraft, SketchEntity, SketchPoint } from "./sketchModel";
+import {sketchAngle,sketchAxisAngle,interiorAngleValue} from "./sketchAngles.ts";
 export type SketchAnnotation = {
   id: string;
   kind: "length" | "angle";
@@ -8,6 +9,8 @@ export type SketchAnnotation = {
   end: SketchPoint;
   vertex?: SketchPoint;
   parameterName?: string;
+  reflex?: boolean;
+  axis?:string;
 };
 const fmt = (n: number) =>
   Number(n.toFixed(2)).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -27,7 +30,7 @@ const text = (c: any, measured: number, unit: string) => {
   return `${c?.parameterName ? "p: " : ""}${value} ${unit}`;
 };
 export function sketchMeasurements(
-  d: Pick<SketchDraft, "entities" | "constraints">,
+  d: Pick<SketchDraft, "entities" | "constraints"> & Partial<Pick<SketchDraft,"frame">>,
 ): SketchAnnotation[] {
   const lines = d.entities.filter(
     (e) => e.type === "line" && dist(end(e, 1), end(e, 2)) > 1e-8,
@@ -62,48 +65,30 @@ export function sketchMeasurements(
           c.type === "angle" &&
           ((c.a === a.id && c.b === b.id) || (c.a === b.id && c.b === a.id)),
       );
-      const pairs = ([1, 2] as const)
-        .flatMap((x) =>
-          ([1, 2] as const).map((y) => ({
-            x,
-            y,
-            d: dist(end(a, x), end(b, y)),
-          })),
-        )
-        .sort((x, y) => x.d - y.d);
-      if (pairs[0].d > 1e-5 && !c) continue;
-      const p = pairs[0],
-        vertex = end(a, p.x),
-        u = end(a, p.x === 1 ? 2 : 1),
-        v = end(b, p.y === 1 ? 2 : 1);
-      const ux = u[0] - vertex[0],
-        uy = u[1] - vertex[1],
-        vx = v[0] - vertex[0],
-        vy = v[1] - vertex[1];
-      const angle =
-        (Math.acos(
-          Math.max(
-            -1,
-            Math.min(
-              1,
-              (ux * vx + uy * vy) / (Math.hypot(ux, uy) * Math.hypot(vx, vy)),
-            ),
-          ),
-        ) *
-          180) /
-        Math.PI;
-      if (!Number.isFinite(angle) || (!c && (angle < 1 || angle > 179)))
+      const corner=sketchAngle(d.entities,a,b);
+      if(!corner.connected&&!c)continue;
+      const {vertex,start:u,end:v}=corner,angle=corner.value;
+      const displayConstraint=c&&!c.angle_frame&&typeof c.value==="number"?{...c,value:interiorAngleValue(c.a===a.id?c.value:-c.value,corner.frame)}:c;
+      if (!Number.isFinite(angle) || (!c && (angle < 1 || angle > 359)))
         continue;
       out.push({
         id: `angle:${a.id}:${b.id}`,
         kind: "angle",
         constrained: !!c,
         parameterName: c?.parameterName,
-        label: text(c, angle, "°"),
+        label: text(displayConstraint, angle, "°"),
         start: u,
         end: v,
         vertex,
+        reflex: angle>180,
       });
     }
+  for(const c of d.constraints.filter(c=>c.type==="angle"&&c.b?.startsWith("world:"))){
+    const e=lines.find(e=>e.id===c.a);if(!e)continue;
+    try{
+      const axis=c.b.slice(6),corner=sketchAxisAngle(d.frame||{origin:[0,0,0],u:[1,0,0],normal:[0,0,1]},axis,e),length=Math.hypot(e.x2-e.x1,e.y2-e.y1);
+      out.push({id:`angle:${e.id}:${c.b}`,kind:"angle",constrained:true,label:`${text(c,corner.value,"\u00b0")} \u00b7 ${axis}`,parameterName:c.parameterName,vertex:[e.x1,e.y1],start:[e.x2,e.y2],end:[e.x1+corner.direction[0]*length,e.y1+corner.direction[1]*length],axis});
+    }catch{/* An unavailable axis is reported by the solver, not drawn at an arbitrary angle. */}
+  }
   return out;
 }

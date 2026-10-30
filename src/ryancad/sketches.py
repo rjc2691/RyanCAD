@@ -120,7 +120,7 @@ def edit_sketch(document, actor, command, args):
         feature.options["constraints"] = []
         for supplied in args.get("constraints", []):
             prior = old_constraints.get(supplied.get("id"))
-            if prior and all(prior.get(k) == supplied.get(k) for k in ("type", "a", "b")):
+            if prior and all(prior.get(k) == supplied.get(k) for k in ("type", "a", "b", "angle_frame")):
                 if "parameter_key" in prior:
                     key = prior["parameter_key"]
                     identifier = existing_parameters[key]
@@ -156,6 +156,11 @@ def edit_sketch(document, actor, command, args):
     if kind not in CONSTRAINTS:
         raise CadError("unsupported_constraint", "Choose a supported sketch constraint.", supported=sorted(CONSTRAINTS))
     constraint = {"id": uid("c"), "type": kind, "a": args.get("a", ""), "b": args.get("b", "")}
+    if kind == "angle" and args.get("angle_frame") is not None:
+        frame = args["angle_frame"]
+        if not isinstance(frame, dict) or frame.get("a") not in {"start", "end"} or frame.get("b") not in {"start", "end"} or frame.get("orientation") not in {-1, 1}:
+            raise CadError("invalid_angle_frame", "An interior angle needs endpoint rays and a winding direction.")
+        constraint["angle_frame"] = {k: frame[k] for k in ("a", "b", "orientation")}
     if kind in {"distance", "angle", "radius", "diameter"}:
         key = f"{constraint['id']}.value"
         feature.parameters[key] = parameter(document, actor, feature.owner, args.get("name", f"{feature.name} · {kind}"),
@@ -164,6 +169,19 @@ def edit_sketch(document, actor, command, args):
     feature.options["constraints"].append(constraint)
     feature.modified_by = actor.id
     return {"constraint_id": constraint["id"]}, [feature.id], f"Constrain {feature.name} · {kind}"
+
+
+def sketch_axis_direction(feature, axis):
+    index = "XYZ".find(axis)
+    if index < 0 or len(axis) != 1:
+        raise CadError("invalid_axis", "Choose a world X, Y or Z axis.")
+    frame = feature.options.get("frame")
+    if frame:
+        u, n = frame["u"], frame["normal"]
+    else:
+        u, n = {"XY": ([1, 0, 0], [0, 0, 1]), "XZ": ([1, 0, 0], [0, -1, 0]), "YZ": ([0, 1, 0], [1, 0, 0])}[feature.options.get("plane", "XY")]
+    v = [n[1]*u[2]-n[2]*u[1], n[2]*u[0]-n[0]*u[2], n[0]*u[1]-n[1]*u[0]]
+    return u[index], v[index]
 
 
 def solve_sketch(feature, values):
@@ -232,7 +250,27 @@ def solve_sketch(feature, values):
             elif kind == "distance":
                 tag = solver.set_p2p_distance(point(a), point(b), value)
             elif kind == "angle":
-                tag = solver.set_l2l_angle(entity(a), entity(b), math.radians(value))
+                frame = constraint.get("angle_frame")
+                directed = value
+                if frame:
+                    if not b.startswith("world:") and not 0 < value < 360:
+                        raise CadError("invalid_dimension", "Interior angles must be greater than 0 and less than 360 degrees.", constraint=constraint["id"])
+                    offset = (180 if frame["b"] == "end" else 0) - (180 if frame["a"] == "end" else 0)
+                    directed = (frame["orientation"] * value - offset + 180) % 360 - 180
+                if b.startswith("world:"):
+                    x, y = sketch_axis_direction(feature, b[6:])
+                    projection = math.hypot(x, y)
+                    if projection < 1e-8:
+                        raise CadError("invalid_axis", "This world axis is perpendicular to the sketch plane. Choose another axis.")
+                    ratio = math.cos(math.radians(value)) / projection
+                    if not 0 <= value <= 180 or abs(ratio) > 1 + 1e-8:
+                        minimum = math.degrees(math.acos(min(1, projection)))
+                        raise CadError("invalid_dimension", f"This axis allows angles from {minimum:.2f} to {180-minimum:.2f} degrees on this sketch plane.")
+                    directed = (frame["orientation"] if frame else 1) * math.degrees(math.acos(max(-1, min(1, ratio))))
+                    reference = solver.add_line(solver.add_fixed_point(0, 0), solver.add_fixed_point(x, y))
+                    tag = solver.set_l2l_angle(entity(a), reference, math.radians(directed))
+                else:
+                    tag = solver.set_l2l_angle(entity(a), entity(b), math.radians(directed))
             elif kind in {"radius", "diameter"}:
                 entity_type = next((item["type"] for item in feature.options["entities"] if item["id"] == a), "circle")
                 tag = getattr(solver, f"set_{'arc' if entity_type == 'arc' else 'circle'}_{kind}")(entity(a), value)

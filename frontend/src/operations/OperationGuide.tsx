@@ -185,9 +185,7 @@ export default forwardRef<
         if (labelPoint && d.profile !== "body" && true) {
           profileLabel.setAttribute("x", String(labelPoint.x + 9));
           profileLabel.setAttribute("y", String(labelPoint.y - 12));
-          profileLabel.textContent = isFinish(d)
-            ? `${f.sectionEffect || "Corner"} section`
-            : "Tool Profile";
+          profileLabel.textContent = "Tool Profile";
         } else profileLabel.textContent = "";
       },
     }),

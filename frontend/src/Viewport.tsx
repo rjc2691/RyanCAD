@@ -1,3 +1,5 @@
+import {syncMovementGhost} from "./movementGhost";
+import MoveAxisHandles,{type MoveAxisHandlesHandle} from "./MoveAxisHandles";
 import {shortcutLabel} from './toolbarShortcuts';
 import type {ActiveAppearance} from "./experiments";
 import {updateEdgePulseTime} from './activeAppearance';
@@ -72,6 +74,8 @@ import {
 } from "./viewportOperationDisplay";
 
 interface Props {
+  onMoveDistance?:(value:string)=>void;
+  onMoveAxisSlide?:(axis:WorldAxis,distance:number)=>void;
   onWorldPlane?:(plane:WorldPlane)=>void;
   selectedWorldPlane?:WorldPlane;
   measurePoints?: MeasurePoint[] | null;
@@ -84,13 +88,16 @@ interface Props {
   sketchPlanePicking?: boolean;
   sketchObjects?: SketchDraft[];
   selectedSketch?: string | null;
-  onSelectSketch?: (id: string) => void;
+  onSelectSketch?: (id: string,removeOnly?:boolean) => void;
   onSketchInput?: (
     point: SketchPoint,
     tolerance: number,
     selection: Selection | null,
+    additive?:boolean,
+    removeOnly?:boolean,
   ) => void;
-  onSketchCursor?: (point: SketchPoint) => void;
+  onSketchCursor?: (point: SketchPoint|null,tolerance?:number) => void;
+  onSketchMeasurement?:(id:string)=>void;
   onOperationPreviewReady?: (token: string | null) => void;
   operationPreview?: any;
   operationFrame?: OperationFrame;
@@ -108,7 +115,7 @@ interface Props {
   occurrences: Occurrence[];
   revision: number;
   selected: Selection | null;
-  onSelect: (selection: Selection | null, add?: boolean) => void;
+  onSelect: (selection: Selection | null, add?: boolean, removeOnly?:boolean) => void;
   explode: number;
   showBounds?: boolean;
   grid: boolean;
@@ -169,6 +176,7 @@ async function previewAsset(id: string, token: string, signal?: AbortSignal) {
 const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const container = useRef<HTMLDivElement>(null);
   const movementGuide = useRef<MovementGuideHandle>(null);
+  const moveAxisHandles=useRef<MoveAxisHandlesHandle>(null);
   const measureGuide = useRef<MeasureGuideHandle>(null);
   const operationGuide = useRef<OperationGuideHandle>(null);
   const sketchGuide = useRef<SketchGuideHandle>(null);
@@ -474,7 +482,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     props.occurrences.map((o) => [o.id, o.color]),
   );
   const appearanceStamp=JSON.stringify(props.activeAppearance);
-  useEffect(()=>{const scene=sceneRef.current;if(scene)syncOperationAppearance(scene.parts,displayedPreview.current,propsRef.current);},[appearanceStamp]);
+  useEffect(()=>{const scene=sceneRef.current;if(scene)syncOperationAppearance(scene.parts,displayedPreview.current,propsRef.current);},[appearanceStamp,props.movementGuide]);
   const refreshSelection = () => {
     const s = sceneRef.current;
     if (!s) return;
@@ -886,7 +894,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       const current = propsRef.current;
       if (
         !axes.visible ||
-        current.sketch ||
+        (current.sketch&&current.sketch.tool!=="dimension") ||
         !current.onWorldAxis ||
         (current.pickSlot && current.pickSlot !== "path")
       )
@@ -1142,12 +1150,15 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       )
         return;
       if (propsRef.current.sketch && !propsRef.current.sketchPlanePicking) {
+        const axis=event.ctrlKey?null:pickWorldAxis(event);if(axis){propsRef.current.onWorldAxis?.(axis);return;}
         const input = sketchInput(event);
         if (input)
           propsRef.current.onSketchInput?.(
             input.point,
             input.tolerance,
             propsRef.current.sketch.showComponents ? pick(event) : null,
+            event.shiftKey,
+            event.ctrlKey,
           );
         return;
       }
@@ -1184,6 +1195,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         }
         return;
       }
+      if(event.ctrlKey){const sketch=pickSketch(event);if(sketch)propsRef.current.onSelectSketch?.(sketch,true);else propsRef.current.onSelect(pick(event),false,true);return;}
       const sketchId = pickSketch(event);
       if (sketchId) {
         propsRef.current.onSelectSketch?.(sketchId);
@@ -1196,7 +1208,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         return;
       }
       const plane=pickWorldPlane(event);if(plane){propsRef.current.onWorldPlane?.(plane);clearHover();return;}
-      propsRef.current.onSelect(pick(event), event.shiftKey);
+      propsRef.current.onSelect(pick(event), event.shiftKey,event.ctrlKey);
 
     };
     const pointermove = (event: PointerEvent) => {
@@ -1207,13 +1219,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       ) {
         const input = sketchInput(event);
         if (input)
-          propsRef.current.onSketchCursor?.(
-            snapSketchPoint(
-              propsRef.current.sketch,
-              input.point,
-              input.tolerance,
-            ),
-          );
+          propsRef.current.onSketchCursor?.(input.point,input.tolerance);
       }
       if (!dragging && !event.buttons) lastPointer = event;
     };
@@ -1230,6 +1236,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       );
     };
     const pointerleave = () => {
+      if(propsRef.current.sketch)propsRef.current.onSketchCursor?.(null);
       dragging = false;
       clearHover();
     };
@@ -1269,6 +1276,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       width: host.clientWidth,
       height: host.clientHeight,
     };
+    const movementGhost=new THREE.Group();scene.add(movementGhost);
     sceneRef.current = state;
     const observer = new ResizeObserver(() => {
       state.width = host.clientWidth;
@@ -1324,6 +1332,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         else if(!picked)renderer.domElement.style.cursor="";
       }
       const selectedAxis =
+        (propsRef.current.sketch&&propsRef.current.dimensionEditor?.second?.startsWith("world:")?propsRef.current.dimensionEditor.second.slice(6):null) ||
         propsRef.current.movementGuide?.worldAxis ||
         (propsRef.current.operationDraft?.direction !== "edge" &&
         propsRef.current.operationDraft?.direction !== "normal"
@@ -1374,7 +1383,9 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         profileRoleKey = "";
         clearProfileRole();
       }
+      syncMovementGhost(movementGhost,parts,current.placementTarget,current.section?[current.sectionPlane||new THREE.Plane(new THREE.Vector3(0,1,0),0)]:[]);
       movementGuide.current?.update(camera, state.width, state.height);
+      moveAxisHandles.current?.update(camera,state.width,state.height);
       measureGuide.current?.update(camera, state.width, state.height);
       sketchGuide.current?.update(camera, state.width, state.height);
       propsRef.current.orientationRef?.current?.update(camera);
@@ -1415,6 +1426,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       }
       cache.current.clear();
       host.removeChild(renderer.domElement);
+      movementGhost.traverse((g:any)=>g.material?.dispose());movementGhost.clear();scene.remove(movementGhost);
       sceneRef.current = null;
       initialFit.current = false;
     };
@@ -1431,12 +1443,13 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     s.grid.visible =
       props.grid && !preview && (!props.sketch || !!props.sketchPlanePicking);
     s.axes.visible =
-      props.grid && (!props.sketch || !!props.sketchPlanePicking);
+      props.grid && (!props.sketch || !!props.sketchPlanePicking || props.sketch.tool==="dimension");
     s.parts.visible = !props.sketch || props.sketch.showComponents;
   }, [
     props.grid,
     !!props.sketch,
     props.sketch?.showComponents,
+    props.sketch?.tool,
     props.sketchPlanePicking,
     props.selectedSketch,
     props.sketchObjects,
@@ -2016,6 +2029,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
           </b>
         </div>
       )}
+      <MoveAxisHandles ref={moveAxisHandles} target={props.placementTarget} rows={props.occurrences} geometry={props.geometry} guide={props.movementGuide} onSlide={props.onMoveAxisSlide} onDistance={props.onMoveDistance}/>
       <MovementGuide ref={movementGuide} guide={props.movementGuide} />
       <SketchGuide
         ref={sketchGuide}
@@ -2030,6 +2044,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
                 : null)
         }
         gridOnly={!props.sketch}
+        onMeasurement={props.onSketchMeasurement}
         dimensionEditor={props.dimensionEditor}
       />
       <OperationGuide

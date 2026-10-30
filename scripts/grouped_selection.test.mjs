@@ -9,6 +9,17 @@ const e1=edge('a',[0,0,0],[10,0,0]),e2=edge('b',[10,10,0],[10,0,0]),e3=edge('c',
 const picked=e=>({definition:'p',occurrence:'i',edge:e});
 const face=(signature,z=0,normal=[0,0,1])=>({definition:'p',occurrence:'i',face:{signature,id:signature,type:'PLANE',center:[0,0,z],normal}});
 
+test('Ctrl-click only removes the exact selected object and preserves other selections',()=>{
+ let s=mergeSelection(picked(e1),picked(e2),true);
+ assert.equal(mergeSelection(s,picked(e3),false,true),s);
+ assert.equal(mergeSelection(s,null,false,true),s);
+ s=mergeSelection(s,picked(e1),false,true);assert.deepEqual(selectionMembers(s).map(v=>v.edge.signature),['b']);
+ assert.equal(mergeSelection(s,picked(e2),false,true),null);
+ assert.equal(mergeSelection(null,picked(e1),false,true),null);
+ assert.equal(mergeSelection(s,{...picked(e2),occurrence:'other'},false,true),s);
+ for(const item of [face('a'),{definition:'p',occurrence:'i'},{definition:'p',occurrence:'i',vertex:{edge:e1,anchor:'start'}}])assert.equal(mergeSelection(item,item,false,true),null);
+});
+
 test('Shift toggles real faces/edges in the same component, retaining the first anchor',()=>{
  let s=mergeSelection(null,picked(e1));s=mergeSelection(s,picked(e2),true);assert.equal(s.edge.signature,'a');assert.equal(selectionMembers(s).length,2);
  s=mergeSelection(s,picked(e1),true);assert.equal(s.edge.signature,'b');s=mergeSelection(s,picked(e2),true);assert.equal(s,null);

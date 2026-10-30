@@ -27,9 +27,9 @@ Switching off restores standard amber component styling immediately. **Reset thi
 
 Example feedback: “Slow down active-component-appearance” or “Use two pulses per edge and a softer glow.”
 
-## Toolbar between sidebars
+## Promoted: Toolbar between sidebars
 
-Stable ID: `sidebar-toolbar-layout`. Off by default. On desktop (1000 px and wider), this extends the design tree and inspector/operation sidebar up to the bottom of the header, with the tool toolbar occupying only the space between them. Long toolbars scroll horizontally. Hidden sidebars and operation panels retain their normal behavior. Phone layouts stay unchanged, while the preference remains remembered for desktop use. A second mode, **Full-width bar, inset buttons** (`inset-buttons`), keeps the bar background full width but insets its scrolling button row between the sidebar boundaries; sidebars remain below the toolbar. The original mode is **Sidebars beside toolbar** (`between`). Switching off restores the standard full-width toolbar immediately. This setting is independent of Active component appearance and persists in the same browser preferences.
+The toolbar layout is now permanent and no longer appears in this menu. It fits between sidebars when space permits and uses the full row when its buttons need more width. The old `sidebar-toolbar-layout` values are ignored without changing other experiment preferences. See [Toolbar customization](TOOLBAR_CUSTOMIZATION.md).
 
 ## Implementation and lifecycle
 

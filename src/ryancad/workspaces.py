@@ -88,6 +88,9 @@ class WorkspaceManager:
         project = directory / identifier
         project.mkdir()
         document = Document(name=name)
+        from .model import Actor
+        from .project_structure import structure_command
+        structure_command(document, Actor(), "structure.enable", {})
         atomic_text(project / "manifest.yaml", yaml.safe_dump(document.model_dump(mode="json"), sort_keys=False, allow_unicode=True))
         store = CadService(project)
         store.close()
@@ -136,8 +139,10 @@ class WorkspaceManager:
             key = (code, identifier)
             if key not in self.services:
                 current = CadService(self._directory(code) / identifier)
+                current.design_name_lock = self.lock
+                current.design_name_guard = lambda name: self.unique_design_name(code,name,excluding=identifier)
                 self.services[key] = current
-                if current.document.features or current.document.instances:
+                if current.document.features or any(c.kind != "assembly" for c in current.document.components.values()):
                     current.submit("rebuild")
             return identifier, self.services[key]
 
@@ -157,10 +162,31 @@ class WorkspaceManager:
             else:
                 self.in_flight[key] = count - 1
 
+    def unique_design_name(self, code, name, excluding=None, automatic=False):
+        label=" ".join(str(name).split())[:180]
+        if not label:
+            raise CadError("invalid_name", "Give the design a name.")
+        data=self._read(code)
+        used={" ".join(self._name(code,e["id"]).split()).casefold() for e in data["designs"] if e["id"]!=excluding}
+        if label.casefold() not in used:return label
+        if not automatic:
+            raise CadError("duplicate_design_name", "A design with that name already exists in this workspace. Choose a unique name.")
+        base=label[:168];index=2
+        while f"{base} {index}".casefold() in used:index+=1
+        return f"{base} {index}"
+
+    def _unique_import_name(self, code, current):
+        label=self.unique_design_name(code,current.document.name,automatic=True)
+        if label==current.document.name:return
+        from .model import Actor, Command
+        command=Command(name="document.rename",args={"name":label},expected_revision=current.document.revision)
+        current._command(Actor(),command=command,signature=hashlib.sha256(label.encode()).hexdigest())
+
     def create(self, code: str, name: str = "Untitled design") -> str:
         name = str(name).strip()[:180] or "Untitled design"
         with self.lock:
             data = self._read(code)
+            name = self.unique_design_name(code,name,automatic=True)
             identifier = self._new_project(self._directory(code), name)
             data["designs"].append({"id": identifier, "deleted": False})
             data["active_design"] = identifier
@@ -180,7 +206,8 @@ class WorkspaceManager:
                 target.close()
             # Opening the backed-up journal writes its own consistent manifest.
             current = CadService(directory)
-            current.close()
+            try:self._unique_import_name(code,current)
+            finally:current.close()
             data["designs"].append({"id": identifier, "deleted": False})
             data["active_design"] = identifier
             self._write(code, data)
@@ -222,7 +249,8 @@ class WorkspaceManager:
                     staging.mkdir()
                     atomic_text(staging / "manifest.yaml", yaml.safe_dump(document.model_dump(mode="json"), sort_keys=False, allow_unicode=True))
                 current = CadService(staging)
-                current.close()
+                try:self._unique_import_name(code,current)
+                finally:current.close()
                 os.replace(staging, destination)
             data["designs"].append({"id": identifier, "deleted": False})
             data["active_design"] = identifier

@@ -32,7 +32,7 @@ def test_face_extrusion_and_edge_finish(kernel):
     out=evaluate(kernel,doc)["components"][part["component_id"]]
     assert out["volume"]==pytest.approx(40*30*10)
     edge=out["edges"][0]
-    edit(doc,target=part["component_id"],profile="chamfer",result="add",motion="sweep",path_reference={"component":part["component_id"],"edge":edge["signature"]},values={"amount":1})
+    edit(doc,target=part["component_id"],profile="chamfer",result="cut",motion="sweep",path_reference={"component":part["component_id"],"edge":edge["signature"]},values={"amount":1})
     assert evaluate(kernel,doc)["components"][part["component_id"]]["volume"]<12000
 
 
@@ -140,7 +140,7 @@ def test_native_finishing_recipe_is_canonical_and_partial_sweep_is_not_silently_
     doc,part,out,_=plate(kernel)
     finish=edit(doc,target=part["component_id"],profile="fillet",path_reference={"component":part["component_id"],"edge":out["edges"][0]["signature"]},values={"amount":1})
     assert doc.features[finish["feature_id"]].options["motion"]=="sweep"
-    assert doc.features[finish["feature_id"]].options["result"]=="add"
+    assert doc.features[finish["feature_id"]].options["result"]=="cut"
     evaluate(kernel,doc)
     with pytest.raises(CadError) as exc:edit(Document(),profile="circle",motion="sweep",extent="symmetric")
     assert exc.value.code=="unsupported_extent"

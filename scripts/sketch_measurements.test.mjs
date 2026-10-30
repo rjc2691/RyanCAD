@@ -10,5 +10,5 @@ test('length dimensions distinguish persistent constraints from measured values'
 });
 test('connected angles are contextual and unrelated line pairs do not create false corners',()=>{
  const d={entities:[line('a',0,0,10,0),line('b',10,0,10,10),line('c',40,40,50,40)],constraints:[{type:'angle',a:'a',b:'b',value:45}]};
- const angles=sketchMeasurements(d).filter(v=>v.kind==='angle');assert.equal(angles.length,1);assert.equal(angles[0].label,'45 °');assert(angles[0].constrained);
+ const angles=sketchMeasurements(d).filter(v=>v.kind==='angle');assert.equal(angles.length,1);assert.equal(angles[0].label,'135 °');assert(angles[0].constrained);
 });

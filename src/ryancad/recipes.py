@@ -12,6 +12,8 @@ def build_recipe(document, actor, recipe):
     blank = Document(id=document.id, name={"mold": "Silicone mold · printed tooling", "plate": "Mounting plate · fit study", "blank": "Untitled design"}[recipe])
     for field in ("name", "parameters", "components", "instances", "features", "feature_order", "fits", "notes"):
         setattr(document, field, getattr(blank, field))
+    document.active_layout = None
+    document.variations.clear()
     if recipe == "blank":
         return {}, [], "Create an empty design"
 

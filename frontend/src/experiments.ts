@@ -1,6 +1,5 @@
 export const EXPERIMENT_STORAGE_KEY = "ryancad-experiments-v1";
 export const ACTIVE_APPEARANCE_ID = "active-component-appearance";
-export const SIDEBAR_TOOLBAR_LAYOUT_ID = "sidebar-toolbar-layout";
 export interface ActiveAppearance {
   enabled: boolean;
   strength: number;
@@ -11,10 +10,6 @@ export interface ActiveAppearance {
 export interface Experiments {
   version: 1;
   "active-component-appearance": ActiveAppearance;
-  "sidebar-toolbar-layout": {
-    enabled: boolean;
-    mode?: "between" | "inset-buttons";
-  };
 }
 export const defaultAppearance = (): ActiveAppearance => ({
   enabled: false,
@@ -29,15 +24,6 @@ export function normalizeExperiments(raw: unknown): Experiments {
       (raw as any)?.version === 1 ? (raw as any)[ACTIVE_APPEARANCE_ID] : null;
   return {
     version: 1,
-    [SIDEBAR_TOOLBAR_LAYOUT_ID]: {
-      mode:
-        (raw as any)?.[SIDEBAR_TOOLBAR_LAYOUT_ID]?.mode === "inset-buttons"
-          ? "inset-buttons"
-          : "between",
-      enabled:
-        (raw as any)?.version === 1 &&
-        (raw as any)?.[SIDEBAR_TOOLBAR_LAYOUT_ID]?.enabled === true,
-    },
     [ACTIVE_APPEARANCE_ID]: {
       enabled:
         typeof value?.enabled === "boolean" ? value.enabled : defaults.enabled,

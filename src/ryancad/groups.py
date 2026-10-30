@@ -23,6 +23,8 @@ def group_command(document,actor,name,args):
     values=evaluate(document);rows={o['id']:o for o in flatten_instances(document,values)}
     def row(identifier):return require(rows,identifier,'placed component')
     def unique_parent(parent):
+        if document.structure_version and document.components[parent].structure_role in {'part','group','layout'}:
+            return  # membership belongs to the definition and updates every placement
         if parent!='root' and sum(o['definition']==parent for o in rows.values())!=1:
             raise CadError('shared_group_structure','This assembly has shared placement structure. Copy the group first to edit membership independently.')
     def members():
@@ -89,6 +91,13 @@ def group_command(document,actor,name,args):
             label=str(args.get('name','Component group')).strip()
             if not label:raise CadError('invalid_name','Give the group a name.')
             definition,instance=create_component(document,actor,label,'assembly',parent)
+            if document.structure_version:
+                definition.structure_role='group' if all(document.components[o['definition']].structure_role=='part' for o in selected) else 'part'
+                from .project_structure import available_name
+                if definition.structure_role=='part':
+                    definition.structure_role='component'
+                    definition.name=available_name(document,definition.name,'part')
+                    definition.structure_role='part'
             # The wrapper takes the earliest selected sibling's browser position.
             selected_ids={o['source_id'] for o in selected};ordered={};inserted=False
             for identifier,placed in document.instances.items():
@@ -119,10 +128,20 @@ def group_command(document,actor,name,args):
     if target['pattern_mode']:raise CadError('pattern_group','Patterned assemblies cannot be edited as independent groups.')
     instance=document.instances[target['source_id']]
     if name=='group.copy':
+        if document.structure_version and definition.structure_role=='part':
+            pose=matrix_pose(local_matrix(instance,values))
+            offset=args.get('offset',[30,0,0])
+            if not isinstance(offset,list) or len(offset)!=3 or any(type(v) not in (int,float) or not np.isfinite(v) or abs(v)>10000 for v in offset):
+                raise CadError('invalid_group','Copy offset needs three finite distances.')
+            for k,v in zip('xyz',offset):pose[k]+=v
+            new=create_instance(document,actor,definition.id,parent=instance.parent,placement=pose)
+            new.variation=instance.variation
+            return {'instance_id':new.id},[new.id],f'Repeat linked part · {definition.name}'
         def clone(source,parent,label=None,top=False):
             original=document.components[source.definition]
             if original.kind=='assembly':
                 new_def,new=create_component(document,actor,label or original.name+' copy','assembly',parent,original.color)
+                new_def.structure_role=original.structure_role
                 for child in list(document.instances.values()):
                     if child.parent==original.id:clone(child,new_def.id,child.name)
             else:new=create_instance(document,actor,original.id,label or source.name,parent)

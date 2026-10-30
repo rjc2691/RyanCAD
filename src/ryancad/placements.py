@@ -57,8 +57,10 @@ def bake_rotation(document, actor, instance):
 
 def flatten_instances(document, values):
     rows = []
+    from .project_structure import variation_values, variation_definition
+    variant_values = {v.id: variation_values(document, v)[1] for v in document.variations.values()}
 
-    def walk(parent, matrix, path, stack, visible=True, suppressed=False):
+    def walk(parent, matrix, path, stack, visible=True, suppressed=False, layout=None, library=False, variant=None):
         if parent in stack:
             raise CadError("ownership_cycle", "Assembly placement creates an ownership cycle.", cycle=stack + [parent])
         for instance in document.instances.values():
@@ -67,20 +69,27 @@ def flatten_instances(document, values):
             if instance.definition not in document.components:
                 raise CadError("missing_component", "An instance refers to a missing component.", instance=instance.id)
             definition = document.components[instance.definition]
-            count = int(values[instance.pattern["count"]]) if instance.pattern_mode else 1
+            current_layout = definition.id if definition.structure_role == "layout" else layout
+            current_library = library or (parent == "root" and definition.structure_role == "part")
+            current_variant = instance.variation or variant
+            local_values = variant_values.get(variant, values)
+            count = int(local_values[instance.pattern["count"]]) if instance.pattern_mode else 1
             if count > 200 or len(rows) + count > 5000:
                 raise CadError("pattern_limit", "Use at most 200 copies per component pattern and 5,000 assembly occurrences.")
             for index in range(count):
                 if index in instance.omitted_indices:
                     continue
-                placement = matrix @ pattern_delta(instance, values, index) @ local_matrix(instance, values)
+                placement = matrix @ pattern_delta(instance, local_values, index) @ local_matrix(instance, local_values)
                 member_id = instance.id if index == 0 else f"{instance.id}~{index}"
                 occurrence_id = f"{path}/{member_id}" if path else member_id
                 record = {**instance.model_dump(), "source_id": instance.id, "id": occurrence_id, "matrix": placement.tolist(),
                           "pattern_index": index, "visible": visible and instance.visible, "suppressed": suppressed or instance.suppressed, "kind": definition.kind, "purpose": definition.purpose, "color": definition.color}
+                record.update(layout=current_layout, library=current_library, variation=current_variant, structure_role=definition.structure_role, source_definition=definition.id)
+                if current_variant and definition.kind != "assembly":
+                    record["definition"] = variation_definition(current_variant, definition.id)
                 rows.append(record)
                 if definition.kind == "assembly":
-                    walk(definition.id, placement, occurrence_id, stack + [parent], record["visible"], record["suppressed"])
+                    walk(definition.id, placement, occurrence_id, stack + [parent], record["visible"], record["suppressed"], current_layout, current_library, current_variant)
     walk("root", np.eye(4), "", [])
     return rows
 

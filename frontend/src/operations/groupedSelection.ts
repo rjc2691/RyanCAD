@@ -12,7 +12,15 @@ export function mergeSelection(
   previous: Selection | null,
   item: Selection | null,
   add = false,
+  removeOnly=false,
 ): Selection | null {
+  if(removeOnly){
+    if(!item||!previous)return previous;
+    const members=selectionMembers(previous);
+    if(!members.some(s=>selectionKey(s)===selectionKey(item)))return previous;
+    const items=members.filter(s=>selectionKey(s)!==selectionKey(item));
+    return items.length>1?{...items[0],items}:items[0]||null;
+  }
   if (!item) return add ? previous : null;
   const kind = (s: Selection) =>
     s.vertex ? "vertex" : s.edge ? "edge" : s.face ? "face" : "component";

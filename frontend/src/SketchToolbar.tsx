@@ -1,6 +1,7 @@
 import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
 import {
   Check,
+  Link2, Unlink, Move3D,
   Circle,
   Crosshair,
   Dot,
@@ -20,7 +21,8 @@ const tools: {
   key: string;
   icon: typeof Circle;
 }[] = [
-  { id: "select", label: "Select", key: "V", icon: MousePointer2 },
+  { id: "select", label: "Select", key: "Space", icon: MousePointer2 },
+  {id:"move",label:"Move",key:"M",icon:Move3D},
   { id: "line", label: "Line", key: "L", icon: PencilLine },
   { id: "rectangle", label: "Rectangle", key: "R", icon: RectangleHorizontal },
   { id: "circle", label: "Circle", key: "C", icon: Circle },
@@ -28,6 +30,8 @@ const tools: {
   { id: "point", label: "Point", key: "P", icon: Dot },
   { id: "project", label: "Project", key: "J", icon: Crosshair },
   { id: "dimension", label: "Dimension", key: "D", icon: Ruler },
+  { id: "connect", label: "Connect", key: "K", icon: Link2 },
+  { id: "disconnect", label: "Disconnect", key: "U", icon: Unlink },
 ];
 export default function SketchToolbar({
   draft,

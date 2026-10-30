@@ -15,6 +15,8 @@ def move_component(document, actor, args):
     from .commands import parameter, require
 
     instance = require(document.instances, args.get("id"), "instance")
+    if document.structure_version and document.components[instance.definition].structure_role == "group":
+        raise CadError("group_organization", "Part Groups organize membership. Move the part placements inside the group instead.")
     method = args.get("method", "axes")
     if method not in {"axes", "reference", "rotate", "point", "direction", "projected"}:
         raise CadError("invalid_move", "Choose axes, reference, or rotate movement.")

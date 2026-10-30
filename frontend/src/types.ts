@@ -25,6 +25,8 @@ export interface Feature {
   modified_by: string;
 }
 export interface Component {
+  structure_role?: "component" | "part" | "group" | "layout";
+  read_only?: boolean;
   id: string;
   name: string;
   kind: "assembly" | "solid" | "planar";
@@ -38,6 +40,11 @@ export interface Component {
   stock_preview: boolean;
 }
 export interface Occurrence {
+  structure_role?: "component" | "part" | "group" | "layout";
+  layout?: string | null;
+  library?: boolean;
+  variation?: string | null;
+  source_definition?: string;
   purpose?: "part" | "tool";
   id: string;
   source_id: string;
@@ -101,6 +108,8 @@ export interface Selection {
   point?: number[];
 }
 export interface State {
+  part_parameters?: Record<string, string[]>;
+  operation_displays?: Record<string, any>;
   profiles?: Record<
     string,
     {
@@ -112,6 +121,9 @@ export interface State {
     }
   >;
   document: {
+    structure_version?: number;
+    active_layout?: string | null;
+    variations?: Record<string, {id: string; part: string; name: string; overrides: Record<string, string>}>;
     id: string;
     name: string;
     revision: number;

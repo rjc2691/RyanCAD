@@ -178,6 +178,8 @@ When **Tool Path reference** is armed, selecting a face expands its complete nat
 
 Fillet/chamfer Tool Profile now displays the **actual changed corner cross section**, cut from the before/after native geometry on a plane perpendicular to the primary selected edge. It is sampled at an interior path station so the section is well defined; it is not a square placeholder or an invented cutter. The panel reports its native area and whether material is removed or added (a concave fillet can add material). Full selected edges remain the normal finish. A target can limit a **single straight edge**; its endpoint has a planar cap. Curved/multiple-edge finishes currently use their full edges and explain the restriction when a partial target is requested.
 
+Round and bevel now use the standard Remove material effect and selected-edge Sweep path, with no separate Refine edge or native-corner labels. The violet Tool Profile reference card shows a Temporary profile, an exact outline and its area; the viewport uses that same profile. Radius/bevel distance regenerates both views. Add material is available for concave rounding, and Auto or Intersect use their normal material semantics. An incompatible effect blocks Apply with an explanation. Reopened history features show the generated profile and the same effect/path terminology.
+
 
 ## Sketch in the main viewport
 
@@ -269,7 +271,7 @@ The design sidebar has Components, 2D Sketches and 3D Tool Bodies sections, each
 
 ## Toolbar customization
 
-In Settings, **Keyboard shortcuts** lets you click an action's binding and press a new combination. Conflicts require confirmation; reset restores defaults. Drag toolbar buttons to reorder them, or use Settings' earlier/later controls. Both preferences persist in this browser. The Parameters divider is removed. **Toolbar between sidebars** now also offers **Full-width bar, inset buttons**. See [Toolbar customization](TOOLBAR_CUSTOMIZATION.md) for defaults, reserved controls and both layout modes.
+In Settings, **Keyboard shortcuts** lets you click an action's binding and press a new combination. Conflicts require confirmation; reset restores defaults. Drag toolbar buttons to reorder them, or use Settings' earlier/later controls. Both preferences persist in this browser. The Parameters divider is removed. The toolbar fits between sidebars by default and expands to the full row when its buttons need more space; remaining overflow scrolls horizontally. This layout is permanent. See [Toolbar customization](TOOLBAR_CUSTOMIZATION.md) for defaults and reserved controls.
 
 ## Bug reports
 
@@ -296,3 +298,58 @@ Viewport click targets use the restrained dark blue treatment; selected faces, e
 
 
 The main world axes now extend in both positive and negative directions. Positive X/Y/Z use brighter red/green/blue 2 px strokes; negative halves use thinner, fainter strokes. Both halves keep world-axis hover/reference picking, while visible part geometry takes priority. Picking either half references the same world axis; use an operation's Reverse direction control to change travel direction. The world grid visibility toggle controls both halves.
+
+
+## Parts and layouts update
+
+See [Parts and layouts](PARTS_AND_LAYOUTS.md) for the implemented definition/placement distinction, editor scopes, linked parameter variations, migration, and remaining decisions. This supersedes the earlier requirement for globally unique component names: part names are unique within a design; component names may repeat.
+
+
+### Move with world-axis arrows
+
+Select a part or component and press M. Before picking geometry references, gray X, Y and Z arrows appear just outside its bounds. Drag an arrow to slide along that world axis; the signed movement distance updates in the panel and the existing validated preview shows the result. Apply or Enter commits; Cancel or Escape discards it. Arrows remain visible while choosing origin and target references. Dragging one selects a world-axis direction while retaining those points. The viewport distance input and panel distance field edit the same value. Translation is drawn immediately while native validation catches up. Directions nearly parallel to the camera are hidden until the view is rotated enough to make dragging meaningful.
+
+Move distance placement scores nearby screen positions using distance to the travel midpoint, overlapping object count and overlap area. A small stability allowance prevents unnecessary jumping, and the field stays fixed while focused. A faint cool edge-only ghost marks the committed location during a move; it is not pickable and disappears when the move ends.
+
+Design names are unique within their workspace, including names held by deleted designs. Comparisons ignore case and normalize whitespace. Creation/copy/import adds a numeric suffix on conflict; renaming to another design name is rejected. The backend also checks direct agent commands and history restores that change a design name.
+
+
+### Live sketch relationships
+
+Sketch plane setup uses the colored reference picker; choose a world plane or planar face in the viewport. No separate plane dropdown is needed.
+
+- Hover highlights the actual sketch line or point target in orange; selected geometry is blue. Drawing tools show the snapped placement cursor and pending segment.
+- Select geometry and press Delete or Backspace to remove it and its attached relationships. Typing in fields keeps normal text deletion. Ctrl/Cmd+Z restores sketch edits.
+- Dimension (D): one line sets length; two lines set angle. Shift-select two lines before pressing D, or pick a second line while the length input is open. Switching to angle discards the tentative length, preserving any previously accepted length constraints. Edit the viewport input with a number or matching named parameter. Geometry solves while typing. Enter accepts the valid dimension; Escape restores the prior geometry. Angles are signed from the first line's start-to-end direction to the second's; existing angle dimensions retain their stored direction when reopened.
+- Connect (K): pick two endpoints or point objects to add a coincident relationship. The solver updates their positions immediately. Midpoints remain reference markers rather than writable endpoints.
+- Disconnect (U): pick a connected endpoint to remove its coincident relationships. The endpoint initially retains its current location but subsequent dimensional edits no longer keep it attached.
+
+New line segments snapped to existing line endpoints, and rectangle corners, get real coincident relationships automatically. Editing a length releases implicit fixed-coordinate seeds through its connected chain so the connected geometry can solve. Explicit constraints remain in force. Conflicts leave the last valid geometry intact and show an error during editing.
+
+Display-only measurements are muted. Persistent dimensions have teal guides, stronger labels, and a diamond marker. In Select mode, click a length or angle label to reopen its viewport input. Existing relationships are listed in the sidebar for inspection/removal; creation and dimensional editing use the toolbar and viewport. Parallel/equal/horizontal/vertical relationship tools are a later interaction pass.
+
+
+### Selecting and moving sketch geometry
+
+Space returns to Select and cancels the pending drawing, relationship pick, dimension edit or move, preserving accepted sketch edits. The sketch itself remains open. Ordinary text fields retain normal text entry; Space in the viewport dimension editor cancels that edit.
+
+Endpoints and point objects select independently of their owning lines. Shift-click adds points or lines to the selection. Ctrl-click removes a selected point or line without adding an unselected object. Ctrl-click also deselects objects in the main viewport. Click between point markers to select the line itself. Midpoints are derived references; moving a midpoint translates the whole line.
+
+Select points or lines and press M, or start Sketch Move and pick the geometry. The selection center (or a single selected point) becomes the movement origin. Move the cursor to preview and click the destination to apply; Enter also applies. The U/V fields and Move to coordinates provide an exact sketch-plane destination. Space or Escape cancels the pending move, and Ctrl/Cmd+Z undoes an applied movement.
+
+Movement solves the existing relationships while temporarily pinning the selected points at the requested destination. These temporary targets are discarded after solving. Connected points follow their coincidence relationships, dimensions remain enforced, and a conflicting move is rejected. Explicit fixed-point relationships must be removed before moving those points. This first move tool supports standalone points and line geometry; arc-endpoint and curve deformation workflows remain future work.
+
+
+### Angles to world axes
+Select a sketch line and press D, then click a world X/Y/Z axis in the viewport or its XYZ corner control. You can also select a line and click the corner axis directly. The same inline dimension input changes from length to angle; no tentative length is kept. Enter a number or named angle parameter. Zero and 90 degrees provide horizontal/vertical alignment where the selected axis lies in the sketch plane. The angle is measured from the line's start-to-end direction to the positive world axis, between 0 and 180 degrees. A constrained label includes the axis letter; clicking it reopens the input.
+
+Axis dimensions remain sketch constraints, with no reference to another component. An axis perpendicular to the sketch plane cannot constrain a line's direction. On tilted planes, the constraint uses the true 3D angle to the world axis and reports the achievable angle range; the guide displays the axis projection on the sketch plane.
+
+
+### Design overview and properties
+With nothing selected, the Inspector shows the design name and a visual inventory matching the project tree: Layouts (part placements), 3D Parts (reusable definitions and unique solid components), and 2D Sketches. Tool bodies and part variations appear when present. The active layout has its own placement/component counts and material measurements. Totals include linked and hidden placements in that layout, exclude suppressed placements, and never add library copies or alternate layouts.
+
+Design properties appear directly below the design name. Edit the design description there; leaving the field or Ctrl/Cmd+Enter saves it automatically. Escape discards a pending description edit. Description edits are durable and undoable, and native files retain them in the existing `notes` field. Display units are per design (millimeters or inches); this changes measurement presentation without rescaling geometry. Numeric inputs continue to use canonical mm/degrees unless explicit units are supplied. Named parameters are counted below the settings and open the existing parameter list.
+
+
+Movement follows the current editor: **Move Part** in the Layout Editor moves placed parts/groups, while **Move Component** remains available inside part and component editors. The M shortcut is unchanged. Layout movement's target list contains placements in the current layout scope, not internal component definitions or library copies. Clicking a world axis while no operation is active does not start a move. During an active move, Tool operation, sketch dimension, or section-plane selection, axes still supply the requested reference.

@@ -10,6 +10,7 @@ export function groupSelection(
   scope = "",
 ): Selection | null {
   if (!hit) return null;
+  if (scope === hit.occurrence && rows.find(o=>o.id===scope)?.kind !== "assembly") return hit;
   if (scope && !hit.occurrence.startsWith(scope + "/")) return null;
   const tail = scope ? hit.occurrence.slice(scope.length + 1) : hit.occurrence;
   const id = (scope ? scope + "/" : "") + tail.split("/")[0],

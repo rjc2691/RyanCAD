@@ -7,7 +7,7 @@ const face={id:'face_0',signature:'PLANE:top',type:'PLANE',normal:[0,0,1],center
 const state=()=>({document:{components:{p:{id:'p',name:'Part',kind:'solid',feature_ids:[]}},features:{},parameters:{}},geometry:{p:{center:[0,0,5]}},occurrences:[{id:'i',definition:'p',matrix:identity}],parameter_graph:{}});
 test('edge launch preselects the path and finishing section',()=>{
  const d=initialOperation({definition:'p',occurrence:'i',edge},state());
- assert.equal(d.profile,'fillet');assert.equal(d.motion,'sweep');assert.equal(d.pathReference.selection.edge.signature,edge.signature);assert.equal(operationProblem(d),null);
+ assert.equal(d.profile,'fillet');assert.equal(d.motion,'sweep');assert.equal(d.result,'cut');assert.equal(operationCommand(d).result,'cut');assert.equal(d.pathReference.selection.edge.signature,edge.signature);assert.equal(operationProblem(d),null);
 });
 test('face launch and hole preset preserve the target and support plane',()=>{
  const d=initialOperation({definition:'p',occurrence:'i',face},state()),hole=applyPreset(d,'holes');

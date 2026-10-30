@@ -73,6 +73,8 @@ class Component(Model):
     source_definition: str | None = None
     stock_thickness: str | None = None
     stock_preview: bool = False
+    structure_role: Literal["component", "part", "group", "layout"] = "component"
+    read_only: bool = False
 
 
 class Instance(Model):
@@ -88,6 +90,14 @@ class Instance(Model):
     pattern_axis: Literal["X", "Y", "Z"] = "X"
     pattern: dict[str, str] = Field(default_factory=dict)
     omitted_indices: list[int] = Field(default_factory=list)
+    variation: str | None = None
+
+
+class PartVariation(Model):
+    id: str
+    part: str
+    name: str
+    overrides: dict[str, str] = Field(default_factory=dict)
 
 
 class Fit(Model):
@@ -116,6 +126,9 @@ class Document(Model):
     fits: dict[str, Fit] = Field(default_factory=dict)
     notes: str = ""
     actors: dict[str, Actor] = Field(default_factory=lambda: {"local-human": Actor()})
+    structure_version: int = 0
+    active_layout: str | None = None
+    variations: dict[str, PartVariation] = Field(default_factory=dict)
 
     @field_validator("schema_version")
     @classmethod

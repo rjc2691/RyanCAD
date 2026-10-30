@@ -4,9 +4,8 @@ import * as THREE from '../frontend/node_modules/three/build/three.module.js';
 import {normalizeExperiments,defaultAppearance,loadExperiments,saveExperiments,EXPERIMENT_STORAGE_KEY} from '../frontend/src/experiments.ts';
 import {syncActiveEdgePulse,edgePulseProgress,updateEdgePulseTime} from '../frontend/src/activeAppearance.ts';
 test('experimental settings have stable IDs, default off, validate persisted values and tolerate unavailable storage',()=>{
- assert.deepEqual(normalizeExperiments(null)['sidebar-toolbar-layout'],{enabled:false,mode:'between'});
- assert.deepEqual(normalizeExperiments({version:1,'sidebar-toolbar-layout':{enabled:true,mode:'between'}})['sidebar-toolbar-layout'],{enabled:true,mode:'between'});
- assert.deepEqual(normalizeExperiments({version:1,'sidebar-toolbar-layout':{enabled:'yes'}})['sidebar-toolbar-layout'],{enabled:false,mode:'between'});
+ assert(!('sidebar-toolbar-layout' in normalizeExperiments(null)));
+ assert(!('sidebar-toolbar-layout' in normalizeExperiments({version:1,'sidebar-toolbar-layout':{enabled:true,mode:'inset-buttons'}})));
  assert.deepEqual(normalizeExperiments(null)['active-component-appearance'],defaultAppearance());
  assert.deepEqual(normalizeExperiments({version:99})['active-component-appearance'],defaultAppearance());
  const original=globalThis.localStorage;

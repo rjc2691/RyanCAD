@@ -49,6 +49,17 @@ def test_bearer_agent_cannot_omit_identity_or_operate_human_controls(client):
     assert state["actions"][0]["actor"]["id"] == actor["id"]
 
 
+def test_agent_heartbeat_and_disconnect_routes(client):
+    bearer = {"Authorization": "Bearer test-capability"}
+    actor = client.post("/api/agents", json={"name": "Presence test"}, headers=bearer).json()
+    headers = {**bearer, "X-RyanCAD-Actor": actor["id"]}
+    assert client.post("/api/agents/heartbeat", headers=headers).json() == {"ok": True}
+    assert client.post("/api/agents/heartbeat").json()["error"]["code"] == "agent_session_required"
+    assert client.post("/api/agents/disconnect", headers=headers).json() == {"ok": True}
+    assert client.get("/api/state").json()["agents"][0]["connected"] is False
+    assert client.post("/api/agents/heartbeat", headers=headers).json()["error"]["code"] == "agent_revoked"
+
+
 def test_preview_and_stale_commit_are_distinct_from_saved_edits(client):
     state = client.get("/api/state").json()
     base = state["document"]["revision"]

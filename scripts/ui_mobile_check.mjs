@@ -88,7 +88,7 @@ try{
  await pane('view');await pane('inspector');
  await page.getByRole('complementary',{name:'Tool operation workspace'}).getByRole('button',{name:'Cancel',exact:true}).tap();
  await pane('history');await page.locator('.timeline-panel').waitFor({state:'visible'});
- await page.getByRole('button',{name:'Separate component timelines'}).tap();await fits();
+ await page.getByRole('button',{name:'Separate part timelines'}).tap();await fits();
  await page.screenshot({path:output+'/phone-history.png'});
  await pane('view');await page.getByRole('button',{name:'Sketch',exact:true}).tap();
  await page.getByLabel('Sketch plane',{exact:true}).selectOption('XY');

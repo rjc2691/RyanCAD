@@ -5,6 +5,29 @@ export interface HistoryLane {
   features: { feature: Feature; column: number }[];
 }
 
+/** Resolve solid-body feature owners to their nearest reusable part. Shared
+ * definitions use the first containing part in document order, so each authored
+ * event still appears once. Layout placements never create duplicate lanes. */
+export function historyPartOwners(components: Record<string, Component>, instances: Record<string, {definition:string;parent:string}>) {
+  const parents = new Map<string,string[]>();
+  for (const instance of Object.values(instances)) {
+    const list=parents.get(instance.definition)||[];
+    if(!list.includes(instance.parent))list.push(instance.parent);
+    parents.set(instance.definition,list);
+  }
+  const structured=Object.values(components).some(c=>c.structure_role==="part");
+  return Object.fromEntries(Object.keys(components).map(id=>{
+    if(!structured||components[id].purpose==="tool")return [id,id];
+    const queue=[id],seen=new Set<string>();
+    for(let i=0;i<queue.length;i++){
+      const current=queue[i];if(seen.has(current))continue;seen.add(current);
+      if(components[current]?.structure_role==="part")return [id,current];
+      queue.push(...parents.get(current)||[]);
+    }
+    return [id,"root"];
+  }));
+}
+
 /** Shared by the timeline grid and its SVG; connections must stay on the same
  * global columns when lanes are merged, restored, or scrolled. */
 export const HISTORY_LAYOUT = {
@@ -87,19 +110,21 @@ export function currentHistoryLane(
     ? activeComponent!
     : "root";
 }
-/** Columns are global creation positions, never compacted within a component. */
+/** Columns are global creation positions, never compacted within a part. */
 export function historyLanes(
   features: Feature[],
   components: Record<string, Component>,
   split: boolean,
   merged: ReadonlySet<string>,
+  owners: Readonly<Record<string,string>> = {},
 ): HistoryLane[] {
   const lanes: HistoryLane[] = [
     { id: "root", name: split ? "Design / merged" : "Design", features: [] },
   ];
   const byOwner = new Map<string, HistoryLane>([["root", lanes[0]]]);
   features.forEach((feature, index) => {
-    const owner = split && !merged.has(feature.owner) ? feature.owner : "root";
+    const part = owners[feature.owner] || feature.owner;
+    const owner = split && !merged.has(part) ? part : "root";
     let lane = byOwner.get(owner);
     if (!lane) {
       lane = {

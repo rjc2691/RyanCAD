@@ -12,6 +12,7 @@ export const worldPlaneAxes = (plane: WorldPlane) => ({
 });
 export function createWorldPlanes() {
   const root = new THREE.Group();
+  root.visible=false;
   for (const plane of ["XY", "XZ", "YZ"] as WorldPlane[]) {
     const group = new THREE.Group();
     const { u, v } = worldPlaneAxes(plane),

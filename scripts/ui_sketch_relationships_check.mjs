@@ -33,7 +33,7 @@ try{
  await page.keyboard.press('Enter');await angle.waitFor({state:'detached'});
  // The same tool switches from one-line length to two-line angle without leaving.
  await page.keyboard.press('Space');await page.waitForFunction(()=>document.querySelector('[data-toolbar-action=sketch_select]')?.getAttribute('aria-pressed')==='true');
- await page.mouse.click(...await line('a'));await page.keyboard.press('d');await length.waitFor();await page.mouse.click(...await line('b'));await angle.waitFor();
+ await page.mouse.click(...await line('a'));await page.keyboard.press('d');await length.waitFor();await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));await page.mouse.click(...await line('b'));await angle.waitFor();
  await page.waitForFunction(()=>document.querySelector('[data-measurement="angle:a:b"] text')?.textContent.includes('60'));
  assert(!(await page.locator('[data-measurement="length:a"]').getAttribute('class')).includes('constrained'));
  await page.keyboard.press('Escape');await angle.waitFor({state:'detached'});

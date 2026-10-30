@@ -106,6 +106,7 @@ class CadService:
         self.pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix="ryancad-job")
         self.agent_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ryancad-agent")
         self.agents = {}
+        self.agent_last_seen = {}
         self.previews = {}
         self.current_actor = None
         self.closed = False
@@ -119,9 +120,35 @@ class CadService:
 
     def register_agent(self, name):
         actor = Actor(id=uid("agent"), name=str(name)[:100] or "External agent", kind="agent", identity_source="local_bearer_session; client-supplied display name")
-        self.agents[actor.id] = {"actor": actor, "connected": True, "paused": False, "revoked": False, "step_mode": False, "credits": 0, "connected_at": now()}
+        with self.state_lock:
+            self.agents[actor.id] = {"actor": actor, "connected": True, "paused": False, "revoked": False, "step_mode": False, "credits": 0, "connected_at": now()}
+            self.agent_last_seen[actor.id] = time.monotonic()
         self.event("agent_connected", actor=actor.model_dump())
         return actor
+
+    def expire_agents(self):
+        with self.state_lock:
+            for identifier, agent in self.agents.items():
+                if agent["connected"] and time.monotonic() - self.agent_last_seen[identifier] > 90:
+                    agent.update(connected=False, disconnect_reason="Connection timed out")
+                    self.event("agent_disconnected", actor_id=identifier, reason="heartbeat_timeout")
+
+    def heartbeat_agent(self, identifier):
+        with self.state_lock:
+            agent = self.agents[identifier]
+            if agent.get("disconnect_reason") == "Connector closed" or agent["revoked"]:
+                raise CadError("agent_revoked", "This agent session has been closed or revoked.")
+            if not agent["connected"]:
+                self.event("agent_reconnected", actor_id=identifier)
+            agent["connected"] = True
+            agent.pop("disconnect_reason", None)
+            self.agent_last_seen[identifier] = time.monotonic()
+        return {"ok": True}
+
+    def disconnect_agent(self, identifier):
+        with self.state_lock:
+            self.agents[identifier].update(connected=False, disconnect_reason="Connector closed")
+            self.event("agent_disconnected", actor_id=identifier)
 
     def agent_control(self, identifier, operation):
         if identifier not in self.agents:
@@ -145,6 +172,7 @@ class CadService:
         return {"ok": True}
 
     def _permission(self, actor, wait=False, job_id=None):
+        self.expire_agents()
         if self.closed:
             raise CadError("session_closed", "The local document session is closing.")
         if actor.kind != "agent":
@@ -442,6 +470,7 @@ class CadService:
         return {identifier: {k: v for k, v in data.items() if k != "mesh"} for identifier, data in evaluation["components"].items()}
 
     def state(self):
+        self.expire_agents()
         # State is copied under the short state lock; native evaluation never holds it.
         with self.state_lock:
             document, evaluation = self.document, self.evaluation

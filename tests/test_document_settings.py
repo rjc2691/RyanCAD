@@ -2,7 +2,7 @@ import time
 import pytest
 from ryancad.commands import reduce
 from ryancad.errors import CadError
-from ryancad.model import Actor, Command, Document
+from ryancad.model import Actor, Command, Component, Document
 from ryancad.service import CadService
 
 
@@ -57,3 +57,34 @@ def test_description_can_be_cleared():
     doc = Document(notes="Old description")
     reduce(doc, Actor(), "document.describe", {"description": ""})
     assert doc.notes == ""
+
+
+def test_part_description_persists_and_supports_undo(tmp_path):
+    path = tmp_path / "parts.rycad"
+    service = CadService(path)
+    try:
+        execute(service, "structure.enable")
+        part = execute(service, "part.create", {"name": "Bracket"})["component_id"]
+        execute(service, "part.describe", {"id": part, "description": "  A bracket\nPrototype  "})
+        assert service.document.components[part].description == "A bracket\nPrototype"
+        execute(service, "history.undo")
+        assert service.document.components[part].description == ""
+        execute(service, "history.redo")
+        assert service.document.components[part].description == "A bracket\nPrototype"
+    finally:
+        service.close()
+    reopened = CadService(path)
+    try:
+        assert reopened.document.components[part].description == "A bracket\nPrototype"
+    finally:
+        reopened.close()
+
+
+@pytest.mark.parametrize("value", [None, 42, {}, "x"*4001])
+def test_invalid_part_description_preserves_value(value):
+    doc = Document(structure_version=1)
+    doc.components["part"] = Component(id="part", name="Part", kind="assembly", structure_role="part", description="Keep")
+    with pytest.raises(CadError) as error:
+        reduce(doc, Actor(), "part.describe", {"id": "part", "description": value})
+    assert error.value.code == "invalid_description"
+    assert doc.components["part"].description == "Keep"

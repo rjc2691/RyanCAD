@@ -73,7 +73,7 @@ try{
   return {order:doc.feature_order,owners};
  });
  await page.waitForFunction(count=>document.querySelectorAll('.history-slot').length===count,fixture.order.length);
- await page.getByRole('button',{name:'Separate component timelines'}).click();
+ await page.getByRole('button',{name:'Separate part timelines'}).click();
  const original=await checkConnections(fixture.order);
  assert(original.some(c=>!c.jump),'Fixture must exercise same-lane links');
  assert(original.some(c=>c.jump),'Fixture must exercise lane jumps');
@@ -103,7 +103,7 @@ try{
  await page.setViewportSize({width:1800,height:1400});
  await checkConnections(fixture.order);
  await page.locator('.timeline-panel').screenshot({path:output+'/history-flow-detail.png'});
- await page.getByRole('button',{name:'Separate component timelines'}).click();
+ await page.getByRole('button',{name:'Separate part timelines'}).click();
  assert.equal(await page.locator('.history-chronology').count(),0);
  assert.equal(await page.locator('.history-slot').count(),fixture.order.length);
  assert.equal(await page.locator('.timeline-end').count(),1);

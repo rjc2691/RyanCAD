@@ -1,8 +1,9 @@
+import {lineSeparation} from "./sketchDimensions.ts";
 import type { SketchDraft, SketchEntity, SketchPoint } from "./sketchModel";
 import {sketchAngle,sketchAxisAngle,interiorAngleValue} from "./sketchAngles.ts";
 export type SketchAnnotation = {
   id: string;
-  kind: "length" | "angle";
+  kind: "length" | "distance" | "angle";
   constrained: boolean;
   label: string;
   start: SketchPoint;
@@ -56,6 +57,11 @@ export function sketchMeasurements(
       end: b,
     });
   }
+  for(const c of d.constraints.filter(c=>c.type==="line_distance")){
+    const a=lines.find(e=>e.id===c.a),b=lines.find(e=>e.id===c.b);if(!a||!b)continue;
+    const span=lineSeparation(a,b);
+    out.push({id:`line_distance:${c.a}:${c.b}`,kind:"distance",constrained:true,label:text(c,span.value,"mm"),start:span.start,end:span.end,parameterName:c.parameterName});
+  }
   for (let i = 0; i < lines.length; i++)
     for (let j = i + 1; j < lines.length; j++) {
       const a = lines[i],
@@ -67,7 +73,7 @@ export function sketchMeasurements(
       );
       const corner=sketchAngle(d.entities,a,b);
       if(!corner.connected&&!c)continue;
-      const {vertex,start:u,end:v}=corner,angle=corner.value;
+      const {vertex,start:u,end:v}=corner,angle=c?.angle_frame&&typeof c.value==="number"?c.value:corner.value;
       const displayConstraint=c&&!c.angle_frame&&typeof c.value==="number"?{...c,value:interiorAngleValue(c.a===a.id?c.value:-c.value,corner.frame)}:c;
       if (!Number.isFinite(angle) || (!c && (angle < 1 || angle > 359)))
         continue;

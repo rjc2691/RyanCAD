@@ -47,6 +47,7 @@ import { useOperationPreview } from "./useOperationPreview";
 
 export interface OperationPanelHandle {
   chooseOrigin: () => void;
+  choosePlane:(plane:"XY"|"XZ"|"YZ")=>void;
   chooseAxis: (axis: "X" | "Y" | "Z") => void;
   canChooseAxis: () => boolean;
   cancel: () => void;
@@ -262,6 +263,10 @@ export default forwardRef<
           : { origin: "reference", reference: item, originPinned: true },
       );
       setPick(null);
+    },
+    choosePlane(plane){
+      if(committingRef.current||pick!=="plane")return;
+      patch({plane});setPick(null);setNotice("");
     },
     chooseAxis(axis) {
       if (committingRef.current) return;

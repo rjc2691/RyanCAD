@@ -1,4 +1,5 @@
 import {syncMovementGhost} from "./movementGhost";
+import {createFadingGrid} from "./gridAppearance";
 import MoveAxisHandles,{type MoveAxisHandlesHandle} from "./MoveAxisHandles";
 import {shortcutLabel} from './toolbarShortcuts';
 import type {ActiveAppearance} from "./experiments";
@@ -86,6 +87,7 @@ interface Props {
   sketch?: SketchDraft | null;
   dimensionEditor?: SketchDimensionEditor | null;
   sketchPlanePicking?: boolean;
+  worldPlanePicking?:boolean;
   sketchObjects?: SketchDraft[];
   selectedSketch?: string | null;
   onSelectSketch?: (id: string,removeOnly?:boolean) => void;
@@ -651,17 +653,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     const rim = new THREE.DirectionalLight("#88c7bf", 1.3);
     rim.position.set(-90, 140, 20);
     scene.add(rim);
-    const grid = new THREE.GridHelper(
-      1000,
-      100,
-      new THREE.Color("#4a5869"),
-      new THREE.Color("#303a49"),
-    );
-    grid.rotation.x = Math.PI / 2;
-    grid.position.z = -0.12;
-    const gm = grid.material as THREE.LineBasicMaterial;
-    gm.transparent = true;
-    gm.opacity = 0.23;
+    const {grid, update: updateGridFade} = createFadingGrid();
     scene.add(grid);
     const axes = new THREE.Group();
     for (const [index,[direction,color]] of ([
@@ -948,16 +940,15 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       return hit.object.userData.worldAxis as WorldAxis;
     };
     const pickWorldPlane=(event:MouseEvent):WorldPlane|null=>{
-      if(!worldPlanes.visible)return null;
+      if(!propsRef.current.worldPlanePicking||!worldPlanes.visible)return null;
       camera.updateMatrixWorld();worldPlanes.updateMatrixWorld(true);parts.updateMatrixWorld(true);
       const r=renderer.domElement.getBoundingClientRect();pointer.set((event.clientX-r.left)/r.width*2-1,1-(event.clientY-r.top)/r.height*2);raycaster.setFromCamera(pointer,camera);
       const marker=raycaster.intersectObjects(worldPlanes.children.map(g=>g.children[0]),false).find(h=>Math.abs(raycaster.ray.direction.dot(h.object.userData.normal))>.08);
       const surfaces=parts.children.flatMap(g=>g.children.filter(o=>(o.type==='Mesh'||o.type==='LineSegments')&&!o.userData.overlay));
       raycaster.params.Line.threshold=(camera.top-camera.bottom)/camera.zoom/r.height*5;
       const occluder=raycaster.intersectObjects(surfaces,false).find(h=>!propsRef.current.section||sectionKeeps(h.point,propsRef.current.sectionPlane));
-      if(propsRef.current.sketchPlanePicking&&occluder)return null;
-      if(marker&&(!occluder||occluder.distance>marker.distance+.001))return marker.object.userData.worldPlane;
-      if(!propsRef.current.sketchPlanePicking)return null;
+      if(occluder)return null;
+      if(marker)return marker.object.userData.worldPlane;
       const candidates=worldPlanes.children.flatMap(group=>{
         const plane=group.userData.worldPlane as WorldPlane,{u,v}=worldPlaneAxes(plane),normal=new THREE.Vector3().crossVectors(u,v),point=new THREE.Vector3();
         if(Math.abs(raycaster.ray.direction.dot(normal))<.08||!raycaster.ray.intersectPlane(new THREE.Plane(normal,0),point))return [];
@@ -1295,10 +1286,11 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       frame = requestAnimationFrame(render);
       controls.update();
       const current=propsRef.current;
-      worldPlanes.visible=!!current.onWorldPlane&&(!current.sketch||!!current.sketchPlanePicking)&&!current.operationDraft&&!current.placementTarget&&!current.featureEditTarget&&!current.measurePoints&&(current.grid||!!current.sketchPlanePicking);
+      updateGridFade(camera);
+      worldPlanes.visible=!!current.worldPlanePicking&&!!current.onWorldPlane;
       worldPlanes.scale.setScalar((camera.top-camera.bottom)/camera.zoom/Math.max(1,state.height));
       if(!worldPlanes.visible)showPlaneHover(null);
-      styleWorldPlanes(worldPlanes,planeHover,current.selectedWorldPlane,!!current.sketchPlanePicking,Math.max(state.width,state.height)*24);
+      styleWorldPlanes(worldPlanes,planeHover,current.selectedWorldPlane,!!current.worldPlanePicking,Math.max(state.width,state.height)*24);
       if (lastPointer) {
         const event = lastPointer;
         const sketchId = pickSketch(event);
@@ -1933,6 +1925,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         className="canvas-host"
         ref={container}
         aria-label="Interactive CAD viewport"
+        data-world-plane-picking={props.worldPlanePicking||undefined}
         data-hover-source={
           hoveredSketch||hoveredWorldPlane?'viewport':hovered ? (hoverFromPanel ? "panel" : "viewport") : undefined
         }
@@ -1988,7 +1981,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
             </span>
           )}
         <small>
-          {hoveredWorldPlane ? props.sketchPlanePicking?'Click to use this sketch plane':`Click to select plane · ${shortcutLabel('sketch')} starts a sketch` : hoveredSketch ? props.operationDraft?'Use as Tool Profile':'Click to select sketch' : hoveredAxis
+          {hoveredWorldPlane ? 'Click to use this plane' : hoveredSketch ? props.operationDraft?'Use as Tool Profile':'Click to select sketch' : hoveredAxis
             ? "Use as reference direction / Tool Path"
             : props.placementTarget
               ? "Pick points for origin/target or an edge for direction"

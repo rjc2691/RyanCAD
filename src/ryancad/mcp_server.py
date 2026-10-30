@@ -5,6 +5,7 @@ import argparse
 import json
 from pathlib import Path
 import time
+import threading
 from uuid import uuid4
 
 import httpx
@@ -28,18 +29,43 @@ def main():
         workspace.raise_for_status()
         # Pin the connector for its entire life, even if another tab switches designs.
         client.headers["X-RyanCAD-Design"] = arguments.design or workspace.json()["active_design"]
-    response = client.post("/api/agents", json={"name": arguments.name})
-    response.raise_for_status()
-    actor = response.json()
-    client.headers["X-RyanCAD-Actor"] = actor["id"]
     server = MCPServer("RyanCAD", instructions="Inspect the live document and capabilities before editing. Use semantic commands with the current revision. Each ordinary command is a visible authored step. Wait for completion before depending on results. Respect paused/revoked controls. No model/chat integration is needed in the CAD app.")
 
+    stopped = threading.Event()
+    registration_lock = threading.Lock()
+    pulse_thread = None
+    def heartbeat():
+        # Separate client: keep leases alive even while a tool waits on geometry.
+        with httpx.Client(base_url=config["url"], headers=dict(client.headers), timeout=10) as pulse:
+            while not stopped.wait(15):
+                try:
+                    result = pulse.post("/api/agents/heartbeat")
+                    if result.status_code in {401, 403}:
+                        return
+                except httpx.HTTPError:
+                    pass  # The server expires this session if the outage persists.
+
+    def ensure_agent():
+        nonlocal pulse_thread
+        # Hosts can start short-lived connectors just to discover available tools.
+        # Only an actual tool invocation creates an authored CAD session.
+        with registration_lock:
+            if pulse_thread is not None:
+                return
+            response = client.post("/api/agents", json={"name": arguments.name})
+            response.raise_for_status()
+            client.headers["X-RyanCAD-Actor"] = response.json()["id"]
+            pulse_thread = threading.Thread(target=heartbeat, name="ryancad-agent-heartbeat", daemon=True)
+            pulse_thread.start()
+
     def get(path):
+        ensure_agent()
         result = client.get(path)
         result.raise_for_status()
         return result.json()
 
     def post(path, payload=None):
+        ensure_agent()
         result = client.post(path, json=payload or {})
         if result.is_error:
             return result.json()
@@ -117,8 +143,12 @@ def main():
     try:
         server.run(transport="stdio")
     finally:
+        stopped.set()
+        if pulse_thread is not None:
+            pulse_thread.join(timeout=11)
         try:
-            client.post("/api/agents/disconnect")
+            if pulse_thread is not None:
+                client.post("/api/agents/disconnect")
         finally:
             client.close()
 

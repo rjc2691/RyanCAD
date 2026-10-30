@@ -35,14 +35,15 @@ def main():
     subprocess.run([node, str(ROOT / "frontend/node_modules/vite/bin/vite.js"), "build"], cwd=ROOT / "frontend", check=True)
     environment = dict(os.environ)
     environment["UV_CACHE_DIR"] = str(ROOT / ".cache/uv")
+    venv_python = ROOT / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
     uv = shutil.which("uv")
     if uv:
         run([uv, "sync", "--frozen", "--extra", "dev", "--python", sys.executable], env=environment)
     else:
-        venv_python = ROOT / (".venv/Scripts/python.exe" if os.name == "nt" else ".venv/bin/python")
         if not venv_python.exists():
             run([sys.executable, "-m", "venv", ROOT / ".venv"])
         run([venv_python, "-m", "pip", "install", "-e", ".[dev]"])
+    run([venv_python, "-m", "ryancad.check_install"], env=environment)
     print("Setup complete. Run the start script or the environment's 'python -m ryancad'.", flush=True)
 
 

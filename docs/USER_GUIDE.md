@@ -153,6 +153,10 @@ Use Previous feature / Next feature or View build stage to inspect earlier geome
 
 External agents join the same session and are visible in activity. Pause, step, resume and revoke control command boundaries. Human edits invalidate earlier proposals. Agent names identify local sessions rather than verified people. Manual tools work with agents disconnected. There is no embedded chat.
 
+The Agents badge counts live connector sessions, not distinct people or models. The MCP connector sends a heartbeat every 15 seconds; a session with no heartbeat for 90 seconds is marked disconnected. Clean shutdown disconnects immediately. Timed-out entries remain labeled in the Agents list for attribution but are excluded from the badge. Direct API clients must also send `POST /api/agents/heartbeat` with their actor and workspace/design headers while connected. After updating this behavior, restart RyanCAD and reconnect the MCP client so both ends use the heartbeat protocol.
+
+MCP initialization and tool discovery do not create agent entries. A connector registers on its first actual CAD tool invocation and reuses that session for subsequent calls. Separate connector processes can still appear with the same display name; this does not indicate that the host used subagents.
+
 ## Export and native documents
 
 STL export selects exact instances, local-part or assembly coordinates and mesh precision. Each selected instance receives its own STL. Hidden parts remain eligible. Planar, incomplete or suppressed parts are rejected rather than silently omitted; deliberately select solid instances when needed.
@@ -226,7 +230,7 @@ Right-click a group for Add component inside group or Add subgroup. Right-click 
 
 The sidebar has three primary collections: Components, 2D Sketches and 3D Tool Bodies. Use the + in 3D Tool Bodies to create a reusable solid, build it in the isolated tool workbench, and Return to design when done. Select 3D body in Tool Profile Shape to choose a saved tool from the library. Tools are parameterized and saved, but do not appear in assembly counts or STL exports.
 
-Component lanes in the feature-history header separates nonempty component/tool histories while retaining every event's global horizontal column. Each lane's hide button merges its events into the top design lane. Restore lanes reverses that view choice; the main toggle returns to a single timeline. The expanded panel is height-limited and scrolls. Previous feature and Next feature step the global build prefix from Origin to Current without editing the saved document. See TOOL_BODIES_AND_HISTORY.md for working-frame semantics and limits.
+Part lanes in the feature-history header separates nonempty part/tool histories while retaining every event's global horizontal column. Component features share their containing part's lane, labeled with the current part name. Nested parts have their own lanes. Layout copies do not duplicate feature events. A shared component definition uses its first nearest containing part; unassigned structured features stay in the design lane. Each lane's hide button merges its events into the top design lane. Restore lanes reverses that view choice; the main toggle returns to a single timeline. The expanded panel is height-limited and scrolls. Previous feature and Next feature step the global build prefix from Origin to Current without editing the saved document. See TOOL_BODIES_AND_HISTORY.md for working-frame semantics and limits.
 
 
 ## Sidebar and sketch workflow refinement — October 28
@@ -286,19 +290,9 @@ For Chrome, open `chrome://settings/system`, enable **Use graphics acceleration 
 
 ## Selectable world planes
 
-Small XY, XZ and YZ square markers sit just off the axes in each plane's positive quadrant. Hover a marker for dark blue highlighting and its name; click to select it in cyan. Visible component geometry and sketch lines take priority over planes behind them. Edge-on planes are not pick targets. The patches maintain a usable screen size while zooming and represent infinite world-coordinate planes, not finite geometry.
+World XY, XZ and YZ plane markers appear only while a workflow is actively requesting a plane: sketch setup, section-plane reference picking, or a Tool support/mirror plane picker. They stay hidden and cannot intercept hover/clicks in the ordinary Layout, Part and Component editors, or after choosing/cancelling a plane. Starting a sketch without a selected face opens its plane-picking step.
 
-Select a marker and start Sketch, or start Sketch with no selection and hover/click anywhere in an empty positive quadrant. Only the hovered quadrant receives a faint highlight. Existing geometry takes priority over empty-space quadrant picking. Where projected positive quadrants overlap, the most balanced in-plane direction wins, with distance as a tie-breaker; marker picks always provide an explicit alternative. The view aligns to the chosen plane and drawing tools become available. Planar component faces remain valid sketch planes. The purple viewport plane-selection box has been removed; the sidebar plane selector remains available. Plane picks are view/setup references and never add document geometry. Movement, Measure and active tool operations keep their existing reference picking rather than intercepting world-plane clicks. World-plane patches follow the world grid visibility control, but remain available while Sketch is waiting for its plane.
-
-
-The sketch Line tool automatically ends its current chain when a new segment closes an outline, including closing a connected existing open outline. The closing segment is retained and the temporary preview clears. Line stays active; the next click begins a separate chain. Open chains, unrelated endpoint picks and flat retracing continue normally. Construction and ordinary geometry are treated separately for closure.
-
-
-Viewport click targets use the restrained dark blue treatment; selected faces, edges, vertices, saved sketches and world-plane markers use bright cyan. The legend reflects these roles. The active component retains its orange styling. Tool Profile labels retain their current geometric corner through near-equal candidates, changing only when another placement offers a meaningful improvement; a visibility dead band prevents blinking near the minimum display size.
-
-
-The main world axes now extend in both positive and negative directions. Positive X/Y/Z use brighter red/green/blue 2 px strokes; negative halves use thinner, fainter strokes. Both halves keep world-axis hover/reference picking, while visible part geometry takes priority. Picking either half references the same world axis; use an operation's Reverse direction control to change travel direction. The world grid visibility toggle controls both halves.
-
+Small squares sit just off the positive world axes. Hover/click an empty positive quadrant as an alternative; only the hovered quadrant receives a faint highlight. Existing geometry takes priority. Where projected quadrants overlap, a balanced in-plane direction wins, with distance as a tie-breaker; the markers offer explicit alternatives. Plane picking remains available with the ordinary world grid hidden. These setup references add no geometry. Main world axes retain their separate reference behavior.
 
 ## Parts and layouts update
 
@@ -320,7 +314,7 @@ Sketch plane setup uses the colored reference picker; choose a world plane or pl
 
 - Hover highlights the actual sketch line or point target in orange; selected geometry is blue. Drawing tools show the snapped placement cursor and pending segment.
 - Select geometry and press Delete or Backspace to remove it and its attached relationships. Typing in fields keeps normal text deletion. Ctrl/Cmd+Z restores sketch edits.
-- Dimension (D): one line sets length; two lines set angle. Shift-select two lines before pressing D, or pick a second line while the length input is open. Switching to angle discards the tentative length, preserving any previously accepted length constraints. Edit the viewport input with a number or matching named parameter. Geometry solves while typing. Enter accepts the valid dimension; Escape restores the prior geometry. Angles are signed from the first line's start-to-end direction to the second's; existing angle dimensions retain their stored direction when reopened.
+- Dimension (D): one line sets length; two nonparallel lines set angle, while two parallel lines default to perpendicular distance. Shift-select two lines before pressing D, or pick a second line while the length input is open. Switching to angle discards the tentative length, preserving any previously accepted length constraints. Edit the viewport input with a number or matching named parameter. Geometry solves while typing. Enter accepts the valid dimension; Escape restores the prior geometry. Angles are signed from the first line's start-to-end direction to the second's; existing angle dimensions retain their stored direction when reopened.
 - Connect (K): pick two endpoints or point objects to add a coincident relationship. The solver updates their positions immediately. Midpoints remain reference markers rather than writable endpoints.
 - Disconnect (U): pick a connected endpoint to remove its coincident relationships. The endpoint initially retains its current location but subsequent dimensional edits no longer keep it attached.
 
@@ -353,3 +347,13 @@ Design properties appear directly below the design name. Edit the design descrip
 
 
 Movement follows the current editor: **Move Part** in the Layout Editor moves placed parts/groups, while **Move Component** remains available inside part and component editors. The M shortcut is unchanged. Layout movement's target list contains placements in the current layout scope, not internal component definitions or library copies. Clicking a world axis while no operation is active does not start a move. During an active move, Tool operation, sketch dimension, or section-plane selection, axes still supply the requested reference.
+
+
+### Dimension candidates and Tab cycling
+Dimension keeps a list of valid constraints for the current sketch-line selection. One line offers Length. Two nonparallel lines offer Angle. Two parallel (or antiparallel) lines offer Distance first, then Angle; distance is perpendicular separation and keeps the lines parallel. Zero separation and zero-degree parallel alignment are supported.
+
+With an inline value open, Tab cycles to the next candidate and Shift+Tab cycles backward. The small counter shows the current choice and next alternative; clicking it cycles too. Candidate-specific typed values are remembered while cycling the same selection. Switching alternatives or changing the picks restores the pre-edit geometry before evaluating the next candidate, so discarded previews never leave hidden constraints. Enter accepts only the current valid candidate. Escape or Space discards the tentative geometry while retaining the latest object selection.
+
+A second line can be picked without Shift. Shift-click adds/removes a line; Ctrl-click removes only an existing pick. With two lines selected, a plain click on another line replaces the second pick and keeps the first as the anchor. Empty-space click clears the picks; Shift-clicking a third line explains the two-line limit. The candidate list updates after each change. Selecting an axis retains the existing line-to-axis angle workflow.
+
+When named-parameter suggestions are open, Tab completes/cycles parameter names as before. Choose a suggestion (or dismiss its list by leaving the field) to resume dimension cycling; the candidate cycle button is also available. Parallel distance annotations use the persistent dimension styling and can be clicked to reopen. Their single sketch constraint includes parallelism; it does not bind to another component or introduce named parameters automatically.

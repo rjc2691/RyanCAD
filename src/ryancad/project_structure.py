@@ -286,6 +286,16 @@ def structure_command(document, actor, name, args):
         c, i = container(document, actor, args.get("name") or available_name(document, "Part Group", "group"), "group")
         i.parent = parent.id
         return {"component_id": c.id, "instance_id": i.id}, [c.id], f"Create Part Group · {c.name}"
+    if name == "part.describe":
+        c = require(document.components, args.get("id"), "part")
+        if c.structure_role != "part":
+            raise CadError("invalid_part", "Descriptions can only be edited on a part definition.")
+        description = args.get("description", "")
+        if not isinstance(description, str) or len(description) > 4000:
+            raise CadError("invalid_description", "Part descriptions must be text containing at most 4000 characters.")
+        c.description = description.strip()
+        c.modified_by = actor.id
+        return {}, [c.id], f"Update part description · {c.name}"
     if name == "structure.rename":
         c = require(document.components, args.get("id"), "definition")
         c.name = unique_name(document, args.get("name"), c.structure_role, c.id) if c.structure_role in {"part", "layout"} else str(args.get("name", "")).strip()[:120]
@@ -337,6 +347,7 @@ def structure_command(document, actor, name, args):
 
 
 STRUCTURE_COMMANDS = {name: description for name, description in [
+    ("part.describe", "Edit the description of a part definition."),
     ("part.delete", "Delete a part definition, its variations and placements; retain child definitions and reject external parameter dependencies."),
     ("structure.enable", "Undoable conversion of legacy bodies/groups into reusable parts and one layout; preserves geometry and placement."),
     ("part.create", "Create a uniquely named reusable part definition."),

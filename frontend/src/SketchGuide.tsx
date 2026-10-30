@@ -1,3 +1,5 @@
+import {placeSketchDimension} from "./sketchDimensionPlacement";
+import type {SketchDimensionEditorState} from "./sketchDimensions";
 import {
   forwardRef,
   useEffect,
@@ -8,6 +10,7 @@ import {
 import { sketchMeasurements } from "./sketchMeasurements";
 import { NumericInput } from "./NumericInput";
 import { sketchPlaneBounds } from "./sketchGrid";
+import { gridAngleOpacity } from "./gridAppearance";
 import * as THREE from "three";
 import {
   entityPoints,
@@ -19,12 +22,8 @@ import {
 export interface SketchGuideHandle {
   update: (camera: THREE.Camera, width: number, height: number) => void;
 }
-export interface SketchDimensionEditor {
-  line: string;
-  value: string;
-  error?: string;
-  kind?:"length"|"angle";
-  second?:string|null;
+export interface SketchDimensionEditor extends SketchDimensionEditorState {
+  onCycle?:(backwards:boolean)=>void;
   onChange: (value: string) => void;
   onConfirm: () => void;
   onCancel: () => void;
@@ -43,13 +42,14 @@ export default forwardRef<
     editorRoot = useRef<HTMLDivElement>(null),
     editorInput = useRef<HTMLInputElement>(null),
     latestEditor = useRef(dimensionEditor);
+  const inputPlacement=useRef<{key:string;point:[number,number]}|null>(null);
   latestEditor.current = dimensionEditor;
   useEffect(() => {
     if (dimensionEditor?.line) {
       editorInput.current?.focus();
       editorInput.current?.select();
     }
-  }, [dimensionEditor?.line]);
+  }, [dimensionEditor?.line,dimensionEditor?.second,dimensionEditor?.kind]);
   const measurements = useMemo(
     () => (draft ? sketchMeasurements(draft) : []),
     [draft?.entities, draft?.constraints],
@@ -63,6 +63,7 @@ export default forwardRef<
         d = latest.current;
       if (!svg || !d) return;
       const f = sketchBasis(d.frame);
+      svg.querySelector('[data-sketch="grid-layer"]')?.setAttribute("opacity", String(gridAngleOpacity(camera, f.normal)));
       const bounds = sketchPlaneBounds(camera, d.frame);
       if (!bounds) return;
       const { minU, maxU, minV, maxV } = bounds,
@@ -80,6 +81,7 @@ export default forwardRef<
         return [((v.x + 1) * width) / 2, ((1 - v.y) * height) / 2];
       };
       const editor = latestEditor.current;
+      let inputPosition:[number,number]|null=null;
       const targetLine =
         editor &&
         d.entities.find((e) => e.id === editor.line && e.type === "line");
@@ -95,7 +97,7 @@ export default forwardRef<
           8,
           Math.min(height - 76, (y1 + y2) / 2 + ((x2 - x1) / length) * 28 - 17),
         );
-        editorRoot.current.style.transform = `translate(${x}px, ${y}px)`;
+        inputPosition=[x,y];
       }
       const path = (ps: SketchPoint[]) =>
         ps
@@ -197,11 +199,11 @@ export default forwardRef<
         const line = g.querySelector("path"),
           label = g.querySelector("text");
         if (!line || !label) continue;
-        if (item.kind === "length") {
+        if (item.kind === "length"||item.kind==="distance") {
           const length = Math.hypot(x2 - x1, y2 - y1),
             nx = length ? -(y2 - y1) / length : 0,
             ny = length ? (x2 - x1) / length : 1;
-          const offset = item.constrained ? 20 : 9,
+          const offset = item.kind==="distance"?0:item.constrained ? 20 : 9,
             ax = x1 + nx * offset,
             ay = y1 + ny * offset,
             bx = x2 + nx * offset,
@@ -216,8 +218,8 @@ export default forwardRef<
               ? `M${x1},${y1}L${ax},${ay}M${x2},${y2}L${bx},${by}M${ax},${ay}L${bx},${by}M${ax - ny * 3},${ay + nx * 3}L${ax + ny * 3},${ay - nx * 3}M${bx - ny * 3},${by + nx * 3}L${bx + ny * 3},${by - nx * 3}`
               : "",
           );
-          label.setAttribute("x", String((ax + bx) / 2));
-          label.setAttribute("y", String((ay + by) / 2 - 3));
+          label.setAttribute("x", String((ax + bx) / 2+(item.kind==="distance"?nx*12:0)));
+          label.setAttribute("y", String((ay + by) / 2 - 3+(item.kind==="distance"?ny*12:0)));
         } else if (item.vertex) {
           const [cx, cy] = project(item.vertex),
             u = [x1 - cx, y1 - cy],
@@ -244,8 +246,9 @@ export default forwardRef<
             "d",
             `${item.axis?`M${cx},${cy}L${qx+(qx-cx)*.6},${qy+(qy-cy)*.6} `:""}M${px},${py} A${radius},${radius} 0 ${item.reflex?1:0} ${(cross > 0)!==!!item.reflex ? 1 : 0} ${qx},${qy}`,
           );
-          const bx = (ux + vx)*(item.reflex?-1:1),
-            by = (uy + vy)*(item.reflex?-1:1),
+          const opposite=Math.hypot(ux+vx,uy+vy)<1e-6;
+          const bx = (opposite?-uy:ux+vx)*(item.reflex?-1:1),
+            by = (opposite?ux:uy+vy)*(item.reflex?-1:1),
             bl = Math.hypot(bx, by) || 1;
           label.setAttribute("x", String(cx + ((radius + 13) * bx) / bl));
           label.setAttribute("y", String(cy + ((radius + 13) * by) / bl));
@@ -333,11 +336,22 @@ export default forwardRef<
           );
         }
       }
-      if(editor?.kind==="angle"&&editorRoot.current&&editor.second){
-        const annotation=latestMeasurements.current.find(m=>m.kind==="angle"&&(m.id===`angle:${editor.line}:${editor.second}`||m.id===`angle:${editor.second}:${editor.line}`));
+      if(editor&&editorRoot.current&&editor.annotation){
+        const annotation=latestMeasurements.current.find(m=>m.id===editor.annotation||(editor.kind==="angle"&&m.id===`angle:${editor.second}:${editor.line}`));
         const text=annotation&&svg.querySelector(`[data-measurement="${annotation.id}"] text`);
-        if(text){const x=Number(text.getAttribute('x')),y=Number(text.getAttribute('y'));editorRoot.current.style.transform=`translate(${Math.max(8,Math.min(width-178,x-85))}px, ${Math.max(8,Math.min(height-76,y-18))}px)`;}
+        if(text){const x=Number(text.getAttribute('x')),y=Number(text.getAttribute('y'));inputPosition=[Math.max(8,Math.min(width-178,x-85)),Math.max(8,Math.min(height-76,y-18))];}
       }
+      if(inputPosition&&editor&&editorRoot.current){
+        const box=editorRoot.current,w=box.offsetWidth,h=box.offsetHeight;
+        const annotationReady=latestMeasurements.current.some(m=>m.id===editor.annotation);
+        const key=`${editor.line}|${editor.second}|${editor.kind}|${width}|${height}|${w}|${h}|${annotationReady}`;
+        let point=inputPlacement.current?.point;
+        if(inputPlacement.current?.key!==key||document.activeElement!==editorInput.current){
+          const lines=d.entities.filter(e=>e.type==="line").map(e=>[project([e.x1,e.y1]),project([e.x2,e.y2])] as [[number,number],[number,number]]);
+          point=placeSketchDimension(inputPosition,[w,h],[width,height],lines);inputPlacement.current={key,point};
+        }
+        if(point)box.style.transform=`translate(${point[0]}px, ${point[1]}px)`;
+      }else if(!editor)inputPlacement.current=null;
       const scale = svg.querySelector('[data-sketch="scale"]');
       if (scale)
         scale.textContent = `Grid ${step.toLocaleString()} mm · coordinates in mm`;
@@ -351,8 +365,10 @@ export default forwardRef<
         className={`sketch-viewport-guide${gridOnly ? " sketch-grid-preview" : ""}`}
         aria-label="Sketch geometry and coordinate grid"
       >
-        <path data-sketch="grid" className="sketch-grid-minor" />
-        <path data-sketch="major" className="sketch-grid-major" />
+        <g data-sketch="grid-layer">
+          <path data-sketch="grid" className="sketch-grid-minor" />
+          <path data-sketch="major" className="sketch-grid-major" />
+        </g>
         {!gridOnly && (
           <>
             <path data-sketch="u" className="sketch-axis-u" />
@@ -427,15 +443,16 @@ export default forwardRef<
           onPointerUp={(e) => e.stopPropagation()}
         >
           <label>
-            <span className="sketch-dimension-inline-label">{dimensionEditor.kind==="angle"?dimensionEditor.second?.startsWith("world:")?`Angle to ${dimensionEditor.second.slice(6)}`:"Angle":"Length"}</span>
+            <span className="sketch-dimension-inline-label">{dimensionEditor.kind==="angle"?dimensionEditor.second?.startsWith("world:")?`Angle to ${dimensionEditor.second.slice(6)}`:"Angle":dimensionEditor.kind==="distance"?"Distance":"Length"}</span>
             <NumericInput kind={dimensionEditor.kind==="angle"?"angle":"length"}
               ref={editorInput}
-              aria-label={dimensionEditor.kind==="angle"?"Viewport dimension angle":"Viewport dimension length"}
+              aria-label={dimensionEditor.kind==="angle"?"Viewport dimension angle":dimensionEditor.kind==="distance"?"Viewport dimension distance":"Viewport dimension length"}
               type="text"
               value={dimensionEditor.value}
               onChange={(e) => dimensionEditor.onChange(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if(e.key==="Tab"&&!e.ctrlKey&&!e.metaKey&&!e.altKey&&(dimensionEditor.choices?.length||0)>1){e.preventDefault();e.stopPropagation();dimensionEditor.onCycle?.(e.shiftKey);}
+                else if (e.key === "Enter") {
                   e.preventDefault();
                   e.stopPropagation();
                   dimensionEditor.onConfirm();
@@ -448,6 +465,7 @@ export default forwardRef<
             />
             <span className="sketch-dimension-inline-unit">{dimensionEditor.kind==="angle"?"°":"mm"}</span>
           </label>
+          {(dimensionEditor.choices?.length||0)>1&&<button className="sketch-dimension-cycle" type="button" aria-label="Cycle dimension type" title="Tab: next dimension; Shift+Tab: previous. Parameter autocomplete uses Tab while its list is open." onClick={()=>dimensionEditor.onCycle?.(false)}><span>{(dimensionEditor.choice||0)+1}/{dimensionEditor.choices!.length}</span><span>Tab: {dimensionEditor.choices![((dimensionEditor.choice||0)+1)%dimensionEditor.choices!.length].label}</span></button>}
           {dimensionEditor.error && (
             <div role="status" className="sketch-dimension-inline-error">
               {dimensionEditor.error}

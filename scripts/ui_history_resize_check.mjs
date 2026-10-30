@@ -18,7 +18,7 @@ try{
  });
  await page.waitForFunction(()=>document.querySelectorAll('.history-slot').length===12);
  const initial=await height();await drag(180);assert(Math.abs(await height()-initial-180)<3);
- await page.getByRole('button',{name:'Separate component timelines'}).click();assert(Math.abs(await height()-initial-180)<3);
+ await page.getByRole('button',{name:'Separate part timelines'}).click();assert(Math.abs(await height()-initial-180)<3);
  await drag(-120);const smaller=await height();assert(smaller<initial+80);
  const scroll=await page.locator('.feature-history-scroll').evaluate(e=>({vertical:e.scrollHeight>e.clientHeight,horizontal:e.scrollWidth>e.clientWidth,width:getComputedStyle(e).scrollbarWidth}));
  assert(scroll.vertical&&scroll.horizontal);assert.equal(scroll.width,'auto');

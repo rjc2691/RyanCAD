@@ -32,7 +32,7 @@ For a separate project:
 
 Use `--port 8791` when needed. Each process must own a different project folder. Click **Local Workspace** in the sidebar, or **Workspace designs** in the RyanCAD menu, to create, switch, rename, delete, and restore independent designs.
 
-On a fresh machine, install Python 3.12/3.13, Node.js 22+, and pnpm 11 (or npm), then run `python scripts/bootstrap.py`. On macOS use `.venv/bin/python` and `bash Start-RyanCAD.command`. PlaneGCS needs a source build on Mac: Apple command-line build tools, CMake, Eigen3 and Boost, with `CMAKE_PREFIX_PATH` pointing to the package prefix. Mac setup/CI is prepared but has not been executed on a Mac here.
+On a fresh machine, install Python 3.12/3.13, Node.js 22+, and pnpm 11 (or npm), then run `python scripts/bootstrap.py`. On Linux, install the native system runtime first: `libgl1` on Ubuntu/Debian or `libglvnd-glx` on Amazon Linux 2023. See [Linux/EC2 setup and troubleshooting](docs/LINUX_SETUP.md). Bootstrap checks native geometry and sketch solving before declaring setup complete. On macOS use `.venv/bin/python` and `bash Start-RyanCAD.command`. PlaneGCS needs a source build on Mac: Apple command-line build tools, CMake, Eigen3 and Boost, with `CMAKE_PREFIX_PATH` pointing to the package prefix. Mac setup/CI is prepared but has not been executed on a Mac here.
 
 After setup the application works offline, with local bundled assets, no cloud service, telemetry, account, embedded model or chat panel.
 

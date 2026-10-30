@@ -367,9 +367,15 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
         actor = actor_for(request)
         if actor.kind != "agent":
             raise CadError("agent_session_required", "This endpoint closes an external-agent session.")
-        service.agents[actor.id]["connected"] = False
-        service.event("agent_disconnected", actor_id=actor.id)
+        service.disconnect_agent(actor.id)
         return {"ok": True}
+
+    @app.post("/api/agents/heartbeat")
+    def agent_heartbeat(request: Request):
+        actor = actor_for(request)
+        if actor.kind != "agent":
+            raise CadError("agent_session_required", "Heartbeat requires an external-agent session.")
+        return service.heartbeat_agent(actor.id)
 
     @app.post("/api/measure")
     async def measure(request: Request):

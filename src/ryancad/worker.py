@@ -7,6 +7,7 @@ import time
 import traceback
 
 from .errors import CadError
+from .native_runtime import kernel_start_error
 
 
 def worker_main(connection):
@@ -30,7 +31,7 @@ def worker_main(connection):
         return
     except Exception as exc:
         try:
-            connection.send({"ok": False, "error": {"code": "kernel_start_failed", "message": str(exc), "details": {}}})
+            connection.send({"ok": False, "error": kernel_start_error(exc).payload()})
         except Exception:
             pass
     finally:

@@ -266,9 +266,11 @@ svg {
     );
 }
 @media(min-width:1000px){
-  .app-shell {--viewport-min:min(400px,calc(100vw - var(--structure-width) - var(--inspector-width)));grid-template-areas:"header header header" "left tools inspector" "left viewport inspector" "timeline timeline timeline";}
-  .app-shell[data-toolbar-layout=full-width] {grid-template-areas:"header header header" "tools tools tools" "left viewport inspector" "timeline timeline timeline";}
+  .app-shell {--viewport-min:min(400px,calc(100vw - var(--structure-width) - var(--inspector-width)));--toolbar-left-inset:var(--structure-width);--toolbar-right-inset:var(--inspector-width);grid-template-areas:"header header header" "tools tools tools" "left viewport inspector" "timeline timeline timeline";}
+  .app-shell.left-hidden {--toolbar-left-inset:0px;}
+  .app-shell.right-hidden {--toolbar-right-inset:0px;}
   .app-shell > .tool-strip {min-width:0;}
+  .app-shell[data-toolbar-layout=between] .tool-strip-content {margin-left:var(--toolbar-left-inset);margin-right:var(--toolbar-right-inset);}
 }
 
 .app-shell.right-hidden {
@@ -945,7 +947,7 @@ input[aria-invalid="true"] { border-color: #d68c80; }
   pointer-events: none;
 }
 .viewport-context .eyebrow {
-  font-size: 8px;
+  font-size: 10px;
   color: #788ba2;
   letter-spacing: 1.5px;
 }
@@ -4310,14 +4312,14 @@ input[aria-invalid="true"] { border-color: #d68c80; }
 .design-inspector .design-overview-heading > div { min-width:0; }
 .design-inspector .design-overview-heading .eyebrow { color:#8296a7;font-size:9px;letter-spacing:.7px; }
 .design-inspector .design-overview-heading h2 { margin-top:5px;font-size:15px;line-height:1.4;overflow-wrap:anywhere;color:#d5dfe9; }
-.design-structure-summary { display:grid;gap:7px;margin-bottom:16px; }
-.design-structure-card { display:flex;align-items:flex-start;gap:10px;border:1px solid #2a3a48;border-radius:6px;padding:11px;background:#18232d;color:#8faabf; }
-.design-structure-card > svg { margin-top:2px;flex-shrink:0; }
-.design-structure-card > div { display:grid;gap:5px;min-width:0; }
-.design-structure-card span { font-size:11px;font-weight:550;color:#c5d5e1; }
-.design-structure-card small { color:#8398a9;font-size:10px;line-height:1.4; }
-.design-structure-card > strong { margin-left:auto;color:#dce9ed;font-size:21px;font-weight:500;line-height:1.2;font-variant-numeric:tabular-nums; }
-.design-structure-card .design-card-detail { display:flex;align-items:center;gap:5px;margin-top:2px;color:#a7bdcd; }
+.design-structure-summary { display:grid;gap:4px;margin-bottom:13px; }
+.design-structure-card { display:flex;align-items:center;gap:8px;border:1px solid #26333f;border-radius:4px;padding:7px 9px;background:#18232d55;color:#8097a9; }
+.design-structure-card > svg { flex-shrink:0; }
+.design-structure-card > div { display:grid;gap:2px;min-width:0; }
+.design-structure-card span { font-size:11px;font-weight:500;color:#b9cbd8; }
+.design-structure-card small { color:#8195a5;font-size:10px;line-height:1.35; }
+.design-structure-card > strong { margin-left:auto;color:#bfd1dd;font-size:14px;font-weight:500;line-height:1.2;font-variant-numeric:tabular-nums; }
+.design-structure-card .design-card-detail { display:flex;align-items:center;gap:4px;margin-top:0;color:#8195a5; }
 .design-card-detail b { font-weight:500;font-variant-numeric:tabular-nums; }
 .design-library-summary { display:flex;flex-wrap:wrap;gap:10px;margin:0 0 15px;font-size:10px;color:#8fa5b7; }
 .design-library-summary span { display:flex;align-items:center;gap:5px; }
@@ -5284,3 +5286,6 @@ input[aria-invalid="true"] { border-color: #d68c80; }
 .sketch-viewport-guide .sketch-measurement.reference text {opacity:.65;font-weight:400;}
 .sketch-viewport-guide .sketch-measurement.constrained text {opacity:1;}
 .sketch-panel .sketch-constraint-row > span:nth-child(2) {color:#bcfff0;white-space:nowrap;}
+
+.sketch-dimension-cycle {display:flex;justify-content:space-between;gap:6px;width:100%;padding:4px 7px 6px;font-size:9px;color:#92c6bb;border-top:1px solid #497a6f66;text-align:left;}
+.sketch-dimension-cycle:hover {background:#21443e;color:#dcfff4;}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {historyLanes,historyStep,currentHistoryLane,historyConnections,HISTORY_LAYOUT} from '../frontend/src/historyModel.ts';
+import {historyLanes,historyPartOwners,historyStep,currentHistoryLane,historyConnections,HISTORY_LAYOUT} from '../frontend/src/historyModel.ts';
 const features=[{id:'a1',owner:'a'},{id:'s',owner:'root'},{id:'b1',owner:'b'},{id:'a2',owner:'a'},{id:'t',owner:'tool'}];
 const components={a:{name:'Bracket'},b:{name:'Cover'},root:{name:'Design'},tool:{name:'Cutter',purpose:'tool'}};
 test('Now belongs to the active visible component lane, or the design lane',()=>{
@@ -81,4 +81,23 @@ test('merging and restoring lanes reroutes chronology without changing event ord
 test('empty and single-event timelines have no chronological connections',()=>{
  assert.deepEqual(historyConnections(historyLanes([],components,true,new Set())),[]);
  assert.deepEqual(historyConnections(historyLanes(features.slice(0,1),components,true,new Set())),[]);
+});
+
+test('structured history uses part names and combines component features without duplicating layout copies',()=>{
+ const definitions={root:{name:'Design'},p:{name:'Mounting plate',structure_role:'part'},q:{name:'Cover',structure_role:'part'},group:{name:'Group',structure_role:'group'},a:{name:'Component'},b:{name:'Component'},c:{name:'Component'},tool:{name:'Cutter',purpose:'tool'}};
+ const instances={a:{definition:'a',parent:'p'},b:{definition:'b',parent:'group'},group:{definition:'group',parent:'p'},c:{definition:'c',parent:'q'},copy:{definition:'p',parent:'layout1'},copy2:{definition:'p',parent:'layout2'}};
+ const owners=historyPartOwners(definitions,instances),events=[{id:'1',owner:'a'},{id:'2',owner:'c'},{id:'3',owner:'b'},{id:'4',owner:'root'},{id:'5',owner:'tool'}];
+ const lanes=historyLanes(events,definitions,true,new Set(),owners);
+ assert.deepEqual(lanes.map(l=>l.name),['Design / merged','Mounting plate','Cover','Cutter']);
+ assert.deepEqual(lanes.find(l=>l.id==='p').features.map(f=>f.column),[0,2]);
+ assert.equal(currentHistoryLane(lanes,owners.b),'p');
+ assert.deepEqual(historyLanes(events,definitions,true,new Set(['p']),owners)[0].features.map(f=>f.column),[0,2,3]);
+ assert.equal(lanes.flatMap(l=>l.features).length,events.length);
+ definitions.p.name='Renamed plate';assert.equal(historyLanes(events,definitions,true,new Set(),owners)[1].name,'Renamed plate');
+});
+
+test('nearest part wins for nested parts and shared definitions have one stable lane',()=>{
+ const defs={p:{name:'Outer',structure_role:'part'},q:{name:'Inner',structure_role:'part'},a:{name:'Component'},orphan:{name:'Unused'}};
+ const owners=historyPartOwners(defs,{nested:{definition:'q',parent:'p'},first:{definition:'a',parent:'q'},shared:{definition:'a',parent:'p'}});
+ assert.equal(owners.a,'q');assert.equal(owners.q,'q');assert.equal(owners.orphan,'root');
 });

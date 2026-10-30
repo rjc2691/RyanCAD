@@ -79,7 +79,7 @@ export default function SectionControls({
             <SquareDashed size={15} />
             <span>
               {picking
-                ? "Pick a planar face or sketch"
+                ? "Pick a world plane, face or sketch"
                 : settings.reference?.label || "Select a face or sketch plane"}
             </span>
             <MousePointer2 size={13} />

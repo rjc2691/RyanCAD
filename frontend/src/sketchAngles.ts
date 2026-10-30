@@ -13,7 +13,18 @@ export function interiorAngleValue(directed:number,frame:SketchAngleFrame){
 export function sketchAngle(entities:SketchEntity[],a:SketchEntity,b:SketchEntity){
   const pairs=(["start","end"] as const).flatMap(x=>(["start","end"] as const).map(y=>({a:x,b:y,d:distance(endpoint(a,x),endpoint(b,y))}))).sort((x,y)=>x.d-y.d);
   const pair=pairs[0],connected=pair.d<1e-5;
-  const vertex=endpoint(a,pair.a),u=endpoint(a,pair.a==="start"?"end":"start"),v=endpoint(b,pair.b==="start"?"end":"start");
+  let vertex=endpoint(a,pair.a),u=endpoint(a,pair.a==="start"?"end":"start"),v=endpoint(b,pair.b==="start"?"end":"start");
+  if(!connected){
+    const ax=a.x2-a.x1,ay=a.y2-a.y1,bx=b.x2-b.x1,by=b.y2-b.y1,cross=ax*by-ay*bx;
+    vertex=[a.x1,a.y1];
+    if(Math.abs(cross)>1e-8){
+      const t=((b.x1-a.x1)*by-(b.y1-a.y1)*bx)/cross;
+      const intersection:SketchPoint=[a.x1+t*ax,a.y1+t*ay];
+      // Near-parallel intersections can be far offscreen; use a local direction guide instead.
+      if(distance(intersection,vertex)<4*Math.max(Math.hypot(ax,ay),Math.hypot(bx,by)))vertex=intersection;
+    }
+    u=[vertex[0]+ax,vertex[1]+ay];v=[vertex[0]+bx,vertex[1]+by];
+  }
   let frame:SketchAngleFrame={a:connected?pair.a:"start",b:connected?pair.b:"start",orientation:1};
   const directed=Math.atan2((a.x2-a.x1)*(b.y2-b.y1)-(a.y2-a.y1)*(b.x2-b.x1),(a.x2-a.x1)*(b.x2-b.x1)+(a.y2-a.y1)*(b.y2-b.y1))*180/Math.PI;
   const raw=interiorAngleValue(directed,frame);

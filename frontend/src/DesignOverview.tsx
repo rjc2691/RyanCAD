@@ -41,13 +41,13 @@ export default function DesignOverview({state,run,disabled,measurements,onParame
     </section>
     <div className="design-structure-summary" aria-label="Design structure summary">
       <div className="design-structure-card" data-design-count="layouts">
-        <Layers size={17}/><div><span>Layouts</span><small>Arrangements of parts</small><small className="design-card-detail">{info.placements} part {info.placements===1?"placement":"placements"}</small></div><strong>{info.layouts}</strong>
+        <Layers size={14}/><div><span>Layouts</span><small className="design-card-detail">{info.placements} part {info.placements===1?"copy":"copies"} across layouts</small></div><strong>{info.layouts}</strong>
       </div>
       <div className="design-structure-card" data-design-count="parts">
-        <Boxes size={17}/><div><span>3D Parts</span><small>Reusable component arrangements</small><small className="design-card-detail" title="Unique solid component definitions; linked copies count once."><Box size={11}/><b>{info.components}</b> {info.components===1?"component":"components"}</small></div><strong>{info.parts}</strong>
+        <Boxes size={14}/><div><span>3D Parts</span><small className="design-card-detail" title="Reusable parts; unique solid component definitions count linked copies once."><Box size={10}/><b>{info.components}</b> {info.components===1?"component definition":"component definitions"}</small></div><strong>{info.parts}</strong>
       </div>
       <div className="design-structure-card" data-design-count="sketches">
-        <SquareDashed size={17}/><div><span>2D Sketches</span><small>Profiles and reference geometry</small></div><strong>{info.sketches}</strong>
+        <SquareDashed size={14}/><div><span>2D Sketches</span><small>Profiles and reference geometry</small></div><strong>{info.sketches}</strong>
       </div>
     </div>
     {(info.tools>0||info.variations>0)&&<div className="design-library-summary">

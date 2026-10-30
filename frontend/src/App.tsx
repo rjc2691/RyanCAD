@@ -1,6 +1,8 @@
+import type {SketchDimensionEditorState} from "./sketchDimensions";
 import {editorContext} from "./editorContext";
 import {useAdaptiveToolbar} from "./useAdaptiveToolbar";
 import DesignOverview from "./DesignOverview";
+import PartOverview from "./PartOverview";
 import ToolBodyIcon from "./ToolBodyIcon";
 import {layoutContextActions} from "./layoutContextActions";
 import WorkspaceDesignTree from "./WorkspaceDesignTree";
@@ -28,7 +30,7 @@ import WorkspaceDialog, { type WorkspaceInfo } from "./WorkspaceDialog";
 import FeatureHistory from "./FeatureHistory";
 import FeatureEditPanel, { type FeatureEditHandle } from "./FeatureEditPanel";
 import MobileNavigation, { useMobileLayout, type MobilePane } from "./MobileNavigation";
-import { historyLanes, historyStep } from "./historyModel";
+import { historyLanes, historyPartOwners, historyStep } from "./historyModel";
 import type { MovementGuideData, WorldAxis } from "./movementModel";
 import GroupPanel, { type GroupPanelHandle } from "./GroupPanel";
 import {
@@ -393,13 +395,7 @@ export default function App() {
   const [editParameter, setEditParameter] = useState<string | null>(null);
   const [sketch, setSketch] = useState<SketchDraft | null>(null);
   const sketchRef = useRef<SketchPanelHandle>(null);
-  const [dimensionEditor, setDimensionEditor] = useState<{
-    line: string;
-    value: string;
-    error?: string;
-    kind?:"length"|"angle";
-    second?:string|null;
-  } | null>(null);
+  const [dimensionEditor, setDimensionEditor] = useState<SketchDimensionEditorState|null>(null);
   const sketchActive = useRef(false);
   sketchActive.current = !!sketch;
   const [sketchPlanePicking, setSketchPlanePicking] = useState(false);
@@ -683,7 +679,8 @@ export default function App() {
       const plane=item.worldPlane;
       if(sectionPicking){setSectionSettings({...sectionSettings,axis:plane==='XY'?'Z':plane==='XZ'?'Y':'X',offset:0,reference:undefined});setSectionPicking(false);setSectionNotice('');return;}
       if(sketchActive.current){if(sketchPlanePicking){setSketch(d=>d?{...d,plane,frame:worldSketchFrame(plane),pending:[],message:''}:d);setSketchPlanePicking(false);}return;}
-      if(operationActive.current||groupingActive.current||measureActive.current)return;
+      if(operationActive.current){operationRef.current?.choosePlane(plane);return;}
+      if(groupingActive.current||measureActive.current)return;
       setSelection(item);setSelectionSet([]);setSelectedSketch(null);setSelectedFeature(null);return;
     }
     if(sectionPicking){captureSectionFace(item);return;}
@@ -1292,6 +1289,7 @@ export default function App() {
         const input = (event.target as HTMLElement).closest(
           "input,textarea,select,[contenteditable=true]",
         );
+        if(!input&&event.key==="Tab"&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&sketchRef.current?.dimensionKey(event.shiftKey?"Shift+Tab":"Tab")){event.preventDefault();event.stopImmediatePropagation();return;}
         if (!input && !event.isComposing && !event.altKey) {
           const key = event.key.toLowerCase();
           if ((event.ctrlKey || event.metaKey) && key === "z") {
@@ -1430,6 +1428,10 @@ export default function App() {
   const occurrence = state?.occurrences.find(
     (i) => i.id === selection?.occurrence,
   );
+  const activePart = editor === "Part Editor" && !selection
+    ? state?.occurrences.find(i=>i.id===groupScope)
+    : occurrence?.structure_role === "part" ? occurrence : undefined;
+  const showingPartOverview = !!activePart && (!selection || selection.occurrence===activePart.id);
   const geometry =
     state && component
       ? (historyView?.components || state.geometry)[component.id]
@@ -1437,7 +1439,7 @@ export default function App() {
   const measurements = state
     ? inspectorMeasurements(
         state,
-        selection,
+        showingPartOverview && activePart ? {occurrence:activePart.id,definition:activePart.definition} : selection,
         historyView?.components || state.geometry,
       )
     : null;
@@ -1455,7 +1457,7 @@ export default function App() {
           {measurements.scope === "component"
             ? "One part"
             : measurements.scope === "assembly"
-              ? "Group totals"
+              ? showingPartOverview ? "Part totals" : "Group totals"
               : state?.document.structure_version ? "Active layout totals" : "Design totals"}
         </small>
       </div>
@@ -1487,7 +1489,7 @@ export default function App() {
       </div>
       {measurements.scope === "assembly" && (
         <div className="property-row">
-          <span>Part instances</span>
+          <span>{showingPartOverview ? "Components" : "Part instances"}</span>
           <strong>{measurements.count}</strong>
         </div>
       )}
@@ -1557,11 +1559,14 @@ export default function App() {
   const visibleFeatures = featureOrder.map(
     (id) => state!.document.features[id],
   );
+  const historyOwners = historyPartOwners(state?.document.components || {}, state?.document.instances || {});
+  const historyContextOwner = component?.id || (editor !== "Layout Editor" ? state?.occurrences.find(o=>o.id===groupScope)?.definition : null);
   const lanes = historyLanes(
     visibleFeatures,
     state?.document.components || {},
     parallelHistory,
     mergedHistory,
+    historyOwners,
   );
   const stageIndex =
     historyView?.feature_id === "origin"
@@ -1868,7 +1873,7 @@ export default function App() {
             {...shortcutAttributes('agents')}
             title="Agents · Shift+N"
             className={
-              "button agent-button " + (state?.agents.length ? "connected" : "")
+              "button agent-button " + (state?.agents.some(a=>a.connected&&!a.revoked) ? "connected" : "")
             }
             onClick={() => setDialog("agents")}
           >
@@ -2722,10 +2727,12 @@ export default function App() {
                   onChange: (v) => sketchRef.current?.dimensionChange(v),
                   onConfirm: () => sketchRef.current?.dimensionKey("Enter"),
                   onCancel: () => sketchRef.current?.dimensionKey("Escape"),
+                  onCycle:(backwards:boolean)=>{sketchRef.current?.dimensionKey(backwards?"Shift+Tab":"Tab");},
                 }
               : null
           }
           sketchPlanePicking={sketchPlanePicking}
+          worldPlanePicking={sketchPlanePicking||sectionPicking||(!sketch&&operationSetup?.pick==="plane")}
           sketchObjects={savedSketchObjects}
           selectedSketch={selectedSketch}
           onSelectSketch={selectSketch}
@@ -3223,7 +3230,7 @@ export default function App() {
             </button>
           </div>
           <div className="inspector-scroll">
-            {component ? (
+            {showingPartOverview && state && activePart ? <PartOverview key={activePart.definition} state={state} part={activePart} measurements={measurementSection} onParameters={()=>setDialog("parameters")} run={run} disabled={busy||!!historyView}/> : component ? (
               <>
                 <div className="component-heading">
                   <div
@@ -3278,35 +3285,6 @@ export default function App() {
                   </span>
                 </div>
                 {measurementSection}
-                {component.kind === "assembly" && (
-                  <section className="inspector-section group-inspector-actions">
-                    <button onClick={() => editGroup(selection, true)}>
-                      <FolderOpen size={14} />
-                      {component.structure_role === "part" ? "Edit part" : "Edit group"}
-                    </button>
-                    <button disabled={component.structure_role === "group" || (!!state?.document.structure_version && occurrence?.parent === "root")} onClick={() => chooseTool("transform")}>
-                      <Move3D size={14} />
-                      {component.structure_role === "part" ? "Move placement" : "Move group"}
-                    </button>
-                    <button
-                      onClick={() =>
-                        run("group.copy", {
-                          occurrence: selection?.occurrence,
-                        }).catch(() => {})
-                      }
-                    >
-                      <Copy size={14} />
-                      {component.structure_role === "part" ? "Repeat part" : "Copy group"}
-                    </button>
-                    <button
-                      onClick={() =>
-                        run(component.structure_role === "part" ? "structure.remove" : "group.ungroup", component.structure_role === "part" ? {instance: occurrence?.source_id} : {occurrence: selection?.occurrence}).catch(() => {})
-                      }
-                    >
-                      {component.structure_role === "part" ? "Remove placement" : "Ungroup"}
-                    </button>
-                  </section>
-                )}
                 {component.kind !== "assembly" && (
                   <section className="inspector-section">
                     <div className="section-heading">
@@ -3661,14 +3639,14 @@ export default function App() {
             <button
               className="text-button"
               aria-pressed={parallelHistory}
-              aria-label="Separate component timelines"
+              aria-label="Separate part timelines"
               onClick={() => {
                 setParallelHistory((v) => !v);
                 setTimelineTab("features");
               }}
             >
               <GitBranch size={14} />
-              Component lanes
+              Part lanes
             </button>
             {parallelHistory && mergedHistory.size > 0 && (
               <button
@@ -3769,7 +3747,7 @@ export default function App() {
         {timelineTab === "features" ? (
           <FeatureHistory
             lanes={lanes}
-            activeComponent={component?.id || null}
+            activeComponent={historyContextOwner ? historyOwners[historyContextOwner] || historyContextOwner : null}
             count={featureOrder.length}
             split={parallelHistory}
             onMerge={(id) =>
@@ -4218,7 +4196,7 @@ export default function App() {
                     <strong>{agent.actor.name}</strong>
                     <small>
                       {!agent.connected
-                        ? "Disconnected"
+                        ? agent.disconnect_reason || "Disconnected"
                         : agent.revoked
                           ? "Write access revoked"
                           : agent.paused

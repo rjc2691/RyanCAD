@@ -12,7 +12,7 @@ ENTITY_FIELDS = {
     "circle": {"x": "length", "y": "length", "radius": "length"},
     "arc": {"x": "length", "y": "length", "radius": "length", "start_angle": "angle", "end_angle": "angle"},
 }
-CONSTRAINTS = {"coincident", "horizontal", "vertical", "parallel", "perpendicular", "equal", "distance",
+CONSTRAINTS = {"coincident", "horizontal", "vertical", "parallel", "perpendicular", "equal", "distance", "line_distance",
                "angle", "radius", "diameter", "fix", "tangent", "point_on_line", "point_on_circle"}
 
 
@@ -161,7 +161,7 @@ def edit_sketch(document, actor, command, args):
         if not isinstance(frame, dict) or frame.get("a") not in {"start", "end"} or frame.get("b") not in {"start", "end"} or frame.get("orientation") not in {-1, 1}:
             raise CadError("invalid_angle_frame", "An interior angle needs endpoint rays and a winding direction.")
         constraint["angle_frame"] = {k: frame[k] for k in ("a", "b", "orientation")}
-    if kind in {"distance", "angle", "radius", "diameter"}:
+    if kind in {"distance", "line_distance", "angle", "radius", "diameter"}:
         key = f"{constraint['id']}.value"
         feature.parameters[key] = parameter(document, actor, feature.owner, args.get("name", f"{feature.name} · {kind}"),
                                            args.get("value", 1), "angle" if kind == "angle" else "length", "Sketch constraints")
@@ -249,12 +249,19 @@ def solve_sketch(feature, values):
                 tag = getattr(solver, method)(entity(a), entity(b))
             elif kind == "distance":
                 tag = solver.set_p2p_distance(point(a), point(b), value)
+            elif kind == "line_distance":
+                if value < 0:
+                    raise CadError("invalid_dimension", "Distance between parallel lines must be nonnegative.", constraint=constraint["id"])
+                types = {item["id"]: item["type"] for item in feature.options["entities"]}
+                if types.get(a) != "line" or types.get(b) != "line":
+                    raise CadError("invalid_constraint", "Parallel distance requires two line segments.")
+                tag = (solver.parallel(entity(a), entity(b)), solver.set_p2l_distance(point(b + ".start"), entity(a), value))
             elif kind == "angle":
                 frame = constraint.get("angle_frame")
                 directed = value
                 if frame:
-                    if not b.startswith("world:") and not 0 < value < 360:
-                        raise CadError("invalid_dimension", "Interior angles must be greater than 0 and less than 360 degrees.", constraint=constraint["id"])
+                    if not b.startswith("world:") and not 0 <= value < 360:
+                        raise CadError("invalid_dimension", "Angles must be at least 0 and less than 360 degrees.", constraint=constraint["id"])
                     offset = (180 if frame["b"] == "end" else 0) - (180 if frame["a"] == "end" else 0)
                     directed = (frame["orientation"] * value - offset + 180) % 360 - 180
                 if b.startswith("world:"):

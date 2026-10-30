@@ -1,4 +1,5 @@
-import {sketchAngle,sketchAxisAngle,interiorAngleValue,interiorAngleExpression} from "./sketchAngles";
+import {sketchAngle,interiorAngleValue} from "./sketchAngles";
+import {dimensionCandidates,candidateExpression,type DimensionCandidate,type DimensionKind,type SketchDimensionEditorState} from "./sketchDimensions";
 import {sketchMoveOrigin,solveSketchMove} from "./sketchMovement";
 import {solveSketchDraft} from "./solveSketchDraft";
 import {anchorReference,editableEndpoint,freeRelationshipGeometry,deleteSketchSelection} from "./sketchRelationships";
@@ -53,7 +54,7 @@ export default forwardRef<
     planePicking: boolean;
     onPlaneChosen: () => void;
     onDimensionEditor: (
-      editor: { line: string; value: string; error?: string; kind?:"length"|"angle"; second?:string|null } | null,
+      editor: SketchDimensionEditorState | null,
     ) => void;
   }
 >(function SketchPanel(
@@ -81,11 +82,15 @@ export default forwardRef<
   const [relationshipBusy,setRelationshipBusy]=useState(false);
   const relationshipEpoch=useRef(0);
   useEffect(()=>()=>{relationshipEpoch.current++;},[]);
-  const [dimensionKind,setDimensionKind]=useState<"length"|"angle">("length");
+  const [dimensionKind,setDimensionKind]=useState<DimensionKind>("length");
   const [dimensionSecond,setDimensionSecond]=useState<string|null>(null);
   const [dimensionLine, setDimensionLine] = useState<string | null>(null);
   const [dimensionValue, setDimensionValue] = useState("");
   const dimensionBase = useRef<SketchDraft | null>(null);
+  const [dimensionChoices,setDimensionChoices]=useState<DimensionCandidate[]>([]),[dimensionChoice,setDimensionChoice]=useState(0);
+  const dimensionSelection=useRef<{lines:string[];axis?:string}>({lines:[]});
+  const dimensionDrafts=useRef(new Map<string,string>());
+  const dimensionEpoch=useRef(0);
   const moveBase=useRef<{draft:SketchDraft;origin:SketchPoint}|null>(null);
   const moveEpoch=useRef(0),movingCommit=useRef(false);
   useEffect(()=>()=>{moveEpoch.current++;},[]);
@@ -99,78 +104,71 @@ export default forwardRef<
   useEffect(() => {
     onDimensionEditor(
       dimensionLine
-        ? { line: dimensionLine, value: dimensionValue, error: dimensionError,kind:dimensionKind,second:dimensionSecond }
+        ? { line: dimensionLine, value: dimensionValue, error: dimensionError,kind:dimensionKind,second:dimensionSecond,annotation:dimensionChoices[dimensionChoice]?.id,choices:dimensionChoices.map(c=>({id:c.id,label:c.label})),choice:dimensionChoice }
         : null,
     );
-  }, [dimensionLine, dimensionValue, dimensionError, dimensionKind,dimensionSecond,onDimensionEditor]);
+  }, [dimensionLine, dimensionValue, dimensionError, dimensionKind,dimensionSecond,dimensionChoices,dimensionChoice,onDimensionEditor]);
   useEffect(() => () => onDimensionEditor(null), [onDimensionEditor]);
-  const openLine = (line: SketchDraft["entities"][number]) => {
-    const c = d.constraints.find(
-      (c) =>
-        c.type === "distance" &&
-        ((c.a === `${line.id}.start` && c.b === `${line.id}.end`) ||
-          (c.b === `${line.id}.start` && c.a === `${line.id}.end`)),
-    );
-    const parameter =
-      c?.parameter_key &&
-      d.feature &&
-      state.document.parameters[d.feature.parameters[c.parameter_key]];
-    const expression = parameter
-      ? parameter.category === "Sketch constraints"
-        ? expressionLabel(parameter.expression, state.document.parameters)
-        : `[${parameter.name}]`
-      : undefined;
-    const value =
-      c?.pendingExpression ??
-      expression ??
-      String(
-        c?.value ??
-          Number(Math.hypot(line.x2 - line.x1, line.y2 - line.y1).toFixed(4)),
-      );
-    setDimensionKind("length");setDimensionSecond(null);
-    dimensionBase.current = d;
-    lastValid.current = "";
-    setDimensionError("");
-    setDimensionStatus("working");
-    setDimensionValue(value);
-    setDimensionLine(line.id);
-    onChange({ ...d,tool:"dimension",relationshipFirst:null, selected: line.id, selectedAnchor: null,selectedEntities:[line.id],selectedPoints:[], message: "Pick another line for an angle, or edit this length." });
+  const showDimensionChoice=(choices:DimensionCandidate[],index:number,base:SketchDraft,ids:string[])=>{
+    const candidate=choices[index];
+    if(!candidate)return;
+    dimensionEpoch.current++;
+    setDimensionChoices(choices);setDimensionChoice(index);setDimensionKind(candidate.kind);setDimensionSecond(candidate.second);setDimensionLine(candidate.line);
+    setDimensionValue(dimensionDrafts.current.get(candidate.id)??candidateExpression(candidate,base,state));
+    lastValid.current="";setDimensionError("");setDimensionStatus("working");setError("");
+    onChange({...base,tool:"dimension",solvedEntities:undefined,selectedEntities:ids,selectedPoints:[],selected:candidate.line,selectedAnchor:null,relationshipFirst:null,message:""});
   };
-  useEffect(() => {
-    if (d.tool === "dimension" && d.selected && !dimensionLine) {
-      const line = (d.solvedEntities || d.entities).find(
-        (e) => e.id === d.selected && e.type === "line",
-      );
-      const lines=(d.selectedEntities||[d.selected]).map(id=>(d.solvedEntities||d.entities).find(e=>e.id===id&&e.type==="line")).filter(Boolean);
-      if(lines.length===2)openAngle(lines[0]!.id,lines[1]!.id);
-      else if(lines.length>2)patch({message:"Select one line for length or two for an angle."});
-      else if (line) openLine(line);
+  const openDimensionSelection=(ids:string[],axis?:string,preferred?:DimensionKind)=>{
+    if(relationshipBusy||busy||planePicking)return;
+    const base=dimensionBase.current||d,lines=[...new Set(ids)];
+    if(!lines.length){
+      dimensionEpoch.current++;
+      dimensionBase.current=null;dimensionSelection.current={lines:[]};dimensionDrafts.current.clear();setDimensionLine(null);setDimensionChoices([]);setDimensionError("");
+      onChange({...base,tool:"dimension",solvedEntities:undefined,selected:null,selectedAnchor:null,selectedEntities:[],selectedPoints:[],relationshipFirst:null,message:"Select one line for length or two lines for distance/angle."});return;
     }
-  }, [d.tool]);
+    try{
+      const choices=dimensionCandidates(base,lines,axis);
+      if(!choices.length){setError("Select one or two line segments for Dimension.");return;}
+      if(JSON.stringify(dimensionSelection.current)!==JSON.stringify({lines,axis}))dimensionDrafts.current.clear();
+      dimensionSelection.current={lines,axis};dimensionBase.current=base;
+      const index=preferred?choices.findIndex(c=>c.kind===preferred):0;
+      showDimensionChoice(choices,Math.max(0,index),base,lines);
+    }catch(e:any){setError(e.message||"These objects do not have a usable dimension.");}
+  };
+  const cycleDimension=(backwards=false)=>{
+    if(!dimensionLine||dimensionChoices.length<2||!dimensionBase.current)return false;
+    const current=dimensionChoices[dimensionChoice];if(current)dimensionDrafts.current.set(current.id,dimensionValue);
+    const next=(dimensionChoice+(backwards?dimensionChoices.length-1:1))%dimensionChoices.length;
+    showDimensionChoice(dimensionChoices,next,dimensionBase.current,dimensionSelection.current.lines);return true;
+  };
+  const openLine=(line:SketchDraft["entities"][number])=>openDimensionSelection([line.id],undefined,"length");
+  const openAngle=(first:string,second:string)=>openDimensionSelection([first,second],undefined,"angle");
+  const openAxisAngle=(first:string,axis:"X"|"Y"|"Z")=>openDimensionSelection([first],axis,"angle");
+  useEffect(()=>{
+    if(d.tool!=="dimension"||dimensionLine)return;
+    const ids=d.selectedEntities?.length?d.selectedEntities:d.selected?[d.selected]:[];
+    if(ids.length)openDimensionSelection(ids);
+  },[d.tool]);
   useEffect(() => {
-    if (!dimensionLine || !dimensionBase.current) return;
+    const candidate=dimensionChoices[dimensionChoice];
+    if (!dimensionLine || !dimensionBase.current||!candidate) return;
     let cancelled = false;
+    const epoch=++dimensionEpoch.current;
     const value = dimensionValue.trim();
     setDimensionStatus("working");
     setDimensionError("");
     const timer = setTimeout(async () => {
       try {
         if (!value) throw new Error("Enter a dimension or parameter.");
-        if(dimensionKind==="angle"&&Number.isFinite(Number(value))&&(dimensionSecond?.startsWith("world:")?(Number(value)<0||Number(value)>180):(Number(value)<=0||Number(value)>=360)))throw new Error(dimensionSecond?.startsWith("world:")?"Axis angles must be between 0 and 180 degrees.":"Angle must be greater than 0 and less than 360 degrees.");
-        if (dimensionKind==="length" && Number.isFinite(Number(value)) && Number(value) <= 0)
-          throw new Error("Dimension must be greater than zero.");
-        const base = dimensionBase.current!;
-        const a = dimensionKind==="angle"?dimensionLine:`${dimensionLine}.start`,
-          b = dimensionKind==="angle"?dimensionSecond!:`${dimensionLine}.end`;
-        const type=dimensionKind==="angle"?"angle":"distance";
-        const old=base.constraints.find(c=>c.type===type&&((c.a===a&&c.b===b)||(c.a===b&&c.b===a)));
-        const angleEntities=base.solvedEntities||base.entities,angleLine=angleEntities.find(e=>e.id===a)!;
-        const angleFrame=dimensionKind==="angle"?(b.startsWith("world:")?sketchAxisAngle(base.frame,b.slice(6),angleLine).frame:sketchAngle(angleEntities,angleLine,angleEntities.find(e=>e.id===b)!).frame):undefined;
-        const constraint={...(old||{type,a,b}),...(angleFrame?{angle_frame:old?.angle_frame||angleFrame}:{}),value:old?.value??0,pendingExpression:value};
+        const numericValue=Number(value),axisAngle=candidate.b.startsWith("world:");
+        if(candidate.kind==="angle"&&Number.isFinite(numericValue)&&(numericValue<0||(axisAngle?numericValue>180:numericValue>=360)))throw new Error(axisAngle?"Axis angles must be between 0 and 180 degrees.":"Angle must be at least 0 and less than 360 degrees.");
+        if(candidate.kind!=="angle"&&Number.isFinite(Number(value))&&(Number(value)<0||(candidate.kind==="length"&&Number(value)===0)))throw new Error(candidate.kind==="distance"?"Distance must be zero or greater.":"Dimension must be greater than zero.");
+        const base=dimensionBase.current!,old=candidate.constraint;
+        const constraint={...(old||{type:candidate.type,a:candidate.a,b:candidate.b}),...(candidate.angleFrame?{angle_frame:candidate.angleFrame}:{}),value:old?.value??0,pendingExpression:value};
         const constraints=old?base.constraints.map(c=>c===old?constraint:c):[...base.constraints,constraint];
-        const entities=freeRelationshipGeometry(base,[dimensionLine,...(dimensionSecond&&!dimensionSecond.startsWith("world:")?[dimensionSecond]:[])]);
+        const entities=freeRelationshipGeometry(base,[candidate.line,...(candidate.second&&!candidate.second.startsWith("world:")?[candidate.second]:[])]);
         const solved=await solveSketchDraft({...base,entities,solvedEntities:undefined,constraints},state);
-        if(cancelled)return;
+        if(cancelled||epoch!==dimensionEpoch.current)return;
         lastValid.current = value;
         setDimensionStatus("valid");
         setDimensionError("");
@@ -183,7 +181,7 @@ export default forwardRef<
           message: "",
         });
       } catch (e: any) {
-        if (!cancelled) {
+        if (!cancelled&&epoch===dimensionEpoch.current) {
           setDimensionStatus("error");
           setDimensionError(e.message || "Could not solve this dimension.");
         }
@@ -193,7 +191,7 @@ export default forwardRef<
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [dimensionLine, dimensionValue,dimensionKind,dimensionSecond,state.document.revision]);
+  }, [dimensionLine, dimensionValue,dimensionKind,dimensionSecond,dimensionChoices,dimensionChoice,state.document.revision]);
   const patch = (change: Partial<SketchDraft>) => onChange({ ...d, ...change });
   const change = (next: SketchDraft) => {
     if(relationshipBusy||busy)return;
@@ -208,32 +206,6 @@ export default forwardRef<
       history.current.push(base);onChange({...solved,tool:latest.current.tool,cursor:latest.current.cursor,gridSnapEnabled:latest.current.gridSnapEnabled,snap:latest.current.snap,showComponents:latest.current.showComponents});
     }).catch(e=>{if(epoch===relationshipEpoch.current)setError(e.message||"Relationship could not be solved.");})
       .finally(()=>{if(epoch===relationshipEpoch.current)setRelationshipBusy(false);});
-  };
-  const openAngle=(first:string,second:string)=>{
-    const base=dimensionLine&&dimensionBase.current?dimensionBase.current:d;
-    const old=base.constraints.find(c=>c.type==="angle"&&((c.a===first&&c.b===second)||(c.a===second&&c.b===first)));
-    if(old){first=old.a;second=old.b;}
-    const entities=base.solvedEntities||base.entities,a=entities.find(e=>e.id===first)!,b=entities.find(e=>e.id===second)!;
-    const parameter=old?.parameter_key&&base.feature&&state.document.parameters[base.feature.parameters[old.parameter_key]];
-    const corner=sketchAngle(entities,a,b);
-    let initial=old?.pendingExpression??(parameter?(parameter.named?`[${parameter.name}]`:expressionLabel(parameter.expression,state.document.parameters)):String(old?.value??Number(corner.value.toFixed(4))));
-    if(old&&!old.angle_frame)initial=interiorAngleExpression(initial,Number(old.value??0),corner.frame);
-    dimensionBase.current={...base,relationshipFirst:null};lastValid.current="";setDimensionKind("angle");setDimensionSecond(second);
-    setDimensionError("");setDimensionStatus("working");setDimensionValue(String(initial));setDimensionLine(first);
-    onChange({...base,tool:"dimension",selectedEntities:[first,second],selectedPoints:[],selected:first,selectedAnchor:null,relationshipFirst:null,message:""});
-  };
-  const openAxisAngle=(first:string,axis:"X"|"Y"|"Z")=>{
-    if(relationshipBusy||busy||planePicking)return;
-    const base=dimensionLine&&dimensionBase.current?dimensionBase.current:d;
-    const line=(base.solvedEntities||base.entities).find(e=>e.id===first&&e.type==="line");if(!line)return;
-    try{
-      const corner=sketchAxisAngle(base.frame,axis,line),second=`world:${axis}`;
-      const old=base.constraints.find(c=>c.type==="angle"&&c.a===first&&c.b===second);
-      const parameter=old?.parameter_key&&base.feature&&state.document.parameters[base.feature.parameters[old.parameter_key]];
-      const initial=old?.pendingExpression??(parameter?(parameter.named?`[${parameter.name}]`:expressionLabel(parameter.expression,state.document.parameters)):String(old?.value??Number(corner.value.toFixed(4))));
-      dimensionBase.current={...base,relationshipFirst:null};lastValid.current="";setDimensionKind("angle");setDimensionSecond(second);setDimensionValue(String(initial));setDimensionError("");setDimensionStatus("working");setDimensionLine(first);setError("");
-      onChange({...base,tool:"dimension",selected:first,selectedEntities:[first],selectedPoints:[],selectedAnchor:null,relationshipFirst:null,message:`Angle to world ${axis}. Enter accepts; Escape cancels.`});
-    }catch(e:any){setError(e.message);}
   };
   const chooseAxis=(axis:"X"|"Y"|"Z")=>{
     const first=dimensionLine||d.selected;
@@ -256,10 +228,11 @@ export default forwardRef<
     if(base)onChange({...base,tool,moveOrigin:null,solvedEntities:undefined,cursor:null,pending:[]});
   };
   const selectTool=()=>{
-    relationshipEpoch.current++;moveEpoch.current++;movingCommit.current=false;setRelationshipBusy(false);setError("");
+    dimensionEpoch.current++;relationshipEpoch.current++;moveEpoch.current++;movingCommit.current=false;setRelationshipBusy(false);setError("");
+    const selected=dimensionBase.current?{selected:latest.current.selected,selectedAnchor:latest.current.selectedAnchor,selectedEntities:latest.current.selectedEntities,selectedPoints:latest.current.selectedPoints}:{};
     const base=moveBase.current?.draft||dimensionBase.current||latest.current;
-    moveBase.current=null;dimensionBase.current=null;setDimensionLine(null);setDimensionError("");
-    onChange({...base,tool:"select",moveOrigin:null,solvedEntities:undefined,pending:[],cursor:null,relationshipFirst:null,message:""});
+    moveBase.current=null;dimensionBase.current=null;dimensionDrafts.current.clear();setDimensionLine(null);setDimensionChoices([]);setDimensionError("");
+    onChange({...base,...selected,tool:"select",moveOrigin:null,solvedEntities:undefined,pending:[],cursor:null,relationshipFirst:null,message:""});
   };
   const applyMoveAt=async(point:SketchPoint)=>{
     const session=moveBase.current;if(!session||movingCommit.current)return;
@@ -300,6 +273,10 @@ export default forwardRef<
   ) => {
     if(relationshipBusy||busy||planePicking)return;
     if(removeOnly){
+      if(d.tool==="dimension"){
+        const hit=sketchClick({...d,entities:d.solvedEntities||d.entities,tool:"select"},p,tolerance);
+        if(hit.selected&&dimensionSelection.current.lines.includes(hit.selected))openDimensionSelection(dimensionSelection.current.lines.filter(id=>id!==hit.selected));return;
+      }
       if(d.tool!=="select")return;
       const hit=sketchClick({...d,entities:d.solvedEntities||d.entities,tool:"select"},p,tolerance);
       onChange(selectGeometry(d,hit,true,true));return;
@@ -342,9 +319,12 @@ export default forwardRef<
       const line = shown.entities.find(
         (e) => e.id === hit.selected && e.type === "line",
       );
-      if(line&&dimensionLine&&line.id!==dimensionLine)openAngle(dimensionLine,line.id);
-      else if(line&&!dimensionLine)openLine(line);
-      else patch({ message: "Select a line segment to dimension." });
+      const ids=dimensionLine?dimensionSelection.current.lines:[];
+      if(!line){if(!additive)openDimensionSelection([]);return;}
+      if(ids.includes(line.id)){if(additive)openDimensionSelection(ids.filter(id=>id!==line.id));return;}
+      if(ids.length<2)openDimensionSelection([...ids,line.id]);
+      else if(additive)patch({message:"Dimension uses at most two lines. Shift-click a selected line to remove it."});
+      else openDimensionSelection([ids[0],line.id]);
       return;
     }
     const shown = d.solvedEntities ? { ...d, entities: d.solvedEntities } : d;
@@ -377,18 +357,20 @@ export default forwardRef<
     }
     if (dimensionBase.current) history.current.push(dimensionBase.current);
     dimensionBase.current = null;
-    setDimensionLine(null);
+    setDimensionLine(null);setDimensionChoices([]);dimensionDrafts.current.clear();
     setDimensionError("");
   };
   const cancelDimension = () => {
+    dimensionEpoch.current++;
     const base = dimensionBase.current;
     dimensionBase.current = null;
-    setDimensionLine(null);
+    setDimensionLine(null);setDimensionChoices([]);dimensionDrafts.current.clear();
     setDimensionError("");
-    if (base) onChange({...base,tool:latest.current.tool,relationshipFirst:null});
+    if (base) onChange({...base,selected:latest.current.selected,selectedEntities:latest.current.selectedEntities,selectedPoints:latest.current.selectedPoints,selectedAnchor:latest.current.selectedAnchor,tool:latest.current.tool,relationshipFirst:null});
   };
   const dimensionKey = (key: string) => {
     if (!dimensionLine) return false;
+    if(key==="Tab"||key==="Shift+Tab")return cycleDimension(key==="Shift+Tab");
     if (key === "Enter") applyDimension();
     else if (key === "Escape") cancelDimension();
     else return false;
@@ -452,7 +434,7 @@ export default forwardRef<
     dimensionChange: setDimensionValue,
     deleteSelection,
     selectTool,
-    editMeasurement(id){if(relationshipBusy||busy)return;const [kind,a,b]=id.split(":");if(kind==="length"){const line=(d.solvedEntities||d.entities).find(e=>e.id===a&&e.type==="line");if(line)openLine(line);}else if(kind==="angle"&&a&&b){if(b==="world"&&["X","Y","Z"].includes(id.split(":")[3]))openAxisAngle(a,id.split(":")[3] as "X"|"Y"|"Z");else openAngle(a,b);}},
+    editMeasurement(id){if(relationshipBusy||busy)return;const [kind,a,b]=id.split(":");if(kind==="length"){const line=(d.solvedEntities||d.entities).find(e=>e.id===a&&e.type==="line");if(line)openLine(line);}else if(kind==="line_distance"&&a&&b)openDimensionSelection([a,b],undefined,"distance");else if(kind==="angle"&&a&&b){if(b==="world"&&["X","Y","Z"].includes(id.split(":")[3]))openAxisAngle(a,id.split(":")[3] as "X"|"Y"|"Z");else openAngle(a,b);}},
   }));
   const selected = d.entities.find((e) => e.id === d.selected);
   const selectedAnchor = sketchAnchors(d).find(
@@ -463,7 +445,7 @@ export default forwardRef<
     d.tool === "connect"?"Pick two endpoints or points to join them. K starts Connect.":
     d.tool === "disconnect"?"Pick a connected endpoint to remove its connection. U starts Disconnect.":
     d.tool === "dimension"
-      ? "One line sets length; another line or a world axis sets angle. Pick an axis in the viewport or the XYZ corner control."
+      ? "One line sets length; two parallel lines default to distance, other line pairs to angle. Tab cycles alternatives. Shift-click adds/removes; a new line replaces the second pick."
       : d.tool === "select"
         ? "Click geometry to edit exact values."
         : d.tool === "project"
@@ -708,7 +690,7 @@ export default forwardRef<
               {d.constraints.map((c, i) => (
                 <div className="sketch-constraint-row" key={c.id || i}>
                   <span>
-                    {c.type} · {c.a}
+                    {c.type==="line_distance"?"Parallel distance":c.type} · {c.a}
                     {c.b ? ` / ${c.b}` : ""}
                   </span>
                   {c.value!==undefined&&<span>{c.type==="angle"&&!c.angle_frame&&!c.b?.startsWith("world:")?Number(interiorAngleValue(c.value,sketchAngle(d.solvedEntities||d.entities,(d.solvedEntities||d.entities).find(e=>e.id===c.a)!,(d.solvedEntities||d.entities).find(e=>e.id===c.b)!).frame).toFixed(2)):c.pendingExpression??c.value}{c.type==="angle"?"°":" mm"}</span>}

@@ -74,6 +74,7 @@ class Component(Model):
     stock_thickness: str | None = None
     stock_preview: bool = False
     structure_role: Literal["component", "part", "group", "layout"] = "component"
+    group_kind: Literal["layout", "part"] | None = None
     read_only: bool = False
 
 

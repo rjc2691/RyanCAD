@@ -14,7 +14,7 @@ const fits=async()=>{
  const sizes=await page.evaluate(()=>({width:innerWidth,scroll:document.documentElement.scrollWidth,height:innerHeight,bottom:document.querySelector('.mobile-navigation').getBoundingClientRect().bottom}));
  assert(sizes.scroll<=sizes.width,JSON.stringify(sizes));
  assert(Math.abs(sizes.bottom-sizes.height)<2,JSON.stringify(sizes));
- for(const selector of ['.brand','.command-search','.account-menu .avatar','.export-button','.viewport-area']){
+ for(const selector of ['.brand','.account-menu .avatar','.export-button','.viewport-area']){
   const box=await page.locator(selector).boundingBox();
   assert(box && box.x>=0 && box.x+box.width<=sizes.width+1,selector+': '+JSON.stringify(box));
  }

@@ -4,8 +4,8 @@ import {api, designHeaders, setCurrentDesignId, waitJob} from "./api";
 import type {State} from "./types";
 import type {WorkspaceInfo} from "./WorkspaceDialog";
 
-export default function WorkspaceDesignTree({workspace,activeId,activeRow,activeLayouts,disabled,onError}:{
-  workspace:WorkspaceInfo|null;activeId:string|null;activeRow:ReactNode;activeLayouts:ReactNode;disabled:boolean;onError:(e:any)=>void;
+export default function WorkspaceDesignTree({workspace,activeId,activeRow,activeLayouts,disabled,onError,onManageDesigns}:{
+  workspace:WorkspaceInfo|null;activeId:string|null;activeRow:ReactNode;activeLayouts:ReactNode;disabled:boolean;onError:(e:any)=>void;onManageDesigns:()=>void;
 }){
   const [expanded,setExpanded]=useState<Set<string>>(()=>new Set(activeId?[activeId]:[]));
   useEffect(()=>{if(activeId)setExpanded(v=>new Set([...v,activeId]));},[activeId]);
@@ -36,11 +36,12 @@ export default function WorkspaceDesignTree({workspace,activeId,activeRow,active
     {designs.map(d=>{const active=d.id===activeId,isOpen=expanded.has(d.id);
       const layouts=Object.values(documents[d.id]?.document.components||{}).filter(c=>c.structure_role==="layout");
       return <div key={d.id} role="treeitem" aria-expanded={isOpen} className="workspace-design-branch">
-        <div className={`workspace-design-heading ${active?"active":""}`}>
+        <div className={`workspace-design-heading ${active?"active":""}`} aria-current={active?'true':undefined} onContextMenu={e=>{e.preventDefault();e.stopPropagation();onManageDesigns();}}>
           <button className="icon-button" aria-label={`${isOpen?"Collapse":"Expand"} ${d.name}`} onClick={()=>void toggle(d.id)}>{isOpen?<ChevronDown size={12}/>:<ChevronRight size={12}/>}</button>
           {active?activeRow:<button className="inactive-design-name" disabled={disabled||pending} onClick={()=>void open(d.id)}><BlueprintIcon/><span>{d.name}</span></button>}
         </div>
         {isOpen&&(active?activeLayouts:<div className="design-layout-children" role="group">
+          <div className="sidebar-list-label nested-list-label">Layouts</div>
           {loading===d.id?<small>Loading layouts…</small>:layouts.map(l=><div className="structure-layout" key={l.id}><Layers size={14}/><button className="layout-name" disabled={disabled||pending} onClick={()=>void open(d.id,l.id)}>{l.name}</button></div>)}
           {loading!==d.id&&!layouts.length&&<small>No layouts</small>}
         </div>)}

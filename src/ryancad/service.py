@@ -373,6 +373,8 @@ class CadService:
             simplify_values(candidate)
             from .project_structure import normalize_structure
             normalize_structure(candidate, actor)
+            if self.design_name_guard and candidate.structure_version != 1:
+                raise CadError("invalid_structure", "Workspace designs must retain parts and at least one layout.")
             validate_document(candidate)
             from .parameters import dependencies
             changed_parameters = {identifier for identifier, p in candidate.parameters.items() if identifier in self.document.parameters and

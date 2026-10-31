@@ -7,4 +7,6 @@ test('movement terminology follows the actual editor scope',()=>{
  assert.equal(editorContext(state,'library',null),'Part Editor');assert.equal(editorContext(state,'library/body',null),'Component Editor');
  assert.equal(editorContext(state,'missing',null),'Layout Editor');assert.equal(editorContext(state,'','tool'),'Component Editor');
  assert.equal(editorContext(null,'',null),'Layout Editor');
+ state.occurrences.push({id:'library/group',definition:'g',kind:'assembly'});
+ assert.equal(editorContext(state,'library/group',null),'Part Editor');
 });

@@ -494,6 +494,10 @@ export function projectSketchReference(
       ...d,
       message: "Pick an edge, vertex or planar face from a visible component.",
     };
+  if(selection.worldOrigin){
+    const f=sketchBasis(d.frame);
+    return {...addEntities({...d,construction:true},[{type:"point",x:-f.origin.dot(f.u),y:-f.origin.dot(f.v)}]),construction:d.construction,message:"World origin projected · independent point"};
+  }
   const o = state.occurrences.find((o) => o.id === selection.occurrence);
   if (!o) return d;
   const matrix = new THREE.Matrix4().set(

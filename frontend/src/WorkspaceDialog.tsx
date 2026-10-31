@@ -4,9 +4,9 @@ import { Modal } from "./Forms";
 import { api, setCurrentDesignId, waitJob } from "./api";
 
 export type WorkspaceInfo = {
+  name: string;
   active_design: string;
   workspace_code: string;
-  legacy_available: boolean;
   designs: { id: string; name: string; deleted: boolean }[];
 };
 
@@ -115,10 +115,6 @@ export default function WorkspaceDialog({
             onChange={(event) => setName(event.target.value)} />
           <button className="button primary" disabled={pending}><Plus size={15} /> New design</button>
         </form>
-        {workspace.legacy_available && <button className="button secondary full workspace-legacy" disabled={pending} onClick={() => void action(async () => {
-          const result = await api("/workspace/copy-existing", { method: "POST" });
-          go(result.design_id);
-        }, true)}>Copy existing server design and history</button>}
         {deleted.length > 0 && <details className="workspace-details">
           <summary>Deleted designs ({deleted.length})</summary>
           {deleted.map((design) => <div className="workspace-deleted-row" key={design.id}>
@@ -128,26 +124,6 @@ export default function WorkspaceDialog({
             })}><RotateCcw size={13} /> Restore</button>
           </div>)}
         </details>}
-        <details className="workspace-details">
-          <summary>Workspace recovery and switching</summary>
-          <p>Save this code to reopen this workspace in another browser or after clearing browser data.</p>
-          <code className="workspace-code">{workspace.workspace_code}</code>
-          <form className="workspace-create" onSubmit={(event) => {
-            event.preventDefault();
-            void action(async () => {
-              await api("/workspace/recover", { method: "POST", body: JSON.stringify({ code: recovery }) });
-              go(null);
-            }, true);
-          }}>
-            <input aria-label="Workspace recovery code" placeholder="Workspace recovery code" value={recovery} onChange={(event) => setRecovery(event.target.value)} />
-            <button className="button secondary" disabled={pending || !recovery.trim()}>Open workspace</button>
-          </form>
-          <button className="text-button" disabled={pending} onClick={() => void action(async () => {
-            if (!window.confirm("Save the current workspace recovery code before creating another workspace. Continue?")) return;
-            await api("/workspace/new", { method: "POST" });
-            go(null);
-          }, true)}>Create another workspace</button>
-        </details>
       </>}
       <footer><button className="button secondary" onClick={onClose}>Close</button></footer>
     </Modal>

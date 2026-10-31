@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { UserRound, Settings, LogIn, UserPlus, Activity } from "lucide-react";
+import { UserRound, Settings, LogIn, UserPlus } from "lucide-react";
 import { Modal } from "./Forms";
-import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
-export default function AccountMenu({ onAgents }: { onAgents: () => void }) {
+import {shortcutAttributes} from './toolbarShortcuts';
+export default function AccountMenu() {
   const [open, setOpen] = useState(false),
     [panel, setPanel] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -62,16 +62,6 @@ export default function AccountMenu({ onAgents }: { onAgents: () => void }) {
               </button>
             );
           })}
-          <button
-            role="menuitem"
-            onClick={() => {
-              setOpen(false);
-              onAgents();
-            }}
-          >
-            <Activity size={16} />
-            External agents
-          </button>
         </div>
       )}
       {panel && (

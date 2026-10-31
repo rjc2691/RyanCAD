@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description="RyanCAD external-agent MCP connector; start RyanCAD first")
     parser.add_argument("--connection", type=Path, default=Path("runtime/connection.json"))
     parser.add_argument("--name", default="External CAD agent")
-    parser.add_argument("--workspace", help="Browser workspace recovery code; omit to use the legacy single-project session")
+    parser.add_argument("--workspace", required=True, help="Browser workspace recovery code")
     parser.add_argument("--design", help="Design ID within the selected browser workspace")
     arguments = parser.parse_args()
     if arguments.design and not arguments.workspace:

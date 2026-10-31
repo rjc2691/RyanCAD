@@ -13,13 +13,11 @@ import webbrowser
 
 def main():
     parser = argparse.ArgumentParser(description="RyanCAD local parametric CAD application")
-    parser.add_argument("--project", type=Path, default=Path("runtime/projects/default.rycad"))
+    parser.add_argument("--project", type=Path, default=Path("runtime/projects/default.rycad"), help="Storage namespace; designs live in its .workspaces sibling directory")
     parser.add_argument("--port", type=int, default=8790)
     parser.add_argument("--lan", action="store_true", help="Allow devices on the local network to connect over IPv4")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--no-tray", action="store_true", help="Do not show the Windows notification-area icon")
-    parser.add_argument("--demo", choices=["mold", "plate"])
-    parser.add_argument("--restore", type=Path, help="Restore a native .rycad.zip snapshot into the new --project folder before opening")
     arguments = parser.parse_args()
     if not 1024 <= arguments.port <= 65535:
         parser.error("Choose a local port from 1024 to 65535.")
@@ -33,16 +31,13 @@ def main():
             parser.error(f"Port {arguments.port} is already in use. Open the running app, or choose another --port and project folder.")
     runtime = Path("runtime").resolve()
     runtime.mkdir(exist_ok=True)
-    if arguments.restore:
-        from .projects import restore_project
-        restore_project(arguments.restore, arguments.project)
     os.environ.setdefault("XDG_CACHE_HOME", str(runtime / "cache"))
     os.environ.setdefault("PYTHONUTF8", "1")
     token = secrets.token_urlsafe(32)
     connection_file = runtime / ("connection.json" if arguments.port == 8790 else f"connection-{arguments.port}.json")
     from .api import create_app
     import uvicorn
-    app = create_app(arguments.project, token, arguments.port, arguments.demo, lan=arguments.lan)
+    app = create_app(arguments.project, token, arguments.port, lan=arguments.lan)
     server = uvicorn.Server(uvicorn.Config(app, host=bind_host, port=arguments.port, log_level="warning"))
     connection_file.write_text(json.dumps({"url": f"http://127.0.0.1:{arguments.port}", "token": token,
                                            "pid": os.getpid(), "project": str(arguments.project.resolve()),

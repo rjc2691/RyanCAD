@@ -1,3 +1,4 @@
+import {DARK_UI_PALETTE_ID,darkThemes,defaultDarkPalette,type DarkPalette} from "./themes.ts";
 export const EXPERIMENT_STORAGE_KEY = "ryancad-experiments-v1";
 export const ACTIVE_APPEARANCE_ID = "active-component-appearance";
 export interface ActiveAppearance {
@@ -9,6 +10,7 @@ export interface ActiveAppearance {
 }
 export interface Experiments {
   version: 1;
+  "dark-ui-palette": DarkPalette;
   "active-component-appearance": ActiveAppearance;
 }
 export const defaultAppearance = (): ActiveAppearance => ({
@@ -24,6 +26,10 @@ export function normalizeExperiments(raw: unknown): Experiments {
       (raw as any)?.version === 1 ? (raw as any)[ACTIVE_APPEARANCE_ID] : null;
   return {
     version: 1,
+    [DARK_UI_PALETTE_ID]: {
+      enabled: (raw as any)?.version===1 && (raw as any)?.[DARK_UI_PALETTE_ID]?.enabled===true,
+      theme: darkThemes.find(t=>t.id===((raw as any)?.version===1?(raw as any)?.[DARK_UI_PALETTE_ID]?.theme:null))?.id || defaultDarkPalette().theme,
+    },
     [ACTIVE_APPEARANCE_ID]: {
       enabled:
         typeof value?.enabled === "boolean" ? value.enabled : defaults.enabled,

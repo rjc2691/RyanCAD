@@ -16,8 +16,8 @@ def data_of(response):
     return data["result"] if "result" in data and "status" not in data else data
 
 
-async def check(connection, workflow):
-    config = StdioServerParameters(command=sys.executable, args=["-m", "ryancad.mcp_server", "--connection", connection, "--name", "MCP acceptance agent"], cwd=str(Path.cwd()))
+async def check(connection, workflow, workspace, design):
+    config = StdioServerParameters(command=sys.executable, args=["-m", "ryancad.mcp_server", "--connection", connection, "--name", "MCP acceptance agent", "--workspace", workspace, "--design", design], cwd=str(Path.cwd()))
     async with stdio_client(config) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()
@@ -71,5 +71,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--connection", default="runtime/connection.json")
     parser.add_argument("--workflow", action="store_true")
+    parser.add_argument("--workspace", required=True)
+    parser.add_argument("--design", required=True)
     args = parser.parse_args()
-    asyncio.run(check(args.connection, args.workflow))
+    asyncio.run(check(args.connection, args.workflow, args.workspace, args.design))

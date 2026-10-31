@@ -1,10 +1,14 @@
+import {copyLayoutParts,pasteLayoutParts,type LayoutClipboard} from "./layoutClipboard";
+import EndMillIcon from "./EndMillIcon";
+import {applyDarkTheme,DARK_UI_PALETTE_ID,resolveDarkTheme} from "./themes";
+import "./themes.css";
 import type {SketchDimensionEditorState} from "./sketchDimensions";
 import {editorContext} from "./editorContext";
 import {useAdaptiveToolbar} from "./useAdaptiveToolbar";
 import DesignOverview from "./DesignOverview";
 import PartOverview from "./PartOverview";
 import ToolBodyIcon from "./ToolBodyIcon";
-import {layoutContextActions} from "./layoutContextActions";
+import {layoutContextActions,layoutRemovalTargets} from "./layoutContextActions";
 import WorkspaceDesignTree from "./WorkspaceDesignTree";
 import {useDeleteConfirmation} from "./useDeleteConfirmation";
 import LayoutList from "./LayoutList";
@@ -27,6 +31,7 @@ import SketchToolbar from "./SketchToolbar";
 import ParametersWindow from "./ParametersWindow";
 import { NamedParameterProvider } from "./NumericInput";
 import WorkspaceDialog, { type WorkspaceInfo } from "./WorkspaceDialog";
+import WorkspaceManagerDialog from './WorkspaceManagerDialog';
 import FeatureHistory from "./FeatureHistory";
 import FeatureEditPanel, { type FeatureEditHandle } from "./FeatureEditPanel";
 import MobileNavigation, { useMobileLayout, type MobilePane } from "./MobileNavigation";
@@ -35,9 +40,6 @@ import type { MovementGuideData, WorldAxis } from "./movementModel";
 import GroupPanel, { type GroupPanelHandle } from "./GroupPanel";
 import {
   groupCandidates,
-  componentTreeRows,
-  treeDropParent,
-  treeDropProblem,
   remapTreePath,
   groupSelection,
   parentPath,
@@ -57,6 +59,7 @@ import {
   Children,isValidElement,type ReactNode,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -114,7 +117,6 @@ import {
   Save,
   ScanLine,
   Scan,
-  Search,
   Settings2,
   ShieldCheck,
   SkipForward,
@@ -128,7 +130,6 @@ import {
   Undo2,
   Unlink,
   X,
-  Zap,
 } from "lucide-react";
 import Viewport, { type ViewportHandle } from "./Viewport";
 import { Modal, ParameterDialog, ToolDialog } from "./Forms";
@@ -174,7 +175,7 @@ import type { Feature, Parameter, Selection, State, Occurrence } from "./types";
 
 // Only independent workflows; shape/motion shortcuts live inside Tool.
 const toolList = [
-  { id: "tool", label: "Tool operation", icon: Zap, category: "Design" },
+  { id: "tool", label: "Tool operation", icon: EndMillIcon, category: "Design" },
   { id: "sketch", label: "Sketch", icon: SquareDashed, category: "Design" },
   {
     id: "transform",
@@ -185,7 +186,7 @@ const toolList = [
   { id: "duplicate", label: "Repeat part", icon: Copy, category: "Organize" },
   {
     id: "assembly",
-    label: "Group components",
+    label: "Layout Group",
     icon: FolderOpen,
     category: "Organize",
   },
@@ -301,14 +302,7 @@ export default function App() {
     definition: string;
     color: string;
   } | null>(null);
-  const [groupColorsEnabled, setGroupColorsEnabled] = useState(true);
-  const [fallbackGroupColors] = useState(() => {
-    const palette = ["#89959f", "#9b958a", "#808f8b", "#9a9098", "#92999b"];
-    return Array.from(
-      { length: 3 },
-      () => palette[Math.floor(Math.random() * palette.length)],
-    );
-  });
+  const [groupColorsEnabled] = useState(true);
   const {confirmDelete,deleteDialog}=useDeleteConfirmation();
   const [sketchMenu,setSketchMenu]=useState<{id:string;x:number;y:number}|null>(null);
   const [renamingSketch,setRenamingSketch]=useState<string|null>(null);
@@ -319,6 +313,9 @@ export default function App() {
     y: number;
   } | null>(null);
   const [selection, setSelection] = useState<Selection | null>(null);
+  const layoutClipboard=useRef<LayoutClipboard|null>(null),pasteCount=useRef(0),pasteBusy=useRef(false);
+  const layoutClipboardKey=useRef<(paste:boolean)=>boolean>(()=>false);
+  const layoutDeleteKey=useRef<(repeat:boolean)=>boolean>(()=>false),layoutDeletePending=useRef(false);
   const selectedMembers = selectionMembers(selection);
   const [selectionSet, setSelectionSet] = useState<string[]>([]);
   const [groupScope, setGroupScope] = useState("");
@@ -329,40 +326,10 @@ export default function App() {
       setPartWorkbench(null);setGroupScope(layoutScope);setSelection(null);setSelectionSet([]);
     }
   },[state?.document.id,state?.document.active_layout,layoutScope]);
-  const treePointer = useRef<{
-    id: string;
-    x: number;
-    y: number;
-    active: boolean;
-    parent: string | null;
-    problem: string;
-  } | null>(null);
-  const suppressTreeClick = useRef(0);
-  const [draggedComponent, setDraggedComponent] = useState<string | null>(null);
-  const [treeDrop, setTreeDrop] = useState<{
-    parent: string;
-    problem: string;
-  } | null>(null);
-  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [editingDesignName, setEditingDesignName] = useState<string | null>(
     null,
   );
   const cancelDesignRename = useRef(false);
-  const toggleGroup = (id: string) =>
-    setExpandedGroups((previous) => {
-      const next = new Set(previous);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  useEffect(() => {
-    if (!groupScope) return;
-    setExpandedGroups((previous) => {
-      const next = new Set(previous);
-      for (let id = groupScope; id; id = parentPath(id)) next.add(id);
-      return next;
-    });
-  }, [groupScope]);
   const groupScopeRef = useRef("");
   groupScopeRef.current = groupScope;
   const [grouping, setGrouping] = useState<string[] | null>(null);
@@ -382,7 +349,7 @@ export default function App() {
   const [toolbarPrefs,setToolbarPrefs]=useState(getToolbarPreferences);
   useEffect(()=>subscribeToolbar(()=>setToolbarPrefs(getToolbarPreferences())),[]);
   const appShellRef=useRef<HTMLDivElement>(null),toolbarContentRef=useRef<HTMLDivElement>(null);
-  const fullWidthToolbar=useAdaptiveToolbar(appShellRef,toolbarContentRef);
+  const toolbarLayout=useAdaptiveToolbar(appShellRef,toolbarContentRef);
   const toolbarDrag=useRef<string|null>(null),toolbarDragEnd=useRef(0);
   const [measure,setMeasure]=useState<MeasurePoint[]|null>(null);
   const [measureReplace,setMeasureReplace]=useState<number|null>(null);
@@ -406,8 +373,9 @@ export default function App() {
   const sketchParent = useRef(false);
   const [error, setError] = useState<any>(null);
   const [toast, setToast] = useState<string | null>(null);
+  const [toastUndo,setToastUndo]=useState<{message:string;revision:number;document:string}|null>(null);
+  const toastUndoPending=useRef(false);
   const [localJob, setLocalJob] = useState<any>(null);
-  const [toolSearch, setToolSearch] = useState("");
   const [parallelHistory, setParallelHistory] = useState(false);
   const [mergedHistory, setMergedHistory] = useState<Set<string>>(new Set());
   const [toolWorkbench, setToolWorkbench] = useState<string | null>(null);
@@ -419,6 +387,7 @@ export default function App() {
   const [grid, setGrid] = useState(true);
   const [experiments,setExperiments]=useState(loadExperiments);
   useEffect(()=>saveExperiments(experiments),[experiments]);
+  useLayoutEffect(()=>{applyDarkTheme(document.documentElement,experiments[DARK_UI_PALETTE_ID]);},[experiments[DARK_UI_PALETTE_ID]]);
   const [section, setSection] = useState(false);
   const [sectionSettings,setSectionSettings]=useState<SectionSettings>({axis:"Y",offset:0,flipped:false});
   const sectionPlane=useRef(updateSectionPlane(sectionSettings));
@@ -516,10 +485,10 @@ export default function App() {
   }, [refresh, refreshWorkspace]);
   useEffect(() => {
     if (toast) {
-      const timer = setTimeout(() => setToast(null), 4500);
+      const timer = setTimeout(() => {setToast(null);setToastUndo(null);}, toastUndo?10000:4500);
       return () => clearTimeout(timer);
     }
-  }, [toast]);
+  }, [toast,toastUndo]);
   const report = (e: any) => {
     setError({
       message: e.message || "The operation could not be completed.",
@@ -532,7 +501,7 @@ export default function App() {
       const current = stateRef.current;
       if (!current) return;
       setError(null);
-      setLocalJob({ status: "queued", description: name });
+      setLocalJob({ status: "queued", operation:"command", description: name });
       try {
         const submission = await api("/commands", {
           method: "POST",
@@ -548,28 +517,7 @@ export default function App() {
         setHistoryView(null);
         if (result.occurrence_map) {
           const mapping = result.occurrence_map as Record<string, string>;
-          setExpandedGroups(
-            (previous) =>
-              new Set([...previous].map((id) => remapTreePath(id, mapping))),
-          );
           setGroupScope((previous) => remapTreePath(previous, mapping));
-        }
-        if (result.occurrence_id) {
-          setExpandedGroups((previous) => {
-            const next = new Set(previous);
-            if (
-              name === "group.create" ||
-              (name === "group.insert" && args.kind === "assembly")
-            )
-              next.add(result.occurrence_id);
-            for (
-              let id = parentPath(result.occurrence_id);
-              id;
-              id = parentPath(id)
-            )
-              next.add(id);
-            return next;
-          });
         }
         if (next && !operationActive.current) {
           setSelection((current) =>
@@ -616,7 +564,12 @@ export default function App() {
               definition: occurrence.definition,
             });
         }
-        setToast(result.description || "Design updated");
+        const removalArgs=name==="structure.remove"?[args]:name==="batch"&&args.commands?.length&&args.commands.every((c:any)=>c.name==="structure.remove")?args.commands.map((c:any)=>c.args):[];
+        const removed=removalArgs.map((spec:any)=>current.occurrences.find(o=>o.source_id===spec.instance&&o.layout&&!o.library&&!current.occurrences.some(p=>p.structure_role==="part"&&o.id.startsWith(p.id+"/")))).filter(Boolean);
+        const removal=removed.length>0&&removed.length===removalArgs.length;
+        const message=removal?removed.length===1?`Removed ${removed[0].name} from Layout`:`Removed ${removed.length} items from Layout`:result.description||"Design updated";
+        setToastUndo(removal?{message,revision:result.revision,document:current.document.id}:null);
+        setToast(message);
         return result;
       } catch (e) {
         report(e);
@@ -752,7 +705,7 @@ export default function App() {
     setSelection(next);
     setSelectedFeature(null);
     setSelectionSet([
-      ...new Set(selectionMembers(next).map((s) => s.occurrence)),
+      ...new Set(selectionMembers(next).map((s) => s.occurrence).filter(Boolean)),
     ]);
   };
   const selectSketch = (id: string,removeOnly=false) => {
@@ -777,7 +730,6 @@ export default function App() {
       return;
     }
     setSectionPicking(false);setSectionNotice("");
-    setToolSearch("");
     if (sketchActive.current) return;
     if (groupingActive.current) return;
     if(measureActive.current && kind!=="measure")closeMeasure();
@@ -822,13 +774,13 @@ export default function App() {
       if(selection && stateRef.current.document.components[selection.definition]?.read_only){
         setToast("Edit the base part to change a variation. Imported bodies are read-only.");return;
       }
-      if(stateRef.current.document.structure_version && selection && !selection.worldPlane && !selectedSketch &&
+      if(stateRef.current.document.structure_version && selection && !selection.worldPlane && !selection.worldOrigin && !selectedSketch &&
          groupScope !== selection.occurrence && stateRef.current.document.components[selection.definition]?.kind !== "assembly"){
         setGroupScope(selection.occurrence);
       }
       if (
         !selectedSketch &&
-        selection &&
+        selection && !selection.worldOrigin &&
         stateRef.current.document.components[selection.definition]?.kind ===
           "assembly"
       ) {
@@ -875,7 +827,7 @@ export default function App() {
       setRightVisible(true);
       setExplode(0);
       setSelectedFeature(null);
-      const picked=selection&&!selection.worldPlane?(editor==="Layout Editor"&&stateRef.current?groupSelection(selection,stateRef.current.occurrences,groupScope):selection):null;
+      const picked=selection&&!selection.worldPlane&&!selection.worldOrigin?(editor==="Layout Editor"&&stateRef.current?groupSelection(selection,stateRef.current.occurrences,groupScope):selection):null;
       const target = picked ? {occurrence:picked.occurrence,definition:picked.definition} : null;
       setMove({ target });
       setMovePreview(null);
@@ -994,33 +946,16 @@ export default function App() {
       requestAnimationFrame(() => operationRef.current?.useSketch(id, true));
   };
   const chooseWorldOrigin = () => {
-    if(sectionPicking)return;
-    if(measureActive.current){select({worldOrigin:true,occurrence:'',definition:'root'});return;}
-    if (sketchActive.current) return;
-    if (!state || busy) return;
-    if (moveActive.current) moveRef.current?.chooseOrigin();
-    else if (operationActive.current) operationRef.current?.chooseOrigin();
-    else {
-      chooseTool("tool");
-      setOperation((current) =>
-        current
-          ? {
-              ...current,
-              origin: "reference",
-              originPinned: true,
-              reference: {
-                selection: {
-                  worldOrigin: true,
-                  definition: "root",
-                  occurrence: "",
-                },
-                anchor: "center",
-                label: "World origin",
-              },
-            }
-          : current,
-      );
+    if(!state||busy||featureEditActive.current||sectionPicking||groupingActive.current)return;
+    const origin:Selection={worldOrigin:true,occurrence:"",definition:"root"};
+    if(measureActive.current){select(origin);return;}
+    if(sketchActive.current){
+      if(sketch&&!sketchPlanePicking){const f=sketchBasis(sketch.frame);sketchRef.current?.point([-f.origin.dot(f.u),-f.origin.dot(f.v)],0,origin);}
+      return;
     }
+    if(moveActive.current){moveRef.current?.chooseOrigin();return;}
+    if(operationActive.current){operationRef.current?.chooseOrigin();return;}
+    select(origin);
   };
   const chooseWorldAxis = (axis: WorldAxis) => {
     if(sectionPicking){setSectionSettings({...sectionSettings,axis,offset:0,reference:undefined});setSectionPicking(false);setSectionNotice("");return;}
@@ -1098,6 +1033,7 @@ export default function App() {
     operationCommit.current = pending;
     setLocalJob({
       status: "queued",
+      operation: "commit_preview",
       description: editing ? "Apply feature changes" : moving ? `Apply ${moveLabel}` : "Apply tool operation",
     });
     try {
@@ -1260,6 +1196,12 @@ export default function App() {
       if((event.target as HTMLElement).closest('[data-shortcut-capture]'))return;
       if(sketchActive.current&&event.code==="Space"&&bindingFor("sketch_select")?.code==="Space"&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.isComposing&&(event.target as HTMLElement).closest('.sketch-dimension-inline')){
         event.preventDefault();event.stopImmediatePropagation();sketchRef.current?.selectTool();return;
+      }
+      if((event.ctrlKey||event.metaKey)&&!event.altKey&&!event.shiftKey&&!event.isComposing&&["c","v"].includes(event.key.toLowerCase())&&!(event.target as HTMLElement).closest("input,textarea,select,[contenteditable]:not([contenteditable=false]),[role=textbox],[role=dialog],[role=menu],.experimental-popover,.bug-reports-popover,.file-action-menu,.account-dropdown")&&!window.getSelection()?.toString()){
+        if(!event.repeat&&layoutClipboardKey.current(event.key.toLowerCase()==="v")){event.preventDefault();event.stopImmediatePropagation();return;}
+      }
+      if(!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey&&!event.isComposing&&["Delete","Backspace"].includes(event.key)&&!(event.target as HTMLElement).closest("input,textarea,select,[contenteditable]:not([contenteditable=false]),[role=textbox],[role=dialog],[role=menu],.experimental-popover,.bug-reports-popover,.file-action-menu,.account-dropdown")){
+        if(layoutDeleteKey.current(event.repeat)){event.preventDefault();event.stopImmediatePropagation();return;}
       }
       if(dispatchToolbarShortcut(event))return;
       if((event.target as HTMLElement).closest('.experimental-popover,.bug-reports-popover,.file-action-menu,.account-dropdown'))return;
@@ -1424,12 +1366,12 @@ export default function App() {
   }, []);
 
   const component =
-    state && selection ? state.document.components[selection.definition] : null;
+    state && selection && !selection.worldOrigin ? state.document.components[selection.definition] : null;
   const occurrence = state?.occurrences.find(
     (i) => i.id === selection?.occurrence,
   );
   const activePart = editor === "Part Editor" && !selection
-    ? state?.occurrences.find(i=>i.id===groupScope)
+    ? state?.occurrences.filter(i=>i.structure_role==='part'&&(i.id===groupScope||groupScope.startsWith(i.id+'/'))).sort((a,b)=>b.id.length-a.id.length)[0]
     : occurrence?.structure_role === "part" ? occurrence : undefined;
   const showingPartOverview = !!activePart && (!selection || selection.occurrence===activePart.id);
   const geometry =
@@ -1517,7 +1459,38 @@ export default function App() {
         j.operation !== "preview",
     ) || [];
   const busy = !!localJob || busyJobs.length > 0;
+  const saving=[localJob,...(state?.jobs||[])].some(job=>job&&["command","commit_preview"].includes(job.operation)&&["queued","running","waiting"].includes(job.status));
   const currentJob = localJob || busyJobs[busyJobs.length - 1];
+  layoutClipboardKey.current=(paste)=>{
+    if(!state||editor!=="Layout Editor"||operationActive.current||sketch||grouping!==null||measure!==null||sectionPicking||historyView||dialog||busy||pasteBusy.current)return false;
+    if(!paste){
+      try{const copied=copyLayoutParts(state,selection);if(!copied)return false;layoutClipboard.current=copied;pasteCount.current=0;setToast(`Copied ${copied.parts.length===1?'part':copied.parts.length+' parts'}`);return true;}catch(e:any){setToast(e.message);return true;}
+    }
+    if(!layoutClipboard.current)return false;
+    let commands;
+    try{commands=pasteLayoutParts(state,layoutClipboard.current,groupScope,30*(pasteCount.current+1));}catch(e:any){setToast(e.message);return true;}
+    pasteBusy.current=true;
+    void runRef.current("batch",{description:`Paste ${commands.length===1?'part':commands.length+' parts'}`,commands}).then((result:any)=>{
+      if(!result)return;pasteCount.current++;
+      const ids=new Set(result.steps.map((step:any)=>step.instance_id));
+      const items=(stateRef.current?.occurrences||[]).filter(o=>ids.has(o.source_id)&&o.parent===commands[0].args.parent).map(o=>({occurrence:o.id,definition:o.definition}));
+      if(items.length){setSelection(items.length>1?{...items[0],items}:items[0]);setSelectionSet(items.map(i=>i.occurrence));}
+      setToast(`Pasted ${commands.length===1?'part':commands.length+' parts'}`);
+    }).catch(()=>{}).finally(()=>{pasteBusy.current=false;});
+    return true;
+  };
+  layoutDeleteKey.current=(repeat)=>{
+    if(!state||editor!=="Layout Editor"||operationActive.current||sketch||grouping!==null||measure!==null||sectionPicking||historyView||dialog)return false;
+    if(layoutDeletePending.current)return true;
+    if(busy)return false;
+    const targets=layoutRemovalTargets(state,selection,groupScope);
+    if(!targets.length)return false;
+    if(repeat)return true;
+    layoutDeletePending.current=true;
+    const commands=targets.map(row=>({name:"structure.remove",args:{instance:row.source_id}}));
+    void (commands.length===1?runRef.current(commands[0].name,commands[0].args):runRef.current("batch",{commands,description:`Remove ${targets.length} items from Layout`})).catch(()=>{}).finally(()=>{layoutDeletePending.current=false;});
+    return true;
+  };
   const unit = state?.document.display_units || "mm";
   const length = (value: number) =>
     numeric(unit === "in" ? value / 25.4 : value, unit === "in" ? 3 : 2);
@@ -1532,9 +1505,6 @@ export default function App() {
           : id);
   const params = state ? Object.values(state.document.parameters).filter(p => p.named === true) : [];
   const editorTools=toolList.map(t=>t.id==="transform"?{...t,label:moveLabel}:t);
-  const filteredTools = editorTools.filter((t) =>
-    `${t.label} ${t.category}`.toLowerCase().includes(toolSearch.toLowerCase()),
-  );
   const featureOrder = state?.document.feature_order || [];
   const sketchFeatures = Object.values(state?.document.features || {}).filter(
     (feature) => feature.type === "sketch",
@@ -1691,139 +1661,12 @@ export default function App() {
       await run("group.insert", { parent, kind });
     } catch {}
   };
-  const dropTreeItem = async (parent: string, source = draggedComponent) => {
-    setDraggedComponent(null);
-    setTreeDrop(null);
-    if (
-      !source ||
-      treeEditingDisabled ||
-      treeDropProblem(state!.occurrences, source, parent)
-    )
-      return;
-    try {
-      await run("group.reparent", { occurrence: source, parent });
-    } catch {}
-  };
-  const dropTreeItemRef = useRef(dropTreeItem);
-  dropTreeItemRef.current = dropTreeItem;
-  useEffect(() => {
-    const clear = () => {
-      treePointer.current = null;
-      setDraggedComponent(null);
-      setTreeDrop(null);
-    };
-    const move = (event: PointerEvent) => {
-      const drag = treePointer.current;
-      if (!drag || treeEditingDisabled) return;
-      if (
-        !drag.active &&
-        Math.hypot(event.clientX - drag.x, event.clientY - drag.y) < 5
-      )
-        return;
-      drag.active = true;
-      setDraggedComponent(drag.id);
-      const hit = document.elementFromPoint(event.clientX, event.clientY),
-        row = hit?.closest<HTMLElement>(".component-row"),
-        design = hit?.closest(".structure-root"),
-        create = hit?.closest<HTMLElement>(".tree-create-row");
-      let parent: string | null = null;
-      if (row) {
-        const target = stateRef.current?.occurrences.find(
-          (o) => o.id === row.dataset.occurrence,
-        );
-        if (target) parent = treeDropParent(target);
-      } else if (design) parent = "";
-      else if (create) parent = create.dataset.createParent || "";
-      drag.parent = parent;
-      drag.problem =
-        parent === null
-          ? "Drop on a group, a component level, or the design name."
-          : treeDropProblem(
-              stateRef.current?.occurrences || [],
-              drag.id,
-              parent,
-            );
-      setTreeDrop({ parent: parent ?? "", problem: drag.problem });
-      const panel = hit?.closest<HTMLElement>(".left-panel");
-      if (panel) {
-        const rect = panel.getBoundingClientRect();
-        if (event.clientY > rect.bottom - 24) panel.scrollTop += 10;
-        else if (event.clientY < rect.top + 24) panel.scrollTop -= 10;
-      }
-      event.preventDefault();
-    };
-    const up = () => {
-      const drag = treePointer.current;
-      clear();
-      if (!drag?.active) return;
-      suppressTreeClick.current = performance.now() + 400;
-      if (drag.parent !== null && !drag.problem)
-        void dropTreeItemRef.current(drag.parent, drag.id);
-    };
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "Escape") clear();
-    };
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-    window.addEventListener("pointercancel", clear);
-    window.addEventListener("blur", clear);
-    window.addEventListener("keydown", key);
-    return () => {
-      window.removeEventListener("pointermove", move);
-      window.removeEventListener("pointerup", up);
-      window.removeEventListener("pointercancel", clear);
-      window.removeEventListener("blur", clear);
-      window.removeEventListener("keydown", key);
-    };
-  }, [treeEditingDisabled]);
-  const treeRows = componentTreeRows(
-    (state?.occurrences || []).filter(
-      (o) => state?.document.components[o.definition]?.purpose !== "tool",
-    ),
-    expandedGroups,
-  );
-  const groupColorDefinitions = [
-    ...new Set(
-      (state?.occurrences || [])
-        .filter((o) => o.kind === "assembly")
-        .map((o) => o.definition),
-    ),
-  ];
-  const groupIconColors = Array.from({ length: 3 }, (_, index) => {
-    const id = groupColorDefinitions[index];
-    return id
-      ? (colorPreview?.definition === id
-          ? colorPreview.color
-          : state?.document.components[id]?.color) || fallbackGroupColors[index]
-      : fallbackGroupColors[index];
-  });
-  const createParent = selection
-    ? parentPath(selection.occurrence)
-    : groupScope;
-  const createRow = (
-    <button
-      className="create-part tree-create-row sidebar-add-row"
-      data-create-parent={createParent}
-      role="treeitem"
-      aria-level={(createParent ? createParent.split("/").length : 0) + 1}
-      style={{
-        marginLeft:
-          26 + (createParent ? createParent.split("/").length : 0) * 16,
-      }}
-      title={`Create an empty component in ${state?.occurrences.find((o) => o.id === createParent)?.name || "this design"}`}
-      onClick={() => void createTreeItem(createParent, "solid")}
-      disabled={treeEditingDisabled}
-    >
-      <Plus size={14} />
-      <span>add component</span>
-    </button>
-  );
   return (
     <NamedParameterProvider parameters={state ? Object.values(state.document.parameters) : []} values={Object.fromEntries(Object.entries(state?.parameter_graph || {}).map(([id, info]) => [id, info.value]))}>
     <div
       data-mobile-pane={mobilePane}
       ref={appShellRef}
-      data-toolbar-layout={fullWidthToolbar?"full-width":"between"}
+      data-toolbar-layout={toolbarLayout.mode}
       className={
         "app-shell " +
         (!leftVisible ? "left-hidden " : "") +
@@ -1836,6 +1679,8 @@ export default function App() {
       style={
         {
           "--timeline-requested": `${48 + lanes.length * 96}px`,
+          "--toolbar-left-inset": `${toolbarLayout.left}px`,
+          "--toolbar-right-inset": `${toolbarLayout.right}px`,
         } as React.CSSProperties
       }
     >
@@ -1848,26 +1693,7 @@ export default function App() {
             onNative={() => importRef.current?.click()} onSTL={() => setDialog("export-settings")}
             onReferences={() => setDialog("references")}
             onImported={async () => { await refresh(true); }} onError={report} />
-        <button {...shortcutAttributes('search')} className="command-search" aria-label="Find a tool or action" title="Find a tool or action · Ctrl/⌘+K" onClick={() => setDialog("palette")}>
-          <Search size={14} />
-          <span>Find a tool or action</span>
-          <kbd>Ctrl K</kbd>
-        </button>
         <div className="header-right">
-          <span
-            className={"save-indicator " + (state?.save_error ? "warning" : "")}
-            title={
-              state?.save_error ||
-              "Every accepted edit is saved to the local durable journal."
-            }
-          >
-            <span />
-            {state?.save_error
-              ? "Save warning"
-              : busy
-                ? "Working…"
-                : "Saved locally"}
-          </span>
           <button
             aria-label="Agents"
             {...shortcutAttributes('agents')}
@@ -1884,7 +1710,7 @@ export default function App() {
                 0}
             </small>
           </button>
-          <AccountMenu onAgents={()=>setDialog("agents")} />
+          <AccountMenu />
         </div>
       </header>
       <nav
@@ -1921,15 +1747,15 @@ export default function App() {
               disabled={!state || busy || !!historyView}
               onClick={() => chooseTool("tool")}
             >
-              <Zap size={19} />
+              <EndMillIcon size={19} />
               <span>Tool</span>
               <kbd>{shortcutLabel('tool')}</kbd>
             </button>
             <button
               className={`tool-button ${grouping ? "active" : ""}`}
-              aria-label="Group components"
+              aria-label={editor==='Layout Editor'?'Layout Group':'Part Group'}
               {...shortcutAttributes('assembly')}
-              title="Group components · G"
+              title={`${editor==='Layout Editor'?'Layout Group':'Part Group'} · ${shortcutLabel('assembly')}`}
               disabled={
                 !state ||
                 busy ||
@@ -1941,7 +1767,7 @@ export default function App() {
               onClick={() => chooseTool("assembly")}
             >
               <FolderPlus size={18} />
-              <span>Group</span>
+              <span>{editor==='Layout Editor'?'Layout Group':'Part Group'}</span>
               <kbd>{shortcutLabel('assembly')}</kbd>
             </button>
             <button
@@ -1966,7 +1792,7 @@ export default function App() {
                   "fit",
                   "measure",
                   "checkpoint",
-                ].includes(t.id),
+                ].includes(t.id)&&!(editor==="Layout Editor"&&t.id==="duplicate"),
               )
               .sort((a, b) =>
                 a.id === "transform" ? -1 : b.id === "transform" ? 1 : 0,
@@ -2035,9 +1861,12 @@ export default function App() {
       {(leftVisible || mobileLayout) && (
         <aside className="left-panel">
           <div className="panel-title">
-            <button className="workspace-tree-title workspace-tree-button" title="Manage workspace designs" aria-label="Manage workspace designs" onClick={() => { void refreshWorkspace().catch(report); setDialog("workspace"); }}>
-              <FolderOpen size={15} /> Designs - Local Workspace
+            <div className="workspace-root-heading">
+            <button className="workspace-tree-title workspace-tree-button" title="Manage workspaces" aria-label="Manage workspaces" onClick={() => { void refreshWorkspace().catch(report); setDialog("workspaces"); }}>
+              <FolderOpen size={15} /> <span className="workspace-root-name">{workspace?.name||'Local Workspace'}</span>
             </button>
+              {state&&<span className={`workspace-save-status ${state.save_error?'warning':''}`} data-state={state.save_error?'warning':saving?'saving':'saved'} role="status" aria-label="Save status" title={state.save_error||"Accepted edits are saved automatically."}>{state.save_error?'save warning':saving?'saving...':'saved'}</span>}
+            </div>
             <button
               className="icon-button"
               aria-label="Hide component panel"
@@ -2046,37 +1875,14 @@ export default function App() {
               <PanelLeftClose size={14} />
             </button>
           </div>
-          <WorkspaceDesignTree workspace={workspace} activeId={currentDesignId()} disabled={treeEditingDisabled} onError={report}
+          <div className="sidebar-list-label"><span>Designs</span><button className="icon-button sidebar-header-add" aria-label="Add design" title="Add design" disabled={treeEditingDisabled} onClick={()=>setDialog("workspace")}><Plus size={14}/></button></div>
+          <WorkspaceDesignTree workspace={workspace} activeId={currentDesignId()} disabled={treeEditingDisabled} onError={report} onManageDesigns={()=>setDialog('workspace')}
             activeRow={<>          <div
             className="structure-root current-design-row"
             aria-current="page"
-            data-tree-drop={
-              draggedComponent && treeDrop?.parent === ""
-                ? treeDrop.problem
-                  ? "invalid"
-                  : "valid"
-                : undefined
-            }
             onContextMenu={(e) => {
               e.preventDefault();
               setContextMenu({ selection: null, x: e.clientX, y: e.clientY });
-            }}
-            onDragOver={(e) => {
-              if (!draggedComponent) return;
-              e.preventDefault();
-              e.dataTransfer.dropEffect = "move";
-              setTreeDrop({
-                parent: "",
-                problem: treeDropProblem(
-                  state!.occurrences,
-                  draggedComponent,
-                  "",
-                ),
-              });
-            }}
-            onDrop={(e) => {
-              e.preventDefault();
-              void dropTreeItem("");
             }}
           >
             <DesignIcon />
@@ -2146,16 +1952,15 @@ export default function App() {
           </>} />
 
 
-          {state && !state.document.structure_version && <button className="sidebar-add-row structure-enable" disabled={treeEditingDisabled} onClick={()=>void run("structure.enable").catch(()=>{})}>Organize into Parts & Layouts</button>}
-          {state?.document.structure_version ? <ProjectStructure onMove={()=>chooseTool("transform")} state={state} run={run} disabled={treeEditingDisabled} scope={groupScope} selection={selection}
-            onSelect={(item,remove)=>{
+          {state && <ProjectStructure onMove={()=>chooseTool("transform")} state={state} run={run} disabled={treeEditingDisabled} scope={groupScope} selection={selection} groupMembers={grouping}
+            onSelect={(item,remove,add=false)=>{
               if(remove){select(item,false,true,true);return;}
               if(!treeEditingDisabled){
                 const root=state.occurrences.find(o=>o.parent==="root"&&o.library&&(item.occurrence===o.id||item.occurrence.startsWith(o.id+"/")));
                 if(root){setPartWorkbench(root.id);if(!groupScope.startsWith(root.id))setGroupScope(root.id);}
                 else if(partWorkbench){setPartWorkbench(null);setGroupScope(layoutScope);}
               }
-              select(item,false,true);
+              select(item,add,true);
             }}
             onEdit={row=>{
               if(treeEditingDisabled)return;
@@ -2165,364 +1970,30 @@ export default function App() {
               setSelection(row.kind==="assembly"?null:{occurrence:row.id,definition:row.definition});setSelectionSet([]);
             }}
             onLayout={()=>{setPartWorkbench(null);setGroupScope(stateRef.current?.occurrences.find(o=>o.parent==="root" && o.definition===stateRef.current?.document.active_layout)?.id||"");setSelection(null);setSelectionSet([]);}}
- /> : <>
-          <div className="structure-section design-category">
-            <button
-              className="component-color-mode"
-              aria-label={
-                groupColorsEnabled
-                  ? "Switch to monochrome component colors"
-                  : "Switch to group component colors"
-              }
-              aria-pressed={groupColorsEnabled}
-              title={
-                groupColorsEnabled
-                  ? "Switch to monochrome colors"
-                  : "Switch to group colors"
-              }
-              onClick={() => setGroupColorsEnabled((enabled) => !enabled)}
-            >
-              <svg
-                width="19"
-                height="19"
-                viewBox="0 0 20 20"
-                aria-hidden="true"
-              >
-                <circle cx="7" cy="7" r="5" fill={groupIconColors[0]} />
-                <circle
-                  cx="13"
-                  cy="7"
-                  r="5"
-                  fill={groupIconColors[1]}
-                  fillOpacity=".85"
-                />
-                <circle
-                  cx="10"
-                  cy="12.5"
-                  r="5"
-                  fill={groupIconColors[2]}
-                  fillOpacity=".85"
-                />
-              </svg>
-            </button>
-            <Boxes size={15} />
-            <span>Components</span>
-          </div>
-          <div className="tree-list" role="tree" aria-label="Design components">
-            {treeRows.map(
-              (
-                { occurrence: o, depth, childCount, position, siblings },
-                treeIndex,
-              ) => {
-                const c = state!.document.components[o.definition];
-                const active = selectionMembers(selection).some(
-                  (s) => s.occurrence === o.id,
-                );
-                const count = state!.occurrences.filter(
-                  (i) => i.definition === o.definition && !i.suppressed,
-                ).length;
-                return (
-                  <Fragment key={o.id}>
-                    <div
-                      className={
-                        "component-row " +
-                        (active || o.id === groupScope ? "selected " : "") +
-                        (!o.visible || o.suppressed ? "muted" : "")
-                      }
-                      data-can-drag={
-                        (!treeEditingDisabled &&
-                          !o.pattern_mode &&
-                          !o.suppressed) ||
-                        undefined
-                      }
-                      data-dragging={draggedComponent === o.id || undefined}
-                      data-tree-drop={
-                        draggedComponent && treeDrop?.parent === o.id
-                          ? treeDrop.problem
-                            ? "invalid"
-                            : "valid"
-                          : undefined
-                      }
-                      role="treeitem"
-                      aria-label={c.name}
-                      aria-level={depth + 1}
-                      aria-posinset={position}
-                      aria-setsize={siblings}
-                      aria-selected={active || o.id === groupScope}
-                      aria-expanded={
-                        o.kind === "assembly"
-                          ? expandedGroups.has(o.id)
-                          : undefined
-                      }
-                      data-occurrence={o.id}
-                      data-editing={o.id === groupScope || undefined}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        select(
-                          { occurrence: o.id, definition: o.definition },
-                          false,
-                          true,
-                        );
-                        setContextMenu({
-                          selection: {
-                            occurrence: o.id,
-                            definition: o.definition,
-                          },
-                          x: e.clientX,
-                          y: e.clientY,
-                        });
-                      }}
-                      style={{
-                        paddingLeft: 22 + depth * 16,
-                      }}
-                    >
-                      {Array.from({ length: depth }, (_, i) => (
-                        <i
-                          key={i}
-                          className="tree-indent-guide"
-                          style={{ left: 31 + i * 16 }}
-                        />
-                      ))}
-                      {o.kind === "assembly" ? (
-                        <button
-                          className="tree-expander"
-                          aria-label={`${expandedGroups.has(o.id) ? "Collapse" : "Expand"} ${c.name}`}
-                          title={`${childCount} direct members`}
-                          onClick={() => toggleGroup(o.id)}
-                        >
-                          {expandedGroups.has(o.id) ? (
-                            <ChevronDown size={13} />
-                          ) : (
-                            <ChevronRight size={13} />
-                          )}
-                        </button>
-                      ) : (
-                        <span className="tree-expander-spacer" />
-                      )}
-                      {o.kind === "assembly" && (
-                        <>
-                          <button
-                            className="component-color-button"
-                            aria-label={"Edit color of " + c.name}
-                            title="Edit component color"
-                            disabled={busy || !!historyView}
-                            onClick={(e) => {
-                              const rect =
-                                e.currentTarget.getBoundingClientRect();
-                              setAppearance({
-                                definition: o.definition,
-                                x:
-                                  (e.currentTarget
-                                    .closest(".left-panel")
-                                    ?.getBoundingClientRect().right ||
-                                    rect.right) + 8,
-                                y: rect.top,
-                              });
-                            }}
-                          >
-                            <span
-                              style={{
-                                background:
-                                  colorPreview?.definition === c.id
-                                    ? colorPreview.color
-                                    : c.color,
-                              }}
-                            />
-                          </button>
-                        </>
-                      )}
-                      <button
-                        className="component-select"
-                        draggable={false}
-                        onPointerDown={(e) => {
-                          if (
-                            e.button === 0 &&
-                            !treeEditingDisabled &&
-                            !o.pattern_mode &&
-                            !o.suppressed
-                          )
-                            treePointer.current = {
-                              id: o.id,
-                              x: e.clientX,
-                              y: e.clientY,
-                              active: false,
-                              parent: null,
-                              problem: "",
-                            };
-                        }}
-                        title={
-                          c.name +
-                          (o.kind === "assembly"
-                            ? " · Double-click to edit group"
-                            : " · Double-click to rename · Right-click for actions")
-                        }
-                        onDoubleClick={(e) => {
-                          if (busy || historyView) return;
-                          if (o.kind === "assembly") {
-                            editGroup(
-                              {
-                                occurrence: o.id,
-                                definition: o.definition,
-                              },
-                              true,
-                            );
-                            return;
-                          }
-                          const rect = e.currentTarget.getBoundingClientRect();
-                          setAppearance({
-                            definition: o.definition,
-                            x:
-                              (e.currentTarget
-                                .closest(".left-panel")
-                                ?.getBoundingClientRect().right || rect.right) +
-                              8,
-                            y: rect.top,
-                            focusName: true,
-                          });
-                        }}
-                        onKeyDown={(e) => {
-                          if (
-                            [
-                              "ArrowUp",
-                              "ArrowDown",
-                              "ArrowLeft",
-                              "ArrowRight",
-                            ].includes(e.key)
-                          ) {
-                            e.preventDefault();
-                            const rows = [
-                              ...e.currentTarget
-                                .closest("[role=tree]")!
-                                .querySelectorAll<HTMLButtonElement>(
-                                  ".component-select",
-                                ),
-                            ];
-                            const index = rows.indexOf(e.currentTarget);
-                            if (e.key === "ArrowDown")
-                              rows[
-                                Math.min(rows.length - 1, index + 1)
-                              ]?.focus();
-                            if (e.key === "ArrowUp")
-                              rows[Math.max(0, index - 1)]?.focus();
-                            if (e.key === "ArrowRight") {
-                              if (
-                                o.kind === "assembly" &&
-                                !expandedGroups.has(o.id)
-                              )
-                                toggleGroup(o.id);
-                              else if (childCount) rows[index + 1]?.focus();
-                            }
-                            if (e.key === "ArrowLeft") {
-                              if (
-                                o.kind === "assembly" &&
-                                expandedGroups.has(o.id)
-                              )
-                                toggleGroup(o.id);
-                              else
-                                rows
-                                  .find(
-                                    (r) =>
-                                      r
-                                        .closest("[data-occurrence]")
-                                        ?.getAttribute("data-occurrence") ===
-                                      parentPath(o.id),
-                                  )
-                                  ?.focus();
-                            }
-                          }
-                          if (e.key === "F2" && !busy && !historyView) {
-                            e.preventDefault();
-                            const rect =
-                              e.currentTarget.getBoundingClientRect();
-                            setAppearance({
-                              definition: o.definition,
-                              x:
-                                (e.currentTarget
-                                  .closest(".left-panel")
-                                  ?.getBoundingClientRect().right ||
-                                  rect.right) + 8,
-                              y: rect.top,
-                              focusName: true,
-                            });
-                          }
-                        }}
-                        onClick={(e) => {
-                          if (performance.now() < suppressTreeClick.current) {
-                            e.preventDefault();
-                            return;
-                          }
-                          select(
-                            { occurrence: o.id, definition: o.definition },
-                            e.shiftKey,
-                            true,
-                          );
-                          setRightVisible(true);
-                        }}
-                      >
-                        {o.kind === "assembly" ? (
-                          <FolderOpen size={15} />
-                        ) : o.kind === "planar" ? (
-                          <Layers size={15} />
-                        ) : (
-                          <Box size={15} />
-                        )}
-                        <span>{c.name}</span>
-                        {count > 1 && (
-                          <span className="instance-count">
-                            <Link2 size={10} />
-                            {count}
-                          </span>
-                        )}
-                      </button>
-                      {o.id === groupScope && (
-                        <div className="tree-edit-status">
-                          <em>Editing</em>
-                          <button
-                            disabled={
-                              !!featureEdit || !!operation || !!move || !!grouping || !!sketch
-                            }
-                            onClick={endGroupEditing}
-                          >
-                            Done
-                          </button>
-                        </div>
-                      )}
-                      
-                      <button
-                        className="tree-eye"
-                        title={
-                          o.visible ? "Hide in viewport" : "Show in viewport"
-                        }
-                        aria-label={(o.visible ? "Hide " : "Show ") + c.name}
-                        onClick={() =>
-                          run("instance.visibility", {
-                            id: o.source_id,
-                            visible: !o.visible,
-                          }).catch(() => {})
-                        }
-                      >
-                        {o.visible ? <Eye size={13} /> : <EyeOff size={13} />}
-                      </button>
-                    </div>
-                  </Fragment>
-                );
-              },
-            )}
-            {createRow}
-            {draggedComponent && (
-              <div className="tree-drop-help" role="status">
-                {treeDrop?.problem ||
-                  `Move into ${state?.occurrences.find((o) => o.id === treeDrop?.parent)?.name || "design root"}. Geometry stays in place.`}
-              </div>
-            )}
-          </div>
-          </>}
+ />}
           <details open className="tool-body-library sidebar-library" aria-label="3D Tool Bodies">
             <summary className="structure-section design-category">
               <ChevronRight className="library-chevron" size={12}/>
               <ToolBodyIcon size={15} />
               <span>3D Tool Bodies</span>
               <small>{toolBodies.length}</small>
+              <button
+                className="icon-button sidebar-header-add"
+                aria-label="New 3D tool body"
+                title="New tool body"
+                disabled={
+                  !state ||
+                  busy ||
+                  !!featureEdit || !!operation ||
+                  !!move ||
+                  !!sketch ||
+                  !!grouping ||
+                  !!historyView
+                }
+                onClick={(e) => { e.preventDefault(); void newToolBody(); }}
+              >
+                <Plus size={14} />
+              </button>
 
             </summary>
             {toolBodies.map((body) => (
@@ -2549,29 +2020,21 @@ export default function App() {
 
               </div>
             ))}
-              <button
-                className="create-part sidebar-add-row"
-                aria-label="New 3D tool body"
-                title="New tool body"
-                disabled={
-                  !state ||
-                  busy ||
-                  !!featureEdit || !!operation ||
-                  !!move ||
-                  !!sketch ||
-                  !!grouping ||
-                  !!historyView
-                }
-                onClick={() => void newToolBody()}
-              >
-                <Plus size={14} /><span>add tool</span>
-              </button>
+
           </details>
           <div className="sketch-tree" aria-label="Design sketches">
             <div className="structure-section">
               <SquareDashed size={15} />
               <span>2D Sketches</span>
               <small>{sketchFeatures.length}</small>
+              <button
+                className="icon-button sidebar-header-add"
+                aria-label="New sketch"
+                disabled={!state || busy || !!sketch}
+                onClick={() => chooseTool("sketch")}
+              >
+                <Plus size={14} />
+              </button>
               <button
                 className="icon-button"
                 aria-label={
@@ -2634,37 +2097,9 @@ export default function App() {
                 </button>
               </div>
             ))}
-              <button
-                className="create-part sidebar-add-row"
-                aria-label="New sketch"
-                disabled={!state || busy || !!sketch}
-                onClick={() => chooseTool("sketch")}
-              >
-                <Plus size={14} /><span>add sketch</span>
-              </button>
+
           </div>
-          <div className="design-utilities" aria-label="Design utilities">
-            <button
-              className="design-utility-link"
-              onClick={() => {
-                setDialog("parameters");
-              }}
-            >
-              <SlidersHorizontal size={15} />
-              <span>Parameters</span>
-              <small>
-                {params.filter((p) => state!.parameter_graph[p.id].root).length}
-              </small>
-            </button>
-            <button
-              className="design-utility-link"
-              onClick={() => setDialog("checkpoints")}
-            >
-              <History size={15} />
-              <span>Checkpoints</span>
-              <small>{state?.checkpoints.length || 0}</small>
-            </button>
-          </div>
+
         </aside>
       )}
 
@@ -2695,9 +2130,16 @@ export default function App() {
         <Viewport
           key={toolWorkbench || "design"}
           onWorldAxis={chooseWorldAxis}
+          onWorldOrigin={chooseWorldOrigin}
           onWorldPlane={plane=>select({worldPlane:plane,occurrence:"",definition:"root"})}
           selectedWorldPlane={selection?.worldPlane}
           editingGroup={groupScope}
+          editingContext={groupScope&&groupScope!==layoutScope&&!sketch?{
+            name:state?.occurrences.find(o=>o.id===groupScope)?.name||"",
+            label:editor==="Component Editor"?"EDITING COMPONENT":editor==="Part Editor"?"EDITING PART":"EDITING LAYOUT GROUP",
+            onDone:endGroupEditing,
+            disabled:!!featureEdit||!!operation||!!move||!!grouping,
+          }:undefined}
           resolveHover={(item) =>
             sectionPicking || measure!==null ? item : operation &&
             operationPathPickProblem(
@@ -2805,6 +2247,7 @@ export default function App() {
           section={sketch || sectionPicking ? false : section}
           sectionPlane={sectionPlane.current}
           activeAppearance={experiments[ACTIVE_APPEARANCE_ID]}
+          uiBackground={resolveDarkTheme(experiments[DARK_UI_PALETTE_ID])?.viewport}
           sectionReference={sectionSettings.reference}
           sectionOffset={sectionSettings.offset}
           historyKey={historyView?.history_key}
@@ -2845,7 +2288,7 @@ export default function App() {
                   : move
                     ? `${moveLabel.toUpperCase()} · UNAPPLIED PREVIEW`
                     : operation
-                      ? "TOOL SETUP · UNAPPLIED PREVIEW"
+                      ? "Part Editor - Tool Setup"
                       : (toolWorkbench ? "Component Editor · tool body" : editor)}
             </span>
             {(!sketch || sketchPlanePicking) && (
@@ -2860,21 +2303,7 @@ export default function App() {
                       : "Orthographic"}
               </div>
             )}
-            {groupScope && groupScope!==layoutScope && !sketch && (
-              <div className="group-edit-banner">
-                <FolderOpen size={14} />
-                <span>
-                  Editing{" "}
-                  {state?.occurrences.find((o) => o.id === groupScope)?.name}
-                </span>
-                <button
-                  disabled={!!featureEdit || !!operation || !!move || !!grouping}
-                  onClick={endGroupEditing}
-                >
-                  Done
-                </button>
-              </div>
-            )}
+
           </div>
           <div className="viewport-view-navigation">
             <ViewOrientation
@@ -3196,6 +2625,7 @@ export default function App() {
       {grouping !== null && state && (
         <GroupPanel
           ref={groupPanelRef}
+          groupKind={editor==='Layout Editor'?'layout':'part'}
           rows={groupCandidates(state.occurrences, groupScope).map((o) => ({
             ...o,
             name: state.document.components[o.definition]?.name || o.name,
@@ -3203,10 +2633,10 @@ export default function App() {
           selected={grouping}
           onSelected={setGrouping}
           onClose={() => setGrouping(null)}
-          onApply={async (mode, name, target) => {
+          onApply={async (mode, name, target, members) => {
             await run(mode === "new" ? "group.create" : "group.add", {
               name,
-              occurrences: grouping,
+              occurrences: members,
               ...(target ? { group: target } : {}),
             });
             setGrouping(null);
@@ -3242,7 +2672,7 @@ export default function App() {
                   <div>
                     <span className="eyebrow">
                       {component.kind === "assembly"
-                        ? (component.structure_role === "part" ? "PART" : component.structure_role === "layout" ? "DESIGN LAYOUT" : "PART GROUP")
+                        ? (component.structure_role === "part" ? "PART" : component.structure_role === "layout" ? "LAYOUT" : occurrence?.layout&&!occurrence.library ? "LAYOUT GROUP" : "PART GROUP")
                         : component.kind === "planar"
                           ? "PLANAR PART"
                           : component.purpose === "tool"
@@ -3262,7 +2692,7 @@ export default function App() {
                 <div className="component-status">
                   <span className="status-orb small" />
                   {component.kind === "assembly"
-                    ? (component.structure_role === "part" ? "Linked part definition" : "Part Group")
+                    ? (component.structure_role === "part" ? "Linked part definition" : occurrence?.layout&&!occurrence.library ? "Layout Group" : "Part Group")
                     : geometry?.status === "valid"
                       ? "Valid solid"
                       : geometry?.status === "planar"
@@ -3905,9 +3335,15 @@ export default function App() {
       </section>
 
       {toast && !error && (
-        <div className="toast">
+        <div className={`toast ${toastUndo?.message===toast?'toast-actionable':''}`} role="status">
           <Check size={14} />
-          {toast}
+          <span>{toast}</span>
+          {toastUndo?.message===toast&&<button className="toast-undo" disabled={busy||!!operation||!!move||!!featureEdit||!!sketch||grouping!==null||state?.document.id!==toastUndo.document||state?.document.revision!==toastUndo.revision||!state?.can_undo} title={state?.document.revision!==toastUndo.revision?"Newer edits were made; use history to undo them first.":"Undo this removal"} onClick={()=>{
+            const current=stateRef.current;
+            if(toastUndoPending.current||current?.document.id!==toastUndo.document||current.document.revision!==toastUndo.revision)return;
+            toastUndoPending.current=true;
+            void run("history.undo").catch(()=>{}).finally(()=>{toastUndoPending.current=false;});
+          }}><Undo2 size={13}/>Undo</button>}
         </div>
       )}
       {error && dialog && (
@@ -4066,59 +3502,7 @@ export default function App() {
           </footer>
         </Modal>
       )}
-      {dialog === "palette" && (
-        <Modal
-          title="Tools and actions"
-          eyebrow="COMMAND SEARCH · CTRL K"
-          onClose={() => setDialog(null)}
-        >
-          <div className="search-field palette-search">
-            <Search size={18} />
-            <input
-              value={toolSearch}
-              onChange={(e) => setToolSearch(e.target.value)}
-              placeholder="Search tools, components, parameters…"
-              autoFocus
-            />
-          </div>
-          <div className="palette-results">
-            {filteredTools.map((t) => (
-              <button key={t.id} onClick={() => chooseTool(t.id)}>
-                <t.icon size={19} />
-                <span>
-                  <strong>{t.label}</strong>
-                  <small>{t.category}</small>
-                </span>
-                <ArrowUpRight size={13} />
-              </button>
-            ))}
-            {state &&
-              Object.values(state.document.parameters)
-                .filter(
-                  (p) =>
-                    toolSearch &&
-                    p.name.toLowerCase().includes(toolSearch.toLowerCase()),
-                )
-                .slice(0, 8)
-                .map((p) => (
-                  <button
-                    key={p.id}
-                    onClick={() => {
-                      setEditParameter(p.id);
-                      setDialog(null);
-                    }}
-                  >
-                    <SlidersHorizontal size={18} />
-                    <span>
-                      <strong>{p.name}</strong>
-                      <small>Parameter</small>
-                    </span>
-                    <ArrowUpRight size={13} />
-                  </button>
-                ))}
-          </div>
-        </Modal>
-      )}
+      {dialog === "workspaces" && <WorkspaceManagerDialog workspace={workspace} canSwitch={!busy&&!operationActive.current&&!sketch&&!grouping} onClose={()=>setDialog(null)} onRefresh={async()=>{await refreshWorkspace();}}/>}
       {dialog === "workspace" && <WorkspaceDialog workspace={workspace} activeDesign={currentDesignId()}
         canSwitch={!busy && !operationActive.current && !sketch && !grouping}
         onClose={() => setDialog(null)} reload={async () => { await refreshWorkspace(); await refresh(true); }} onError={report} />}
@@ -4419,7 +3803,7 @@ export default function App() {
           const editingDisabled = treeEditingDisabled;
           const actions: ContextAction[] = [];
           if(state?.document.structure_version && occurrence?.layout && !occurrence.library && part && !state.occurrences.some(o=>o.structure_role==="part"&&(o.id===groupScope||groupScope.startsWith(o.id+"/")))){
-            const actions=layoutContextActions(occurrence,editingDisabled,run,()=>chooseTool("transform"),()=>confirmDelete(part.name,"Remove this item from the layout? The reusable definition is retained.",()=>void run("structure.remove",{instance:occurrence.source_id}).catch(()=>{})));
+            const actions=layoutContextActions(occurrence,editingDisabled,run,()=>chooseTool("transform"));
             return <ContextMenu x={contextMenu.x} y={contextMenu.y} title={part.name} actions={actions} onClose={()=>setContextMenu(null)}/>;
           }
 

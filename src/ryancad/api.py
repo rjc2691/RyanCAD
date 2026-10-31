@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 from contextvars import ContextVar
 import io
 import json
+import hmac
+import hashlib
 import os
 from pathlib import Path
 import secrets
@@ -28,16 +30,21 @@ from .reports import ReportStore, ReportInput
 
 class _RequestService:
     """Resolve existing endpoints to the service bound to this request."""
-    def __init__(self, fallback: CadService):
-        self.current: ContextVar[CadService] = ContextVar("ryancad_service", default=fallback)
+    def __init__(self):
+        self.current: ContextVar[CadService | None] = ContextVar("ryancad_service", default=None)
 
     def __getattr__(self, name):
-        return getattr(self.current.get(), name)
+        current = self.current.get()
+        if current is None:
+            raise CadError("workspace_required", "Open RyanCAD in a browser or connect with a workspace code and design ID.")
+        return getattr(current, name)
 
 
-def create_app(project: Path, token: str, port: int = 8790, demo: str | None = None, frontend: Path | None = None, testing=False, lan=False):
+def create_app(project: Path, token: str, port: int = 8790, frontend: Path | None = None, testing=False, lan=False):
     cookie_name = f"ryancad_session_{port}"
     workspace_cookie = f"ryancad_workspace_{port}"
+    owner_cookie = f"ryancad_browser_{port}"
+    admin_cookie = f"ryancad_workspace_admin_{port}"
     allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}"}
     allowed_origins = {f"http://127.0.0.1:{port}", f"http://localhost:{port}"}
     lan_urls = []
@@ -69,27 +76,19 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
     if testing:
         allowed_hosts.add("testserver")
         allowed_origins.add("http://testserver")
-    legacy_service = CadService(project)
-    workspaces = WorkspaceManager(project, legacy_service)
-    service = _RequestService(legacy_service)
-    reports = ReportStore(legacy_service.store.directory / "feedback")
+    workspaces = WorkspaceManager(project)
+    service = _RequestService()
+    reports = ReportStore(project / "feedback")
     frontend = frontend or Path(__file__).resolve().parents[2] / "frontend" / "dist"
     if not frontend.exists():
         frontend = Path(__file__).resolve().parent / "web"
 
     @asynccontextmanager
     async def lifespan(app):
-        if demo and legacy_service.document.revision == 0 and not legacy_service.document.features:
-            legacy_service.submit("command", Actor(id="reference-library", name="RyanCAD reference library", kind="system"),
-                           command=Command(name="recipe.load", args={"recipe": demo}, expected_revision=0))
-        else:
-            legacy_service.submit("rebuild")
         yield
         workspaces.close()
-        legacy_service.close()
 
     app = FastAPI(title="RyanCAD local engine", version=__version__, lifespan=lifespan, docs_url=None, redoc_url=None)
-    app.state.service = legacy_service
     app.state.workspaces = workspaces
     app.state.token = token
     app.state.lan_urls = lan_urls
@@ -102,8 +101,9 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
         origin = request.headers.get("origin")
         if origin and origin not in allowed_origins:
             return JSONResponse({"error": {"code": "invalid_origin", "message": "This page is not authorized to control the local CAD service."}}, status_code=403)
-        if int(request.headers.get("content-length", "0")) > 8_000_000:
-            return JSONResponse({"error": {"code": "request_limit", "message": "The request exceeds the 8 MB limit."}}, status_code=413)
+        request_limit = 90_000_000 if request.url.path == "/api/workspace/folder/import" else 8_000_000
+        if int(request.headers.get("content-length", "0")) > request_limit:
+            return JSONResponse({"error": {"code": "request_limit", "message": f"The request exceeds the {request_limit // 1_000_000} MB transfer limit."}}, status_code=413)
         if request.url.path.startswith("/api/") and request.url.path != "/api/health":
             bearer = request.headers.get("authorization", "").removeprefix("Bearer ")
             cookie = request.cookies.get(cookie_name, "")
@@ -198,9 +198,69 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
             raise CadError("missing_workspace", "Open RyanCAD in a browser or supply a valid workspace code.")
         return code
 
+    def browser_owner(request: Request):
+        owner = request.cookies.get(owner_cookie, "")
+        if not workspaces.valid_code(owner):
+            raise CadError("browser_required", "Refresh RyanCAD to initialize workspace management.")
+        return owner
+
+    def admin_signature(owner):
+        return hmac.new(token.encode(), owner.encode(), hashlib.sha256).hexdigest()
+
+    @app.get("/api/workspaces")
+    def list_browser_workspaces(request: Request):
+        owner = browser_owner(request)
+        admin = secrets.compare_digest(request.cookies.get(admin_cookie, ""), admin_signature(owner))
+        return {"admin": admin, "workspaces": workspaces.list_workspaces(owner, admin)}
+
+    @app.post("/api/workspaces/admin")
+    async def unlock_workspaces(request: Request):
+        owner = browser_owner(request)
+        payload = await request.json()
+        if not isinstance(payload.get("password"), str) or not secrets.compare_digest(payload["password"], "ryan"):
+            raise CadError("incorrect_password", "Incorrect admin password.")
+        response = JSONResponse({"ok": True})
+        response.set_cookie(admin_cookie, admin_signature(owner), max_age=3600, httponly=True, samesite="strict", path="/",
+                            secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
+        return response
+
+    @app.post("/api/workspaces/admin/lock")
+    def lock_workspaces():
+        response = JSONResponse({"ok": True})
+        response.delete_cookie(admin_cookie, path="/")
+        return response
+
+    @app.post("/api/workspace/rename")
+    async def rename_workspace(request: Request):
+        body = await request.json()
+        workspaces.rename_workspace(workspace_code_for(request), body.get("name"))
+        return {"ok": True}
+
     @app.get("/api/workspace")
     def workspace(request: Request):
         return workspaces.describe(workspace_code_for(request))
+
+    @app.get("/api/workspace/folder/export")
+    def export_workspace_folder(request: Request):
+        from .workspace_folders import export_folder
+        return export_folder(workspaces, workspace_code_for(request))
+
+    @app.post("/api/workspace/folder/import")
+    async def import_workspace_folder(request: Request):
+        from .workspace_folders import import_folder
+        from starlette.concurrency import run_in_threadpool
+        workspace_code_for(request)
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > 90_000_000:
+                raise CadError("workspace_limit", "Folder transfers support at most 64 MB of files.")
+        try:
+            payload = json.loads(body)
+        except ValueError as exc:
+            raise CadError("invalid_workspace_folder", "Choose a valid RyanCAD workspace folder.") from exc
+        result = await run_in_threadpool(import_folder, workspaces, payload)
+        return result
 
     @app.post("/api/workspace/designs")
     async def create_design(request: Request):
@@ -234,10 +294,6 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
         workspaces.restore(workspace_code_for(request), identifier)
         return {"ok": True}
 
-    @app.post("/api/workspace/copy-existing")
-    def copy_existing(request: Request):
-        return {"design_id": workspaces.copy_legacy(workspace_code_for(request))}
-
     @app.post("/api/workspace/import")
     async def import_design(request: Request):
         return {"design_id": workspaces.import_native(workspace_code_for(request), await request.body())}
@@ -248,15 +304,17 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
         code = str(body.get("code", "")).strip()
         if not workspaces.exists(code):
             raise CadError("missing_workspace", "This workspace could not be found. Check its recovery code.")
+        workspaces.claim(code, browser_owner(request))
         response = JSONResponse({"ok": True})
         response.set_cookie(workspace_cookie, code, max_age=60 * 60 * 24 * 365 * 5, httponly=True, samesite="strict", path="/",
                             secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
         return response
 
     @app.post("/api/workspace/new")
-    def new_workspace(request: Request):
-        code = secrets.token_urlsafe(32)
-        workspaces.ensure(code)
+    async def new_workspace(request: Request):
+        body = await request.body()
+        payload = json.loads(body) if body else {}
+        code = workspaces.create_workspace(browser_owner(request), payload.get("name", ""))
         response = JSONResponse({"ok": True})
         response.set_cookie(workspace_cookie, code, max_age=60 * 60 * 24 * 365 * 5, httponly=True, samesite="strict", path="/",
                             secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
@@ -501,13 +559,19 @@ def create_app(project: Path, token: str, port: int = 8790, demo: str | None = N
 
     @app.get("/")
     def index(request: Request):
+        owner = request.cookies.get(owner_cookie, "")
+        if not workspaces.valid_code(owner):
+            owner = secrets.token_urlsafe(32)
         code = request.cookies.get(workspace_cookie, "")
-        if not workspaces.valid_code(code):
+        if not workspaces.exists(code):
             code = secrets.token_urlsafe(32)
             workspaces.ensure(code)
+        workspaces.claim(code, owner)
         content = ((frontend / "index.html").read_text("utf-8") if (frontend / "index.html").exists()
                    else "<h1>RyanCAD engine is running</h1><p>Build the frontend, then refresh this page.</p>")
         response = HTMLResponse(content)
+        response.set_cookie(owner_cookie, owner, max_age=60 * 60 * 24 * 365 * 5, httponly=True, samesite="strict", path="/",
+                            secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
         response.set_cookie(cookie_name, token, httponly=True, samesite="strict", path="/",
                             secure=bool(secure_public_host and request.headers.get("host", "").lower() == secure_public_host))
         response.set_cookie(workspace_cookie, code, max_age=60 * 60 * 24 * 365 * 5, httponly=True, samesite="strict", path="/",

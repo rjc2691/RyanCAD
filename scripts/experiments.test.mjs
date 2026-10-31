@@ -45,3 +45,11 @@ test('edge animation owns its buffers, shares a clock and changes uniforms witho
  syncActiveEdgePulse(group,source,[],false,settings);assert.equal(pulse.visible,false);
  syncActiveEdgePulse(group,source,[],true,{...settings,enabled:false});assert.equal(pulse.visible,false);
 });
+
+
+test('dark palette validates saved choices independently of active appearance',()=>{
+ assert.deepEqual(normalizeExperiments(null)['dark-ui-palette'],{enabled:false,theme:'midnight'});
+ const settings=normalizeExperiments({version:1,'dark-ui-palette':{enabled:true,theme:'forest'}});
+ assert.equal(settings['dark-ui-palette'].theme,'forest');assert(!settings['active-component-appearance'].enabled);
+ assert.deepEqual(normalizeExperiments({version:1,'dark-ui-palette':{enabled:'yes',theme:'invalid'}})['dark-ui-palette'],{enabled:false,theme:'midnight'});
+});

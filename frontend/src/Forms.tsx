@@ -40,7 +40,7 @@ export function Modal({
       >
         <header>
           <div>
-            <span className="eyebrow">{eyebrow || "DESIGN TOOLS"}</span>
+            {eyebrow !== "" && <span className="eyebrow">{eyebrow || "DESIGN TOOLS"}</span>}
             <h2>{title}</h2>
           </div>
           <button
@@ -442,7 +442,7 @@ export function ToolDialog({
                 onClick={() => setOperation(mode)}
               >
                 {mode === "new"
-                  ? "New component"
+                  ? "Create New Part"
                   : mode === "add"
                     ? "Add to part"
                     : "Cut from part"}

@@ -1,4 +1,4 @@
-// Run only against an isolated --demo mold project; this test makes durable edits.
+// Run only against an isolated workspace populated with the mold reference recipe; this test makes durable edits.
 import { createRequire } from 'node:module';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';

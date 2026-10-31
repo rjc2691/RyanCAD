@@ -12,7 +12,10 @@ Changes take effect immediately in button tooltips, key badges and accessible sh
 | Group components | G |
 | Sketch | E |
 | Move Component | M |
-| Repeat part | Shift+D |
+| Repeat part (Part/Component Editors) | Shift+D |
+| Copy selected layout parts | Ctrl/Command+C |
+| Paste linked layout parts | Ctrl/Command+V |
+| Remove selected items from Layout | Delete or Backspace |
 | Array parts | Shift+A |
 | Measure | I |
 | Checkpoint | Shift+S |
@@ -27,7 +30,7 @@ Drag a modeling toolbar button onto another button to place it before that butto
 
 ## Adaptive sidebar layout
 
-The toolbar-between-sidebars layout is permanent. On desktop, sidebars reach the header while the toolbar fits in the center column. Actual button widths determine fit, including custom shortcut labels and sketch tools. When that row needs more room, the toolbar uses the full window width and sidebars begin below it. If the full row is still too narrow, buttons scroll horizontally. It returns between the sidebars when room is available, with a small dead band to avoid resize flicker. Hidden sidebars and operation panels participate in sizing. Mobile keeps its existing full-width toolbar and panel layout.
+The toolbar always spans the full window width, with sidebars starting below it. Its buttons sit inside the sidebar margins whenever space permits. Actual button widths determine fit, including custom shortcut labels and sketch tools. As space narrows, the buttons gradually use only the margin space they need, instead of snapping to both outer window edges. The left and right insets shrink proportionally; the full row is used only when necessary. If even that is too narrow, buttons scroll horizontally. Hidden sidebars and operation panels participate in sizing. Mobile keeps its full-width toolbar and panel layout.
 
 The old `sidebar-toolbar-layout` experiment and both of its controls have been removed; stored values are ignored. Active component appearance preferences are preserved.
 

@@ -110,9 +110,9 @@ def test_movement_native_preview_projection_commit_undo_and_no_geometry_feature(
     second = wait(client, client.post("/api/commands", json={"name":"component.duplicate", "expected_revision":1,
         "args":{"id":first["component_id"],"placement":{"x":40,"y":20,"z":10}}}))["result"]
     before = client.get("/api/state").json()
-    a, b = first["instance_id"], second["instance_id"]
+    a, b = [next(o["id"] for o in before["occurrences"] if o["source_id"]==item["instance_id"] and not o["library"]) for item in (first,second)]
     candidate = wait(client, client.post("/api/previews", json={"name":"instance.move", "expected_revision":2, "args":{
-        "id":a, "occurrence":a, "method":"projected", "origin":{"occurrence":a,"point":[0,0,0]},
+        "id":first["instance_id"], "occurrence":a, "method":"projected", "origin":{"occurrence":a,"point":[0,0,0]},
         "target":{"occurrence":b,"point":[0,0,0]},"direction":{"occurrence":b,"start":[0,0,0],"end":[2,0,0]}}}))["result"]
     assert candidate["changes"]["movement"]["displacement"] == pytest.approx([40,0,0])
     assert candidate["changes"]["movement"]["remaining_gap"] == pytest.approx(500**.5)
@@ -131,24 +131,25 @@ def test_movement_native_preview_projection_commit_undo_and_no_geometry_feature(
 def test_unified_reference_and_live_axis_rotation_survive_native_regeneration(client):
     first=wait(client,client.post("/api/commands",json={"name":"operation.create","expected_revision":0,"args":{"profile":"rectangle","values":{"width":12,"height":10,"distance":8}}}))["result"]
     second=wait(client,client.post("/api/commands",json={"name":"component.duplicate","expected_revision":1,"args":{"id":first["component_id"],"placement":{"x":40,"y":20,"z":10}}}))["result"]
-    a,b=first["instance_id"],second["instance_id"]
-    candidate=wait(client,client.post("/api/previews",json={"name":"instance.move","expected_revision":2,"args":{"id":a,"occurrence":a,"method":"reference","target":{"occurrence":b,"point":[0,0,0]},"direction":{"occurrence":b,"start":[0,0,0],"end":[1,0,0]},"values":{"distance":6}}}))["result"]
+    rows=client.get("/api/state").json()["occurrences"]
+    a,b=[next(o["id"] for o in rows if o["source_id"]==item["instance_id"] and not o["library"]) for item in (first,second)]
+    candidate=wait(client,client.post("/api/previews",json={"name":"instance.move","expected_revision":2,"args":{"id":first["instance_id"],"occurrence":a,"method":"reference","target":{"occurrence":b,"point":[0,0,0]},"direction":{"occurrence":b,"start":[0,0,0],"end":[1,0,0]},"values":{"distance":6}}}))["result"]
     assert candidate["changes"]["movement"]["displacement"] == pytest.approx([6,0,0])
     assert client.get("/api/state").json()["document"]["revision"] == 2
     wait(client,client.post(f"/api/previews/{candidate['preview_token']}/commit"))
-    rotated=wait(client,client.post("/api/previews",json={"name":"instance.move","expected_revision":3,"args":{"id":a,"occurrence":a,"method":"rotate","direction":{"occurrence":b,"start":[0,0,0],"end":[0,0,1]},"values":{"angle":"90 deg"}}}))["result"]
+    rotated=wait(client,client.post("/api/previews",json={"name":"instance.move","expected_revision":3,"args":{"id":first["instance_id"],"occurrence":a,"method":"rotate","direction":{"occurrence":b,"start":[0,0,0],"end":[0,0,1]},"values":{"angle":"90 deg"}}}))["result"]
     assert next(o for o in rotated["occurrences"] if o["id"]==a)["matrix"][0][3] == pytest.approx(60)
     assert next(o for o in rotated["occurrences"] if o["id"]==a)["matrix"][1][3] == pytest.approx(-14)
     wait(client,client.post(f"/api/previews/{rotated['preview_token']}/commit"))
     state=client.get("/api/state").json()
-    angle=state["document"]["instances"][a]["placement"]["rotation_angle"]
+    angle=state["document"]["instances"][first["instance_id"]]["placement"]["rotation_angle"]
     wait(client,client.post("/api/commands",json={"name":"parameter.set","expected_revision":4,"args":{"id":angle,"value":"180 deg"}}))
     final=client.get("/api/state").json()
     assert next(o for o in final["occurrences"] if o["id"]==a)["matrix"][0][3] == pytest.approx(74)
     assert next(o for o in final["occurrences"] if o["id"]==a)["matrix"][1][3] == pytest.approx(40)
     assert len(final["document"]["features"])==1
     assert client.get("/api/native").status_code==200
-    global_preview=wait(client,client.post("/api/previews",json={"name":"instance.move","expected_revision":5,"args":{"id":a,"occurrence":a,"method":"reference","direction":{"axis":"Y"},"values":{"distance":3}}}))["result"]
+    global_preview=wait(client,client.post("/api/previews",json={"name":"instance.move","expected_revision":5,"args":{"id":first["instance_id"],"occurrence":a,"method":"reference","direction":{"axis":"Y"},"values":{"distance":3}}}))["result"]
     assert global_preview["changes"]["movement"]["displacement"]==pytest.approx([0,3,0])
     assert client.get("/api/state").json()["document"]["revision"]==5
 
@@ -157,12 +158,12 @@ def test_disconnected_unified_preview_has_explicit_component_ownership(client):
     first=wait(client,client.post("/api/commands",json={"name":"operation.create","expected_revision":0,"args":{"profile":"rectangle","values":{"width":20,"height":10,"distance":5}}}))["result"]
     candidate=wait(client,client.post("/api/previews",json={"name":"operation.create","expected_revision":1,"args":{"target":first["component_id"],"target_occurrence":first["instance_id"],"profile":"rectangle","result":"add","values":{"origin_x":100,"width":10,"height":10,"distance":5}}}))["result"]
     assert candidate["changes"]["ownership_change"]["reason"]=="disconnected_addition"
-    assert len(candidate["occurrences"])==2
-    assert len(client.get("/api/state").json()["document"]["components"])==2
+    assert len([o for o in candidate["occurrences"] if o["kind"]!="assembly" and not o.get("library")])==2
+    assert len([c for c in client.get("/api/state").json()["document"]["components"].values() if c["kind"]!="assembly"])==1
     saved=wait(client,client.post(f"/api/previews/{candidate['preview_token']}/commit"))
     assert saved["status"]=="complete"
     state=client.get("/api/state").json()
-    assert len(state["occurrences"])==2
+    assert len([o for o in state["occurrences"] if o["kind"]!="assembly" and not o.get("library")])==2
     assert state["geometry"][first["component_id"]]["volume"]==pytest.approx(1000)
 
 
@@ -198,7 +199,7 @@ def test_auto_disconnected_add_becomes_component_but_auto_split_cut_does_not(cli
     split=wait(client,client.post("/api/previews",json={"name":"operation.create","expected_revision":1,"args":{"target":first["component_id"],"profile":"rectangle","result":"auto","values":{"width":4,"height":30,"distance":6}}}))
     assert split["status"]=="failed" and split["error"]["code"]=="separate_components_required"
     assert split["error"]["details"]["auto_decision"]["mode"]=="cut"
-    assert len(client.get("/api/state").json()["occurrences"])==1
+    assert len([o for o in client.get("/api/state").json()["occurrences"] if o["kind"]!="assembly" and not o.get("library")])==1
 
 
 def test_two_local_projects_do_not_overwrite_each_others_browser_cookie(tmp_path):
@@ -248,3 +249,13 @@ def test_sketch_preview_edit_keeps_existing_revision_and_resolves_parameter(clie
     assert math.dist(solved['start'],solved['end'])==pytest.approx(14)
     assert report['constraint_values']==[14]
     assert client.get('/api/state').json()['document']==before
+
+
+def test_no_effect_corner_preview_retains_profile_details_without_committing(client):
+    first=wait(client,client.post("/api/commands",json={"name":"operation.create","expected_revision":0,"args":{"profile":"rectangle","values":{"width":20,"height":20,"distance":10}}}))["result"]
+    before=client.get("/api/state").json();edge=next(e for e in before["geometry"][first["component_id"]]["edges"] if abs(e["tangent"][2])>.99)
+    failed=wait(client,client.post("/api/previews",json={"name":"operation.create","expected_revision":1,"args":{"target":first["component_id"],"target_occurrence":first["instance_id"],"profile":"fillet","result":"add","path_reference":{"component":first["component_id"],"occurrence":first["instance_id"],"edge":edge["signature"]},"values":{"amount":2}}}))
+    assert failed["status"] == "failed" and failed["error"]["code"] == "no_geometry_change"
+    assert "Change Tool Effect to Remove Material" in failed["error"]["message"]
+    assert failed["error"]["details"]["operation_display"]["tool_profile"]["loops"]
+    assert client.get("/api/state").json()["document"]["revision"] == 1

@@ -8,7 +8,7 @@ test('every toolbar shortcut is unique and matches its intended modifiers',()=>{
  assert.equal(toolbarShortcut(event(s.code,{shiftKey:!!s.shift,ctrlKey:!!s.command}),shortcutScope(id)==='sketch'?'sketch':'model'),id);
  assert.equal(shortcutAttributes(id)['data-toolbar-action'],id);
  }
- assert.equal(toolbarShortcut(event('KeyK',{metaKey:true})),'search');
+ assert.equal(toolbarShortcut(event('KeyK',{metaKey:true})),null);
 });
 test('shortcuts do not hijack browser combinations, input composition or held keys',()=>{
  for(const extra of [{ctrlKey:true},{metaKey:true},{altKey:true},{isComposing:true},{repeat:true}])assert.equal(toolbarShortcut(event('KeyT',extra)),null);

@@ -12,9 +12,9 @@ The [simple design intent policy](SIMPLE_DESIGN_INTENT.md) supersedes the earlie
 
 `WorkspaceManager` maps each persistent browser workspace code to a list of separate project directories. A request is bound to one service for its full lifetime, including commands, previews, jobs, geometry and exports. The UI pins each browser tab using `X-RyanCAD-Design`; navigational downloads use the `design_id` query parameter. A tab can therefore keep editing its design while another tab changes the workspace's default. The server validates design membership and preserves each project's journal and worker. Deleted entries remain recoverable and are not routed until restored. At least one design remains active. Projects with queued/running/waiting jobs cannot be deleted.
 
-`GET /api/workspace` returns the workspace code, default design and design list. `POST /api/workspace/designs` creates a design; `/designs/{id}/select`, `/rename`, `/delete` and `/restore` manage it. `/api/workspace/import` imports native data as a new project; `/copy-existing` copies the legacy project and journal without altering it. `/api/workspace/recover` switches the browser using a code; `/new` creates another workspace. Browser profiles keep a persistent cookie, while tabs remember their chosen design in session storage. The workspace code is a recovery identifier, not an account or authorization system.
+`GET /api/workspace` returns the workspace code, default design and design list. `POST /api/workspace/designs` creates a design; `/designs/{id}/select`, `/rename`, `/delete` and `/restore` manage it. `/api/workspace/import` imports native data as a new project. `/api/workspace/recover` switches the browser using a code; `/new` creates another workspace. Browser profiles keep a persistent cookie, while tabs remember their chosen design in session storage. The workspace code is a recovery identifier, not an account or authorization system.
 
-MCP clients can pass `--workspace CODE --design ID`; both values are available in the app's External agents panel. The adapter pins its HTTP requests, job polling and agent identity to that service. With `--workspace` alone it pins the current default at connection time; omitting both retains compatibility with the original standalone project. The local bearer connection file remains necessary for agent registration.
+MCP clients must pass `--workspace CODE` and can pin `--design ID`; both values are available in the app's External agents panel. The adapter pins its HTTP requests, job polling and agent identity to that service. With `--workspace` alone it pins the current default at connection time. No standalone fallback is opened. The local bearer connection file remains necessary for agent registration.
 
 Code boundaries:
 
@@ -28,7 +28,7 @@ Code boundaries:
 | `geometry.py`, `meshcheck.py` | OCCT construction, stable-selection guards, tessellation, measurement, validation and STL writing. |
 | `worker.py` | Supervised spawned process, cancellation/generation protection and restart. |
 | `storage.py`, `projects.py` | Durable revisions, readable snapshots, safe archive restore and single-writer protection. |
-| `workspaces.py` | Persistent browser workspaces, project routing, recoverable deletion and legacy-project copies. |
+| `workspaces.py` | Persistent browser workspaces, project routing, recoverable deletion and explicit native imports. |
 | `service.py` | Transactions, previews, revisions, authorship, jobs, agent permissions and quantities. |
 | `api.py` | Local HTTP adapter and bundled client delivery. |
 | `mcp_server.py` | Official MCP stdio adapter to the running service. |
@@ -256,3 +256,10 @@ This local stdio setup assumes Codex runs on the RyanCAD server computer. A brow
 ## Shared feedback API
 
 `GET/POST /api/reports`, `GET/PUT/DELETE /api/reports/{id}`, and `GET /api/reports/{id}/images/{imageId}` manage server-wide bug reports and feature requests. These routes use normal host/authentication checks but ignore workspace/design selection. Updates/deletes use per-report optimistic versions; no CAD revisions are changed. See [Bug reports](BUG_REPORTS.md) for request fields, screenshots and storage details.
+
+
+## Workspace names, browser ownership and admin listing
+
+`GET /api/workspace` includes `name`. `GET /api/workspaces` lists workspaces associated with the persistent browser-owner cookie. Opening/recovering a workspace associates it with that browser; the owner cookie survives refresh and server restart. `POST /api/workspace/rename {name}` renames the active workspace; `POST /api/workspace/new {name?}` creates a workspace with one blank design and a default Layout 1. `POST /api/workspaces/admin {password: "ryan"}` unlocks the server-wide listing via a separate short-lived, browser-bound cookie. `/api/workspaces/admin/lock` closes that view. Workspace folder snapshots preserve the name, but omit owner associations and admin state.
+
+Groups retain `structure_role: group` and declare `group_kind: layout | part`. `layoutgroup.create` accepts a layout/layout-group parent; `partgroup.create` accepts a part/part-group parent. The Group operation infers the kind from its parent scope. Layout groups contain part placements and layout groups; part groups contain components, nested parts and part groups. Cross-scope reparenting is rejected. `part.component.create` also accepts a part-group ID.

@@ -1,4 +1,4 @@
-// Run on a separate --demo plate project. Visibility, units and undo are durable test edits.
+// Run on a separate workspace populated with the plate reference recipe. Visibility, units and undo are durable test edits.
 import {createRequire} from 'node:module';
 import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';

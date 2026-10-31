@@ -25,6 +25,7 @@ export interface Feature {
   modified_by: string;
 }
 export interface Component {
+  group_kind?: "layout" | "part" | null;
   description: string;
   structure_role?: "component" | "part" | "group" | "layout";
   read_only?: boolean;

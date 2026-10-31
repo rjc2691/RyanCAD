@@ -98,7 +98,7 @@ def create_operation(document, actor, args):
     if spec.profile in {"fillet","chamfer"} and (not spec.target or not spec.path_reference or not spec.path_reference.edge):
         raise CadError("missing_path", "Pick the edge to finish. You can keep this operation open while selecting it.")
     if spec.motion == "sweep" and (not spec.path_reference or not spec.path_reference.edge):
-        raise CadError("missing_path", "Pick a design edge for the sweep path.")
+        raise CadError("missing_path", "Pick an edge or path to follow.")
     if spec.direction=="edge" and spec.motion not in {"none","mirror"} and not spec.path_reference:
         raise CadError("missing_path","Pick an edge to define the direction or axis.")
     if spec.profile in {"face","body"} and not spec.profile_reference:
@@ -341,13 +341,13 @@ def execute(feature, q, shape, context):
                 mode="cut" if has_removed else "add"
                 context["decision"]={"mode":mode,"overlap_fraction":1. if has_removed else 0.}
             if mode=="cut":
-                if not has_removed:raise CadError("no_geometry_change","This corner profile adds material. Choose Add material for this path.")
+                if not has_removed:raise CadError("no_geometry_change","This operation will have no effect on the component. Change Tool Effect to Add Material or select a different Tool Profile.",operation_display=context.get("display"),feature_values=q)
                 result=shape.cut(removed)
             elif mode=="add":
-                if not has_added:raise CadError("no_geometry_change","This corner profile removes material. Choose Remove material for this path.")
+                if not has_added:raise CadError("no_geometry_change","This operation will have no effect on the component. Change Tool Effect to Remove Material or select a different Tool Profile.",operation_display=context.get("display"),feature_values=q)
                 result=shape.fuse(added)
             elif mode=="intersect":
-                if not has_removed:raise CadError("no_geometry_change","This profile has no material inside the active component to intersect.")
+                if not has_removed:raise CadError("no_geometry_change","This operation will have no effect on the component. Change Tool Effect to Add Material or select a different Tool Profile.",operation_display=context.get("display"),feature_values=q)
                 result=intersection(shape,removed)
         return result
     axis_world={"X":(1,0,0),"Y":(0,1,0),"Z":(0,0,1)}

@@ -10,6 +10,7 @@ import {
   forwardRef,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useImperativeHandle,
   useRef,
   useState,
@@ -22,7 +23,7 @@ import {
   Plus,
   RotateCcw,
   X,
-  Zap,
+  LockKeyhole,
 } from "lucide-react";
 import { ParameterInput } from "../Forms";
 import type { Selection, State } from "../types";
@@ -34,6 +35,8 @@ import {
   operationPathLength,
   pathMeasure,
   operationProblem,
+  withToolEffect,
+  withOperationTarget,
   reference,
   inferOperationSelection,
   inferFacePath,
@@ -107,6 +110,16 @@ export default forwardRef<
       ? null
       : operationCommand(draft);
   const preview = useOperationPreview(args, state.document.revision, onPreview);
+  const finishDisplayKey=isFinish(draft)?JSON.stringify([state.document.revision,operationCommand({...draft,result:"cut",name:""})]):"";
+  const finishDisplayCache=useRef<{key:string;report:any}|null>(null);
+  const guideReport=useMemo(()=>{
+    if(!finishDisplayKey){finishDisplayCache.current=null;return preview.ready?preview.report:null;}
+    const current=preview.ready?preview.report:preview.displayReport;
+    if(current?.operation_display)finishDisplayCache.current={key:finishDisplayKey,report:current};
+    if(preview.ready)return preview.report;
+    const cached=finishDisplayCache.current;
+    return cached?.key===finishDisplayKey?{operation_display:cached.report.operation_display,feature_values:cached.report.feature_values,display_only:true}:null;
+  },[finishDisplayKey,preview.ready,preview.report,preview.displayReport]);
   const ready =
     preview.ready && renderedToken === preview.report?.preview_token;
   const draftSignature = args
@@ -115,8 +128,8 @@ export default forwardRef<
   const notify = useRef(onChange);
   notify.current = onChange;
   useLayoutEffect(() => {
-    notify.current(draft, pick, preview.ready ? preview.report : null);
-  }, [draft, pick, preview.ready, preview.report]);
+    notify.current(draft, pick, guideReport);
+  }, [draft, pick, guideReport]);
   const scrollSection = (id: string) =>
     requestAnimationFrame(() => {
       const body = amountRef.current,
@@ -244,6 +257,7 @@ export default forwardRef<
     },
     cancel: onClose,
     chooseOrigin() {
+      if(pick==="target"){setNotice("World origin is a point. Pick the body to modify.");return;}
       if (isFinish(draft) && pick !== "travelTarget") {
         setNotice(
           "This profile starts on the selected path. Use a travel target to limit its travel.",
@@ -332,6 +346,11 @@ export default forwardRef<
         return;
       }
       const slot = pick;
+      if(slot==="target"){
+        const next=withOperationTarget(draft,selection,state);
+        if(!next.target){setNotice("Pick an editable body or a face on it. For a part with multiple bodies, pick the body to modify.");return;}
+        setDraft(next);setPick(null);setNotice("");return;
+      }
       setSelectionNotice(null);
       const item = reference(selection, state);
       if (slot === "place" || slot === "sketch") {
@@ -454,7 +473,8 @@ export default forwardRef<
     <button
       type="button"
       className={"operation-pick-slot " + (pick === slot ? "picking" : "")}
-      onClick={() => beginPick(slot)}
+      aria-disabled={slot==="target"&&!!draft.target}
+      onClick={() => {if(slot!=="target"||!draft.target)beginPick(slot);}}
       onMouseEnter={() => value && onHoverReference(value.selection)}
       onMouseLeave={() => onHoverReference(null)}
       onFocus={() => value && onHoverReference(value.selection)}
@@ -471,7 +491,7 @@ export default forwardRef<
             : "Click here, then pick in the viewport"}
         </small>
       </span>
-      <MousePointer2 size={13} />
+      {slot==="target"&&draft.target?<LockKeyhole size={13}/>:<MousePointer2 size={13} />}
     </button>
   );
   const groupSummary = (role: "path" | "profile") => {
@@ -649,13 +669,15 @@ export default forwardRef<
             <select
               aria-label="Tool Effect Type"
               value={draft.result}
-              onChange={(e) =>
-                patch({ result: e.target.value as OperationDraft["result"] })
-              }
+              onChange={(e) => {
+                const next=withToolEffect(draft,e.target.value as OperationDraft["result"],state);
+                setDraft(next);setNotice("");setSelectionNotice(null);
+                setPick(next.result!=="new"&&!next.target?"target":null);
+              }}
             >
               {[
                   ["auto", "Auto · detect add / remove"],
-                  ["new", "New component"],
+                  ["new", "Create New Part"],
                   ["add", "Add material"],
                   ["cut", "Remove material"],
                   ["intersect", "Keep intersection"],
@@ -663,13 +685,17 @@ export default forwardRef<
                   <option
                     key={id}
                     value={id}
-                    disabled={(id !== "new" && !draft.target) || (isFinish(draft) && id === "new")}
+                    disabled={isFinish(draft) && id === "new"}
                   >
                     {label}
                   </option>
                 ))}
             </select>
           </label>
+          {draft.result!=="new"&&<div className="operation-reference-control operation-effect-target" data-reference-role="effect">
+            {slotButton("target","Body to modify",draft.target?reference(draft.target,state):null)}
+            {!draft.target&&<p className="operation-reference-status">Pick a body in the viewport to apply this effect.</p>}
+          </div>}
           {draft.target &&
             state.occurrences.filter(
               (o) => o.definition === draft.target!.definition,
@@ -692,7 +718,7 @@ export default forwardRef<
             >
               {preview.ready
                 ? preview.report?.changes?.ownership_change
-                  ? "Auto · New component · separate material"
+                  ? "Auto · New part · separate material"
                   : `Auto · ${preview.report?.operation_decision?.mode === "cut" ? "Remove" : "Add"} material · ${Math.round((preview.report?.operation_decision?.overlap_fraction || 0) * 100)}% of tool inside target`
                 : "Auto · detecting material overlap…"}
             </div>
@@ -701,7 +727,7 @@ export default forwardRef<
             preview.report?.changes?.ownership_change &&
             draft.result !== "auto" && (
               <p className="operation-help">
-                Separate material creates a new component.
+                Separate material creates a new part.
               </p>
             )}
         </section>
@@ -891,7 +917,7 @@ export default forwardRef<
                 referenceMembers(draft, "profile")[0],
               )}
             {isFinish(draft) && (
-              <GeneratedProfileReference embedded shape={draft.profile} profile={preview.report?.operation_display?.tool_profile || preview.report?.operation_display?.finish_section} updating={preview.pending} />
+              <GeneratedProfileReference embedded shape={draft.profile} profile={guideReport?.operation_display?.tool_profile || guideReport?.operation_display?.finish_section} updating={preview.pending} />
             )}
             {!["face", "sketch", "body", "fillet", "chamfer"].includes(
               draft.profile,
@@ -1035,8 +1061,8 @@ export default forwardRef<
                 value={draft.motion}
                 onChange={(e) => patch({ motion: e.target.value as any })}
               >
+                <option value="sweep">Follow along path</option>
                 <option value="linear" disabled={isFinish(draft)}>Straight travel / extrusion</option>
-                <option value="sweep">Follow a design edge / sweep</option>
                 <option value="revolve" disabled={isFinish(draft)}>Rotate about an axis</option>
                 <option value="helix" disabled={isFinish(draft)}>Rotate and travel / helix</option>
                 <option value="none" disabled={isFinish(draft)}>No motion / placed Boolean</option>
@@ -1068,7 +1094,7 @@ export default forwardRef<
                         }
                       >
                         <option value="normal" disabled={isFinish(draft)}>Profile normal</option>
-                        <option value="edge">Picked edge direction</option>
+                        <option value="edge">Selected edge or path</option>
                         <option value="X" disabled={isFinish(draft)}>World X</option>
                         <option value="Y" disabled={isFinish(draft)}>World Y</option>
                         <option value="Z" disabled={isFinish(draft)}>World Z</option>
@@ -1301,7 +1327,7 @@ export default forwardRef<
                   {quantity("spacing", "Copy spacing")}
                   <p className="operation-help">
                     Copies must form one connected part. Repeat part in the
-                    toolbar creates separate linked components.
+                    clipboard creates separate linked part placements.
                   </p>
                 </>
               )}
@@ -1421,7 +1447,9 @@ export default forwardRef<
           <div className="operation-pick-prompt">
             <MousePointer2 size={15} />
             <span>
-              {pick === "place"
+              {pick === "target"
+                ? "Pick the body to modify in the viewport"
+                : pick === "place"
                 ? "Place on the face · exact 1 mm U/V snap"
                 : pick === "sketch"
                   ? "Draw exact points on the profile plane"

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from "react";
+import {createPortal} from 'react-dom';
 import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
 import { Upload, Download, ChevronDown } from "lucide-react";
 import { Modal } from "./Forms";
+import WorkspaceFolderDialog from './WorkspaceFolderDialog';
 import {
   ApiError,
   currentDesignId,
@@ -31,6 +33,7 @@ export default function FileActions({
   onReferences: () => void;
 }) {
   const [menu, setMenu] = useState<"import" | "export" | null>(null);
+  const [folderMode,setFolderMode]=useState<'import'|'export'|null>(null);
   const [svgExport, setSvgExport] = useState(false),
     [chosen, setChosen] = useState<string[]>([]),
     [working, setWorking] = useState(false);
@@ -105,6 +108,7 @@ export default function FileActions({
             <button role="menuitem" onClick={() => pick("svg")}>
               SVG file <small>2D sketch geometry</small>
             </button>
+            <button role="menuitem" onClick={()=>{setMenu(null);setFolderMode('import');}}>RyanCAD Workspace folder <small>All designs, history and saved exports</small></button>
             <button
               role="menuitem"
               className="reference-designs-import"
@@ -167,9 +171,11 @@ export default function FileActions({
             >
               SVG file <small>2D sketch geometry</small>
             </button>
+            <button role="menuitem" onClick={()=>{setMenu(null);setFolderMode('export');}}>RyanCAD Workspace folder <small>All designs, history and saved exports</small></button>
           </div>
         )}
       </div>
+      {folderMode&&createPortal(<WorkspaceFolderDialog mode={folderMode} onClose={()=>setFolderMode(null)} onBusy={transfer}/>,document.body)}
       <input
         hidden
         ref={fileRef}

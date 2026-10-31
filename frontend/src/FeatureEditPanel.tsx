@@ -63,7 +63,7 @@ export default forwardRef<FeatureEditHandle, {
   const sections = feature.type === "operation" ? ["Tool Profile", "Tool Path", "Tool Origin"] : [...new Set(Object.keys(values).filter(featureFieldVisible).map(field => featureFieldSection(feature, field)))];
   sections.sort((a, b) => FEATURE_EDIT_SECTION_ORDER.indexOf(a) - FEATURE_EDIT_SECTION_ORDER.indexOf(b));
   const finish = ["fillet", "chamfer"].includes(feature.options.profile);
-  const display = preview.report?.operation_display || state.operation_displays?.[feature.id];
+  const display = preview.displayReport?.operation_display || preview.report?.operation_display || state.operation_displays?.[feature.id];
   const generatedProfile = display?.tool_profile || display?.finish_section;
   const effectKey = feature.type === "operation" ? "result" : "operation";
   const effect = options[effectKey] ?? (finish && !feature.options.corner_effect_version ? generatedProfile?.effect === "added" ? "add" : "cut" : feature.options[effectKey]);
@@ -76,7 +76,7 @@ export default forwardRef<FeatureEditHandle, {
       <p className="feature-edit-context">{state.document.components[feature.owner]?.name} · Feature {state.document.feature_order.indexOf(feature.id) + 1} of {state.document.feature_order.length}</p>
       <p className="feature-edit-help">Changes rebuild this feature and all later features. Original profile and references are retained.</p>
       {showEffect && <section className="operation-section" data-tool-section="effect"><h3>Tool Effect</h3><label className="field"><select aria-label="Tool Effect Type" value={effect || "add"} onChange={e => setOptions(o => ({...o, [effectKey]: e.target.value}))}>
-        {first && !finish && <option value="new">New component</option>}{feature.type === "operation" && <option value="auto">Auto · detect add / remove</option>}<option value="add">Add material</option><option value="cut">Remove material</option><option value="intersect">Keep intersection</option>
+        {first && !finish && <option value="new">Create New Part</option>}{feature.type === "operation" && <option value="auto">Auto · detect add / remove</option>}<option value="add">Add material</option><option value="cut">Remove material</option><option value="intersect">Keep intersection</option>
       </select></label></section>}
       {sections.map(section => <section className="operation-section" key={section} data-tool-section={section.replace("Tool ", "").toLowerCase()}><h3>{section}</h3>
         {section === "Tool Profile" && <><label className="field"><span>Tool Profile Shape</span><select aria-label="Tool Profile Shape" disabled value={feature.options.profile}><option value={feature.options.profile}>{PROFILE_SHAPE_LABELS[feature.options.profile] || feature.options.profile}</option></select></label>{finish ? <GeneratedProfileReference shape={feature.options.profile} profile={generatedProfile} updating={preview.pending} /> : <SavedReferences role="profile" title="Tool Profile" references={featureSavedReferences(feature, state, "profile")} />}</>}

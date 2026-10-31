@@ -95,10 +95,10 @@ def test_invalid_variations_rejected(case):
         edit(d, "variation.create", part=part.id, name="Bad", overrides=overrides)
 
 
-def test_part_groups_reject_bodies_and_cycles_rejected():
+def test_layout_groups_reject_bodies_and_cycles_rejected():
     d, part, body, *_ = sample()
-    group = edit(d, "partgroup.create")
-    with pytest.raises(CadError, match="only parts"):
+    group = edit(d, "layoutgroup.create")
+    with pytest.raises(CadError, match="Layout groups contain parts"):
         candidate=d.model_copy(deep=True)
         edit(candidate, "component.create", parent=group["component_id"])
     with pytest.raises(CadError, match="itself|ancestors"):

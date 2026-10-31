@@ -12,7 +12,7 @@ The environment and production UI are already installed in this workspace:
 .\Start-RyanCAD.ps1
 ```
 
-Open **http://127.0.0.1:8790**. The launcher opens the browser. A new browser workspace starts with a blank design; reference examples are available from the project menu. The normal launcher keeps the terminal open; Ctrl+C closes the service. An existing single-project design stays in `runtime/projects/default.rycad/` and can be copied into a workspace with its history from **Local Workspace → Copy existing server design and history**.
+Open **http://127.0.0.1:8790**. The launcher opens the browser. A new browser workspace starts with a blank design; reference examples are available from the project menu. The normal launcher keeps the terminal open; Ctrl+C closes the service. Startup opens browser workspaces only; it does not load an old standalone design or seed a demo.
 
 On Windows, RyanCAD also places its icon in the notification area. Look under the **^** arrow if Windows hides it. Right-click the icon to open RyanCAD or quit the server; double-click opens the app. Hover over the icon to see which port that instance uses. Quitting shuts down the local server cleanly for every browser connected to it; saved designs remain on disk.
 
@@ -71,7 +71,7 @@ Each browser profile gets an independent workspace and the same profile retains 
 - Preview, undo/redo, checkpoint, inspect attributed actions and feature rollback, cancel native work and recover durable edits.
 - Export separate validated binary STL files with explicit selection, frames, precision and a revision/unit receipt.
 
-Read the [user guide](docs/USER_GUIDE.md), [API/MCP guide](docs/API.md), and [editable examples](examples/README.md). The supplied meshes remain unchanged in `stls/`.
+Read the [user guide](docs/USER_GUIDE.md), [API/MCP guide](docs/API.md), and [reference generation](examples/README.md). Reference designs can be created from the Import menu.
 
 ## Connect an external agent
 
@@ -93,13 +93,9 @@ On Mac use `.venv/bin/python`. For a different port use `runtime/connection-PORT
 
 ## Save and recover
 
-Each workspace's designs are stored in `runtime/projects/default.rycad.workspaces/` (or alongside the path given by `--project`, with `.workspaces` appended). Back up that entire folder as well as the original project, with the server stopped, or download a native snapshot of each design while it is running. Each design folder contains readable `manifest.yaml`, durable `journal.sqlite3` and any `exports/`. Every accepted edit commits to SQLite before success. YAML follows after 500 ms quiet time or two seconds of sustained changes. The interface reports write failures and snapshot warnings.
+Each workspace's designs are stored in `runtime/projects/default.rycad.workspaces/` (or alongside the path given by `--project`, with `.workspaces` appended). Back up that entire folder with the server stopped, use workspace folder export, or download a native snapshot of each design while it is running. Each design folder contains readable `manifest.yaml`, durable `journal.sqlite3` and any `exports/`. Every accepted edit commits to SQLite before success. YAML follows after 500 ms quiet time or two seconds of sustained changes. The interface reports write failures and snapshot warnings.
 
-The workspace manager shows a recovery code under **Workspace recovery and switching**. Save it somewhere you can find it: clearing browser data or changing browser profiles removes the local link to the workspace. If you lose it, the server stores the same `recovery_code` in that workspace's `workspace.json` file. Deleted designs stay available under **Deleted designs**. Download native snapshot creates a consistent `.rycad.zip` with full history/checkpoints. **Open a native design copy** creates a separate design; full native archives retain history, while YAML contains the current model only. Restore a full archive into a new standalone folder with:
-
-```text
-python -m ryancad --restore examples/mold-tooling.rycad.zip --project runtime/projects/restored-mold.rycad
-```
+The workspace manager shows a recovery code under **Workspace recovery and switching**. Save it somewhere you can find it: clearing browser data or changing browser profiles removes the local link to the workspace. If you lose it, the server stores the same `recovery_code` in that workspace's `workspace.json` file. Deleted designs stay available under **Deleted designs**. Download native snapshot creates a consistent `.rycad.zip` with full history/checkpoints. **Open a native design copy** creates a separate design; full native archives retain history, while YAML contains the current model only. Use Import for native design copies or workspace folders.
 
 Do not hand-edit the manifest while the service owns it. The journal is authoritative for existing working projects. Preserve the whole folder or a portable snapshot; YAML alone omits history.
 

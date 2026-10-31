@@ -28,14 +28,12 @@ _DESIGN = re.compile(r"^design_[a-f0-9]{32}$")
 class WorkspaceManager:
     """Map an opaque browser workspace to its own collection of project stores.
 
-    The existing single-project service remains separate and can be copied on
-    request. Every design has its own journal, worker, jobs and preview tokens.
+    Every design has its own journal, worker, jobs and preview tokens.
     """
 
-    def __init__(self, project: Path, legacy: CadService):
+    def __init__(self, project: Path):
         self.root = platform_path(project.resolve().with_name(project.name + ".workspaces"))
         self.root.mkdir(parents=True, exist_ok=True)
-        self.legacy = legacy
         self.lock = threading.RLock()
         self.services: dict[tuple[str, str], CadService] = {}
         self.in_flight: dict[tuple[str, str], int] = {}
@@ -126,10 +124,58 @@ class WorkspaceManager:
             if not data.get("recovery_code"):
                 data["recovery_code"] = code
                 self._write(code, data)
-            return {"active_design": data["active_design"], "workspace_code": code,
+            return {"active_design": data["active_design"], "workspace_code": code, "name": data.get("name", "Local Workspace"),
                     "designs": [{"id": entry["id"], "name": self._name(code, entry["id"]),
-                                 "deleted": bool(entry.get("deleted"))} for entry in data["designs"]],
-                    "legacy_available": bool(self.legacy.document.revision or self.legacy.document.features or self.legacy.document.instances)}
+                                 "deleted": bool(entry.get("deleted"))} for entry in data["designs"]]}
+
+    def claim(self, code: str, owner: str):
+        with self.lock:
+            data = self._read(code)
+            key = hashlib.sha256(owner.encode()).hexdigest()
+            if key not in data.get("browser_owners", []):
+                data.setdefault("browser_owners", []).append(key)
+                self._write(code, data)
+
+    def list_workspaces(self, owner: str, admin=False):
+        key = hashlib.sha256(owner.encode()).hexdigest()
+        result = []
+        with self.lock:
+            for file in sorted(self.root.glob("*/workspace.json")):
+                try:
+                    file = platform_path(file)
+                    data = json.loads(file.read_text("utf-8"))
+                    code = data.get("recovery_code", "")
+                    if not self.exists(code) or not file.parent.samefile(self._directory(code)):
+                        continue
+                    if not admin and key not in data.get("browser_owners", []):
+                        continue
+                    result.append({"code": code, "name": data.get("name", "Local Workspace"),
+                                   "design_count": sum(not e.get("deleted") for e in data["designs"])})
+                except (OSError, ValueError, CadError):
+                    continue
+        return result
+
+    def rename_workspace(self, code: str, name):
+        if not isinstance(name, str) or not name.strip() or len(name) > 120:
+            raise CadError("invalid_name", "Give the workspace a name of at most 120 characters.")
+        with self.lock:
+            data = self._read(code)
+            data["name"] = name.strip()
+            self._write(code, data)
+
+    def create_workspace(self, owner: str, name=""):
+        if not isinstance(name, str) or len(name) > 120:
+            raise CadError("invalid_name", "Workspace names must be text containing at most 120 characters.")
+        name = name.strip()
+        code = secrets.token_urlsafe(32)
+        self.ensure(code)
+        names = {w["name"].casefold() for w in self.list_workspaces(owner)}
+        number = 1
+        while f"Workspace {number}".casefold() in names:
+            number += 1
+        self.rename_workspace(code, name or f"Workspace {number}")
+        self.claim(code, owner)
+        return code
 
     def service(self, code: str, identifier: str | None = None) -> tuple[str, CadService]:
         with self.lock:
@@ -193,26 +239,6 @@ class WorkspaceManager:
             self._write(code, data)
             return identifier
 
-    def copy_legacy(self, code: str) -> str:
-        with self.lock, self.legacy.store.lock:
-            data = self._read(code)
-            identifier = "design_" + secrets.token_hex(16)
-            directory = self._directory(code) / identifier
-            directory.mkdir()
-            target = sqlite3.connect(directory / "journal.sqlite3")
-            try:
-                self.legacy.store.connection.backup(target)
-            finally:
-                target.close()
-            # Opening the backed-up journal writes its own consistent manifest.
-            current = CadService(directory)
-            try:self._unique_import_name(code,current)
-            finally:current.close()
-            data["designs"].append({"id": identifier, "deleted": False})
-            data["active_design"] = identifier
-            self._write(code, data)
-            return identifier
-
     def import_native(self, code: str, body: bytes) -> str:
         """Import as a new project, preserving a full native journal when present."""
         if len(body) > 8_000_000:
@@ -249,7 +275,10 @@ class WorkspaceManager:
                     staging.mkdir()
                     atomic_text(staging / "manifest.yaml", yaml.safe_dump(document.model_dump(mode="json"), sort_keys=False, allow_unicode=True))
                 current = CadService(staging)
-                try:self._unique_import_name(code,current)
+                try:
+                    if current.document.structure_version != 1:
+                        raise CadError("invalid_structure", "Workspace designs need parts and at least one layout. Choose a current RyanCAD design file.")
+                    self._unique_import_name(code,current)
                 finally:current.close()
                 os.replace(staging, destination)
             data["designs"].append({"id": identifier, "deleted": False})

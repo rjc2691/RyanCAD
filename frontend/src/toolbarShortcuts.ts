@@ -19,7 +19,6 @@ export const TOOLBAR_SHORTCUTS: Record<
   export: { label: "Shift+E", code: "KeyE", shift: true },
   agents: { label: "Shift+N", code: "KeyN", shift: true },
   account: { label: "Shift+U", code: "KeyU", shift: true },
-  search: { label: "Ctrl/⌘+K", code: "KeyK", command: true },
   sketch_select: { label: "Space", code: "Space" },
   sketch_move:{label:"M",code:"KeyM"},
   sketch_line: { label: "L", code: "KeyL" },
@@ -49,7 +48,7 @@ export const MODEL_TOOLBAR_ORDER = [
 ];
 export const ACTION_NAMES: Record<string, string> = {
   tool: "Tool operation",
-  assembly: "Group components",
+  assembly: "Layout Group",
   sketch: "Sketch",
   transform: "Move Component",
   duplicate: "Repeat part",
@@ -64,7 +63,6 @@ export const ACTION_NAMES: Record<string, string> = {
   export: "Export",
   agents: "Agents",
   account: "Account menu",
-  search: "Command search",
   sketch_select: "Sketch Select",
   sketch_move:"Sketch Move",
   sketch_line: "Sketch Line",
@@ -77,7 +75,7 @@ export const ACTION_NAMES: Record<string, string> = {
   sketch_connect:"Sketch Connect",
   sketch_disconnect:"Sketch Disconnect",
 };
-const GLOBAL = new Set(["import", "export", "agents", "account", "search"]);
+const GLOBAL = new Set(["import", "export", "agents", "account"]);
 export const shortcutScope = (id: string) =>
   GLOBAL.has(id) ? "global" : id.startsWith("sketch_") ? "sketch" : "model";
 export interface ToolbarPreferences {

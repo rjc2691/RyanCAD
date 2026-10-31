@@ -52,7 +52,9 @@ try{
  await page.getByRole('button',{name:'Account menu',exact:true}).click();
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
  await page.screenshot({path:'.cache/section-reference-ui/account-mobile.png'});
- await page.getByRole('menuitem',{name:'External agents',exact:true}).click();
+ assert.equal(await page.getByRole('menuitem',{name:'External agents',exact:true}).count(),0);
+ await page.getByRole('button',{name:'Account menu',exact:true}).click();
+ await page.getByRole('button',{name:'Agents',exact:true}).click();
  await page.getByRole('dialog').waitFor();
  assert.deepEqual(errors,[]);
  console.log('Passed: viewport face plane, tilted sketch plane, relative offset, cancel/clear, account dropdown, disabled authentication mockup, mobile bounds and Agents access.');

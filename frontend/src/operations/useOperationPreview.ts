@@ -15,6 +15,7 @@ export function useOperationPreview(
     report: any;
     error: string;
     status: string;
+    displayReport?: any;
   }>({ signature: "", report: null, error: "", status: "idle" });
   const latest = useRef({
     signature,
@@ -86,9 +87,12 @@ export function useOperationPreview(
       }
     } catch (error: any) {
       if (r.mounted && latest.current.signature === snapshot.signature) {
+        const displayReport=error.details?.operation_display?{operation_display:error.details.operation_display,feature_values:error.details.feature_values}:undefined;
+        if(displayReport)lastReport.current=null;
         setResult({
           signature: snapshot.signature,
           report: null,
+          displayReport,
           error: error.message || "The candidate could not be built.",
           status: "error",
         });
@@ -175,6 +179,7 @@ export function useOperationPreview(
       void drive();
     },
     ...result,
+    displayReport: result.signature === signature ? result.displayReport : undefined,
     error: result.signature === signature ? result.error : "",
     ready:
       !!signature &&

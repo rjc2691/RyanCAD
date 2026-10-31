@@ -76,6 +76,8 @@ export default function ToolbarSettings({moveLabel="Move Component"}:{moveLabel?
               (code === "KeyG" && e.shiftKey && !command) ||
               (command &&
                 [
+                  "KeyC",
+                  "KeyV",
                   "KeyZ",
                   "KeyS",
                   "KeyR",

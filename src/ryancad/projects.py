@@ -21,6 +21,15 @@ def restore_project(archive_path: Path, destination: Path):
         if len(names) != len(set(names)) or set(names) != {"manifest.yaml", "journal.sqlite3"} or sum(entry.file_size for entry in entries) > 128_000_000:
             raise CadError("invalid_archive", "Expected a bounded RyanCAD snapshot containing a manifest and durable journal.")
         manifest, database = archive.read("manifest.yaml"), archive.read("journal.sqlite3")
+    return restore_project_files(manifest, database, destination)
+
+
+def restore_project_files(manifest: bytes, database: bytes, destination: Path):
+    """Restore the native pair without requiring a ZIP container."""
+    if destination.exists():
+        raise CadError("destination_exists", "Restore into a new project folder.")
+    if len(manifest) > 8_000_000 or len(database) > 128_000_000:
+        raise CadError("archive_limit", "The native snapshot exceeds the size limit.")
     # Validate using a fresh in-memory connection, then rebuild our known schema.
     # Never execute SQL text, triggers, or migration scripts supplied by an archive.
     source = sqlite3.connect(":memory:")

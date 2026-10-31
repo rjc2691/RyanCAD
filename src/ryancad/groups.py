@@ -1,6 +1,7 @@
 """Assembly-backed selection groups. Organization never moves existing geometry."""
 import numpy as np
 from .errors import CadError
+from .structure_scopes import group_scope
 from .parameters import evaluate
 from .placements import flatten_instances,local_matrix,matrix_pose
 
@@ -57,6 +58,9 @@ def group_command(document,actor,name,args):
             label=base;number=2;names={c.name for c in document.components.values()}
             while label in names:label=f'{base} {number}';number+=1
             definition,instance=create_component(document,actor,label,kind,parent)
+            if document.structure_version and kind=='assembly' and parent!='root':
+                definition.structure_role='group'
+                definition.group_kind=group_scope(document,definition.id)
             identifier=f'{destination_id}/{instance.id}' if destination_id else instance.id
             return {'component_id':definition.id,'instance_id':instance.id,'occurrence_id':identifier},[definition.id,instance.id],f'Create {label}'
         source=row(args.get('occurrence'))
@@ -92,12 +96,8 @@ def group_command(document,actor,name,args):
             if not label:raise CadError('invalid_name','Give the group a name.')
             definition,instance=create_component(document,actor,label,'assembly',parent)
             if document.structure_version:
-                definition.structure_role='group' if all(document.components[o['definition']].structure_role=='part' for o in selected) else 'part'
-                from .project_structure import available_name
-                if definition.structure_role=='part':
-                    definition.structure_role='component'
-                    definition.name=available_name(document,definition.name,'part')
-                    definition.structure_role='part'
+                definition.structure_role='group'
+                definition.group_kind=group_scope(document,definition.id)
             # The wrapper takes the earliest selected sibling's browser position.
             selected_ids={o['source_id'] for o in selected};ordered={};inserted=False
             for identifier,placed in document.instances.items():
@@ -111,6 +111,8 @@ def group_command(document,actor,name,args):
         else:
             target=row(args.get('group'));definition=document.components[target['definition']]
             if definition.kind!='assembly':raise CadError('invalid_group','Choose a group to receive the components.')
+            if document.structure_version and definition.structure_role!='group':
+                raise CadError('invalid_group','Choose a layout group or part group as the destination.')
             if target['parent']!=parent or (target['id'].rsplit('/',1)[0] if '/' in target['id'] else '')!=prefix or target['id'] in [s['id'] for s in selected]:
                 raise CadError('invalid_group','Choose a sibling group outside the selected members.')
             unique_parent(definition.id)
@@ -142,6 +144,7 @@ def group_command(document,actor,name,args):
             if original.kind=='assembly':
                 new_def,new=create_component(document,actor,label or original.name+' copy','assembly',parent,original.color)
                 new_def.structure_role=original.structure_role
+                new_def.group_kind=original.group_kind
                 for child in list(document.instances.values()):
                     if child.parent==original.id:clone(child,new_def.id,child.name)
             else:new=create_instance(document,actor,original.id,label or source.name,parent)

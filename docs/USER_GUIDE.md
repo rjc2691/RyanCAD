@@ -20,11 +20,11 @@ Use the adjacent **Import** and **Export** dropdowns in the header. Import opens
 
 On Windows, RyanCAD has a notification-area icon while its local server is running. Right-click it and choose **Open RyanCAD** or **Quit RyanCAD**; double-click also opens the app. Windows may place it under the **^** hidden-icons arrow. Its tooltip shows the server port when several instances are running. Quit stops that local server and all browsers connected to it, while accepted edits stay saved. A remote server, such as an EC2 instance, is a separate process. `Start-RyanCAD.ps1 -Background` starts a hidden local process controlled by this icon; without `-Background`, Ctrl+C in its terminal also stops it.
 
-Click **Local Workspace** at the top of the left sidebar to manage designs. Create a named or untitled design, switch between designs, rename any design, or delete one. Deleted designs remain under **Deleted designs**, where they can be restored; at least one design stays in the workspace. A design has its own parameters, features, revisions, undo/redo, checkpoints and exports. The current design name can also be renamed directly in the tree.
+Click the active workspace name at the top of the left sidebar to manage workspaces. Create, rename or switch between this browser’s workspaces there. The key button asks for the admin password (`ryan`) and reveals all server workspaces; locking the view returns to the browser-owned list. Use **add design**, a design-row context menu, or **Manage designs** in Workspaces to manage designs. Create a named or untitled design, switch between designs, rename any design, or delete one. Deleted designs remain under **Deleted designs**, where they can be restored; at least one design stays in the workspace. A design has its own parameters, features, revisions, undo/redo, checkpoints and exports. The current design name can also be renamed directly in the tree.
 
-Separate browser profiles receive separate workspaces. Refresh and server restart preserve the workspace, and each open browser tab retains its selected design independently. Under **Workspace recovery and switching**, save the displayed code to reopen that workspace after clearing browser data or in another browser. The code is also recorded in that workspace's `workspace.json` on the server. You can create another workspace there. Switching workspaces changes the browser profile's workspace cookie; reload its other tabs after switching. These codes are convenience identifiers; RyanCAD does not provide user accounts or access control.
+Separate browser profiles receive separate workspaces. Refresh and server restart preserve the workspace, and each open browser tab retains its selected design independently. Under **Recovery code** in Workspaces, save the displayed code to reopen that workspace after clearing browser data or in another browser. The code is also recorded in that workspace's `workspace.json` on the server. You can create another workspace there. Switching workspaces changes the browser profile's workspace cookie; reload its other tabs after switching. These codes are convenience identifiers; RyanCAD does not provide user accounts or access control.
 
-An earlier single-project installation is kept intact. On a fresh workspace, **Copy existing server design and history** makes a separate workspace design with the old journal and checkpoints. The original project is not moved or overwritten. Reference designs and native imports likewise open as separate designs; full native snapshots retain history, while YAML imports contain the current model.
+Startup opens browser workspaces only. Reference designs and native imports open as separate designs; full native snapshots retain history, while YAML imports contain the current model.
 
 The left tree contains physical instances and assembly groups, with total part and unique-definition counts below its heading. Linked parts share a definition and show a count badge. The inspector shows material volume and surface/profile area for one selected part, or quantity-aware totals for the entire design when selection is cleared. Selecting an assembly measures its placed subtree. Hidden parts remain in totals; suppressed instances are excluded. Planar parts report profile area without inventing solid volume, and incomplete geometry is marked explicitly.
 
@@ -95,7 +95,7 @@ The viewport uses amber source, blue target, mint travel/rotation, and violet re
 - Tool Path includes straight/symmetric/through-all, distance/percent sweep, revolution, helix, none, mirror and connected repeat. No motion creates/cuts planar parts with the same interaction.
 - Align view in Tool Profile helps place inline polygon vertices. Clicks snap to 1 mm; numeric coordinates permit finer values. Close the profile before previewing.
 
-Auto chooses Add/Remove from actual overlap with the current target and displays its decision. Mostly inside suggests Remove, mostly outside suggests Add. An explicit Tool Effect Type choice locks the result; New component and Hole preserve their preset intent. Accepted Auto operations retain a fixed Add/Remove result during later edits.
+Auto chooses Add/Remove from actual overlap with the current target and displays its decision. Mostly inside suggests Remove, mostly outside suggests Add. An explicit Tool Effect Type choice locks the result; Create New Part and Hole preserve their preset intent. Accepted Auto operations retain a fixed Add/Remove result during later edits.
 
 The edited component stays solid in its own color; inactive components become transparent during tool setup. Previous valid previews remain opaque until their replacements are ready, with no overlapping source fill. Coral marks Tool Origin; violet outlines/hatching identify the actual Tool Profile, and a violet mesh identifies a body tool. Blue marks Tool Path independently of selected orange edges: dash-dot for implicit normals, solid for direct edges, dashed travel and a dotted connector for parallel offsets. Travel inputs sit directly below the target-point reference under Tool Path. Use the adjacent **mm / %** selector for distance or percentage. A picked target shows projected travel in that same position. **Path Direction** labels the direction dropdown, with Reverse reference direction immediately below it. Percent uses the total native edge/chain length and updates when that reference changes; implicit normals require a distance. Sweeps default to 100% and support shorter travel; Reverse starts from the opposite end. Radius/diameter remain in Tool Profile. No operation input floats over the viewport. The viewport key names the reference. Material result does not flip direction: with an outward face normal, negative distance travels inward. Reverse reference direction is a separate explicit choice. Previewing changes no saved intent. During an update the previous mesh stays visible with a stale warning; only the newly validated current result can apply. Recent exact drafts are reused, and Enter starts pending computation immediately. Apply requires the current validated candidate to appear. Cancel discards the draft. Enter applies the current valid preview, waiting for computation/display if necessary. One Escape cancels the whole operation, even during picking/drawing or text entry. Editing after a queued Enter requires confirming again. Orbit/zoom/views remain available; export and exploded display wait until the operation closes.
 
@@ -103,11 +103,11 @@ The edited component stays solid in its own color; inactive components become tr
 
 ## First precise part
 
-1. Clear selection and press T. Set rectangle width 80, height 40 in Profile; distance 6 in Travel. In Result choose New component and name Mounting plate. Inspect the preview, then Apply.
+1. Clear selection and press T. Set rectangle width 80, height 40 in Profile; distance 6 in Travel. In Result choose Create New Part and name Mounting plate. Inspect the preview, then Apply.
 2. In Top view, select the top face. T → Tool Profile: Circle → Hole setup. Click the desired position on the plane and set diameter 6 in Tool Profile. Under Origin refine U/V offsets, for example −32/−12 relative to face center. Through-all is the default. Apply; repeat at the other intended offsets.
 3. Select an outer edge. T → Round, radius 2. Inspect the native preview; Apply affects this one selected edge. Bevel is available in the same workspace.
-4. Clear selection, Tool → Tool Profile: Circle, then Tool Path: Straight travel / extrusion. Choose New component, name Alignment pin, diameter 5.7 and travel 10. Under Origin choose exact coordinates X −32, Y −12, Z 0. Apply.
-5. Select the pin and Repeat part with X placement 64 for a second linked instance. Use this for separate parts; Connected repeat joins repeated geometry within one physical part.
+4. Clear selection, Tool → Tool Profile: Circle, then Tool Path: Straight travel / extrusion. Choose Create New Part, name Alignment pin, diameter 5.7 and travel 10. Under Origin choose exact coordinates X −32, Y −12, Z 0. Apply.
+5. Select the pin and use Duplicate in Layout from its right-click menu, then Move Part to X placement 64 for a second linked instance. Use this for separate parts; Connected repeat joins repeated geometry within one physical part.
 
 Independent constructors create components. Initially disconnected additions disclose separate ownership in preview; later regeneration or a cut that splits one part fails safely. Body tools preserve source parts. Linked-definition edits affect every linked instance. Exact world inputs and reference positions resolve through the chosen target occurrence's placement.
 
@@ -133,7 +133,7 @@ Create a rectangle/circle as a new planar fabrication component. Cut another pro
 
 ## Assemblies and inspection
 
-Repeat part creates a linked instance. Component pattern repeats with exact linear spacing or circular increments about the owning assembly origin/axis. Component actions → Make independent clones a selected definition and retains provenance; for a pattern member it extracts that member at its current pose.
+In the Layout Editor, Ctrl+C / Ctrl+V (Command+C / Command+V on macOS) copies and pastes linked part placements. Paste offsets the copied arrangement 30 mm in world X and selects the new parts; multiple pasted parts undo together. Duplicate in Layout remains in the context menu. Repeat part remains available in Part/Component Editors. Component pattern repeats with exact linear spacing or circular increments about the owning assembly origin/axis. Component actions → Make independent clones a selected definition and retains provenance; for a pattern member it extracts that member at its current pose.
 
 Assembly group creates a container. Reparenting preserves the local transform, so world position can change if the new assembly is transformed. Use exact coordinates/rotations; geometry does not rely on free-space dragging.
 
@@ -143,7 +143,7 @@ Booleans use source definitions in local geometry coordinates and do not implici
 
 ## History and recovery
 
-Saved locally means the edit is durable in the journal. YAML follows automatically. Preview does not change the saved design. Disk-write failure leaves the old document authoritative and reports failure. Snapshot warnings separately identify YAML refresh trouble.
+Italic **saving...** / **saved** beside the workspace name shows the active design’s save status. Saved means the edit is durable in the journal. YAML follows automatically. Previews and exports do not trigger the saving indicator or change the saved design. Disk-write failure leaves the old document authoritative and reports failure. Snapshot warnings separately identify YAML refresh trouble.
 
 Undo/redo preserves the action audit. Checkpoints name revisions; restoring creates a new revision. Activity records actor, revision and timing; atomic batches expand into inspectable steps committed together.
 
@@ -156,6 +156,18 @@ External agents join the same session and are visible in activity. Pause, step, 
 The Agents badge counts live connector sessions, not distinct people or models. The MCP connector sends a heartbeat every 15 seconds; a session with no heartbeat for 90 seconds is marked disconnected. Clean shutdown disconnects immediately. Timed-out entries remain labeled in the Agents list for attribution but are excluded from the badge. Direct API clients must also send `POST /api/agents/heartbeat` with their actor and workspace/design headers while connected. After updating this behavior, restart RyanCAD and reconnect the MCP client so both ends use the heartbeat protocol.
 
 MCP initialization and tool discovery do not create agent entries. A connector registers on its first actual CAD tool invocation and reuses that session for subsequent calls. Separate connector processes can still appear with the same display name; this does not indicate that the host used subagents.
+
+## Workspace folders
+
+Import and Export both offer **RyanCAD Workspace folder**. A short notice explains browser support before the folder picker opens. This is a one-time transfer, not automatic folder synchronization.
+
+Export writes `workspace.json` and a `designs/` directory with stable design IDs. Each design includes its readable `manifest.yaml`, durable `journal.sqlite3` (history, undo/redo and checkpoints), and saved `exports/` files. Imported STL/SVG geometry is already embedded in the native design. Deleted designs are retained for recovery. Runtime caches, locks, agent connections, workspace recovery credentials and the shared bug-report store are excluded.
+
+Select a destination folder. If any matching file exists, nothing is written until **Overwrite matching files** is checked. Unrelated files are retained. The workspace index is written last; import verifies its checksums and rejects incomplete or mixed snapshots. If an export is interrupted, repeat it with overwrite enabled. Files are replaced individually; the entire directory update is not atomic.
+
+Import selects the folder containing `workspace.json` and opens it as a new independent workspace, preserving the previous workspace. Save the old workspace recovery code from its menu before switching if you want to return to it. Missing, modified or invalid native files are rejected before any workspace is opened. Only files listed in the workspace index are imported, so unrelated files in the selected folder are ignored.
+
+Direct folder export requires a browser exposing `showDirectoryPicker` and a secure context (HTTPS or localhost). Chrome/Edge are supported; Brave may need its File System Access setting enabled. Safari/Firefox do not provide this direct folder-export path. Folder import has a standard folder-upload fallback for modern browsers without direct directory access. Browser permission prompts cannot be bypassed. Transfers are limited to 100 designs, 64 MB of files and 5,000 files; existing single-design ZIP transfers remain available.
 
 ## Export and native documents
 
@@ -182,7 +194,7 @@ When **Tool Path reference** is armed, selecting a face expands its complete nat
 
 Fillet/chamfer Tool Profile now displays the **actual changed corner cross section**, cut from the before/after native geometry on a plane perpendicular to the primary selected edge. It is sampled at an interior path station so the section is well defined; it is not a square placeholder or an invented cutter. The panel reports its native area and whether material is removed or added (a concave fillet can add material). Full selected edges remain the normal finish. A target can limit a **single straight edge**; its endpoint has a planar cap. Curved/multiple-edge finishes currently use their full edges and explain the restriction when a partial target is requested.
 
-Round and bevel now use the standard Remove material effect and selected-edge Sweep path, with no separate Refine edge or native-corner labels. The violet Tool Profile reference card shows a Temporary profile, an exact outline and its area; the viewport uses that same profile. Radius/bevel distance regenerates both views. Add material is available for concave rounding, and Auto or Intersect use their normal material semantics. An incompatible effect blocks Apply with an explanation. Reopened history features show the generated profile and the same effect/path terminology.
+Round and bevel now use the standard Remove material effect and selected-edge Sweep path, with no separate Refine edge or native-corner labels. The violet Tool Profile reference card shows a Temporary profile, an exact outline and its area; the viewport uses that same profile. Radius/bevel distance regenerates both views. Add material is available for concave rounding, and Auto or Intersect use their normal material semantics. An incompatible effect blocks Apply with an explanation suggesting a different effect or profile; its generated profile remains visible in the viewport and reference card, including after changing its size. Reopened history features show the generated profile and the same effect/path terminology.
 
 
 ## Sketch in the main viewport
@@ -216,6 +228,18 @@ Tool Path extent uses a compact value field with an adjacent mm/% unit selector.
 
 The main viewport world X/Y/Z axis lines are selectable reference directions, just like the corner axis controls. Hover a visible axis for its name and highlight, then click to set Tool Path direction or the movement reference axis. Origin/profile/target point picking keeps its own selection semantics; axes do not replace those point references. Model surfaces in front of an axis take precedence. World axes are infinite directions, so travel uses a distance or projected target rather than a finite-path percentage.
 
+World-axis rays extend to the viewport edges as you pan, orbit, zoom or resize. Positive directions remain prominent and negative directions subdued. Their extent is independent of the finite grid and its fade; hiding the main grid also keeps the axes available. An axis viewed directly end-on has no directional line. Sketch editing retains its existing axis visibility rules.
+
+The crosshair marker at the world-axis intersection selects **World origin** (0, 0, 0), including with the grid hidden or geometry covering the origin. The center dot in the corner XYZ control offers the same point when the origin is offscreen. In the main view these controls select a reference point without opening an operation; Escape or Ctrl-click clears the viewport selection. During point-reference workflows they set the requested origin or target, including measurement points and tool travel targets. In sketches the origin can be used as an exact drawing point or projected into the sketch plane as an independent construction point. Starting a tool with only World origin selected creates an untargeted operation anchored there rather than treating the design root as a body.
+
+Viewport resizing keeps the last frame visible until the next frame resizes and redraws the canvas together. Repeated size notifications are combined and unchanged sizes do not clear the drawing buffer. Camera orientation and geometry remain intact while dragging window or history-panel boundaries.
+
+Right-click menus stay inside the visible window, open upward near its bottom edge, and scroll if the available height cannot hold all actions. Keyboard navigation can reach the last action in a scrolling menu.
+
+**Remove from Layout** acts immediately. Use **Undo** in its green completion notification to restore an accidental removal; the part definition remains in Custom Parts. Regular history Undo is also available after the notification expires.
+
+While editing a part, component or layout group, the orange viewport context box shows its name and a **Done** action. It replaces the separate green editing banner. Done steps out of the current editing scope and is disabled while an operation needs to be applied or cancelled.
+
 When a Tool Path or movement direction can be selected, arrow keys choose world axes: Up/Down = Z, Left = Y, Right = X. These shortcuts preserve arrow navigation in text/numeric fields, dropdowns and editable content, and do not override explicit origin/profile/target picking, sketch editing, or native fillet/chamfer edge paths. No operation is launched by an arrow key.
 
 Contextual dimensions now appear directly on planar object faces beside their edges/features. Text tilts, skews and foreshortens with the face; rotate the model to read it. External dimension guides are replaced by these labels. Up to eight useful dimensions can appear for selection and five for hover (including group members), subject to fit, visibility and duplicate suppression. Tiny, hidden or curved faces do not receive a forced flat label. Hover an edge to see its exact length in the entity/component information box; curved edges report curve length. These are read-only measurements, not parameter-edit fields.
@@ -239,7 +263,7 @@ The design has a floor-plan blueprint icon; Fit uses interlocking pieces, distin
 
 Components, 2D Sketches and 3D Tool Bodies use aligned headings and full-width separators. Group editing is indicated inside the selected group row, with italic Editing and Done controls. Double-click empty viewport space to leave the current group edit. Individual parts no longer have tree color swatches; a containing group's color is inherited by its members in the viewport, with the nearest nested group taking precedence.
 
-Component definitions, including groups and tool bodies, use unique names (case-insensitive, with surrounding whitespace ignored). Creation and independent copies receive numeric suffixes when needed; duplicate manual renames are rejected. Linked instances keep their shared definition name. The `document.normalize_names` command repairs legacy duplicate definition names in one undoable action without changing reference IDs.
+Part and layout names are unique within a design. Component names can repeat; stable definition IDs distinguish them.
 
 Starting Sketch without a selected planar face first opens the sketch panel in plane-selection state. Pick a planar face in the viewport or choose World XY/XZ/YZ; drawing controls remain inactive until the plane is chosen. The plane reference uses the same colored reference-box styling as tool operations. Selecting a face before starting Sketch or drawing a profile inside a pending operation retains the inferred plane. Escape cancels a sketch that is waiting for its plane.
 
@@ -251,7 +275,7 @@ Use the bounding-box icon in the viewport controls to show orange bounds and a c
 
 ## Account menu preview
 
-Click the R avatar in the upper-right corner for Profile, Account settings, Sign in and Create account placeholders. Account forms are explicitly marked as previews and disabled; they do not collect credentials, authenticate a user or change workspace access. External agents remains functional in this menu and provides the mobile route to the existing Agents panel.
+Click the R avatar in the upper-right corner for Profile, Account settings, Sign in and Create account placeholders. Account forms are explicitly marked as previews and disabled; they do not collect credentials, authenticate a user or change workspace access. Use the main Agents button to access external agents; on mobile it is shown as an icon beside the avatar.
 
 
 Drag the grip along the top edge of Feature history / Activity up or down to resize the panel. Its contents scroll horizontally and vertically when they exceed the available space, with wider visible scrollbar tracks and thumbs. The chosen height stays while switching history modes during the session. Double-click the divider to restore automatic sizing. With the divider focused, Up/Down resize by 20 px (Shift: 50 px), Home minimizes it, and Enter resets it. Portrait mobile history supports the same divider; landscape mobile history fills its side panel.
@@ -271,7 +295,7 @@ Saved 2D sketches show a dark blue stroke and a sketch-name tooltip when hovered
 
 ## Sidebar organization
 
-The design sidebar has Components, 2D Sketches and 3D Tool Bodies sections, each with a compact dashed-outline **+ add component**, **+ add sketch** or **+ add tool** row below its list. Add labels are italic, and section headings no longer duplicate the sketch/tool add controls. Component creation retains the currently inferred parent/group context, indicated by its indentation and tooltip.
+The project sidebar has workspace/design/layout navigation, a Layout Tree, 3D Parts, and 2D Sketches. Within 3D Parts, Custom Parts for this Design, Primitives and 3D Tool Bodies are collapsible lists. Compact plus icons in the relevant headers create or place items.
 
 ## Toolbar customization
 
@@ -357,3 +381,16 @@ With an inline value open, Tab cycles to the next candidate and Shift+Tab cycles
 A second line can be picked without Shift. Shift-click adds/removes a line; Ctrl-click removes only an existing pick. With two lines selected, a plain click on another line replaces the second pick and keeps the first as the anchor. Empty-space click clears the picks; Shift-clicking a third line explains the two-line limit. The candidate list updates after each change. Selecting an axis retains the existing line-to-axis angle workflow.
 
 When named-parameter suggestions are open, Tab completes/cycles parameter names as before. Choose a suggestion (or dismiss its list by leaving the field) to resume dimension cycling; the candidate cycle button is also available. Parallel distance annotations use the persistent dimension styling and can be clicked to reopen. Their single sketch constraint includes parallelism; it does not bind to another component or introduce named parameters automatically.
+
+
+The sidebar root is the active workspace name. Plain **Designs** and **Layouts** labels identify their nested lists. **Layout Tree · [layout name]** contains groups and placed parts only; inspect their internal components in **3D Parts**. Layout and Part Groups are separate scopes, with their existing folder icon. A part group stays in the Part Editor; **Return to layout** switches back to the active layout without changing part geometry.
+
+
+### Experimental dark UI palette
+
+Open **Experimental features**, turn on **Dark UI palette**, and expand its settings to choose Midnight (navy/ice blue), Graphite (charcoal/copper), Tide (teal/sea glass), Aubergine (plum/lavender), Forest (olive/sage), Monochrome Light (lighter charcoal/silver), or Monochrome Dark (near-black/gray). Swatches show each palette before selection; changes apply immediately. Turning it off restores the standard UI. The selected palette is retained in this browser, independently of workspace and design, and does not change model, selection, or reference colors. The feature ID is `dark-ui-palette`.
+
+
+A Tool operation started without a selected body begins as **Create New Part**. To extrude a picked face into its existing body, choose **Add material**, **Remove material**, or **Auto** in Tool Effect. The face's editable source body becomes the fixed target. If a target cannot be inferred, pick it through **Body to modify** in the same panel; there is no need to cancel and restart.
+
+Tool Path Type starts with **Follow along path**. For linear travel, choose **Selected edge or path** to use a picked direction. The viewport identifies tool configuration as **Part Editor - Tool Setup**.

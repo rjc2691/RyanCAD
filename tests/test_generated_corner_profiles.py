@@ -30,8 +30,12 @@ def test_generated_profile_has_explicit_boolean_effect_and_shared_display_geomet
 def test_incompatible_effect_is_reported_instead_of_silently_rounding_anyway():
     kernel, doc, part, edge, ref = scene()
     edit(doc, target=part["component_id"], profile="fillet", result="add", path_reference=ref, values={"amount":2})
-    with pytest.raises(CadError, match="Choose Remove material"):
+    with pytest.raises(CadError, match="Change Tool Effect to Remove Material") as error:
         kernel.evaluate(doc.model_dump(mode="json"))
+    profile=error.value.details["operation_display"]["tool_profile"]
+    assert profile["temporary"] and profile["loops"]
+    assert profile["area"] == pytest.approx(4-math.pi)
+    assert error.value.details["feature_values"]["amount"] == 2
 
 
 @pytest.mark.parametrize("effect", ["add", "auto", "cut"])
@@ -42,7 +46,7 @@ def test_concave_path_uses_addition_only_when_requested(effect):
     edge=next(e for e in before["edges"] if abs(e["tangent"][2])>.99 and abs(e["center"][0]-6)<1e-6 and abs(e["center"][1]-6)<1e-6)
     made=edit(doc,target=part["component_id"],profile="fillet",result=effect,path_reference={"component":part["component_id"],"edge":edge["signature"]},values={"amount":2})
     if effect=="cut":
-        with pytest.raises(CadError,match="Choose Add material"):kernel.evaluate(doc.model_dump(mode="json"))
+        with pytest.raises(CadError,match="Change Tool Effect to Add Material"):kernel.evaluate(doc.model_dump(mode="json"))
     else:
         result=kernel.evaluate(doc.model_dump(mode="json"))
         assert result["components"][part["component_id"]]["volume"]==pytest.approx(before["volume"]+(4-math.pi)*10)

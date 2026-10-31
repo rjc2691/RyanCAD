@@ -6,6 +6,7 @@ roles to assembly definitions rather than introducing a second placement engine.
 from __future__ import annotations
 
 from .errors import CadError
+from .structure_scopes import group_scope
 from .model import Component, Instance, PartVariation, uid
 from .parameters import bind_expression, dependencies, evaluate
 
@@ -122,7 +123,7 @@ def resolve_operation_occurrences(document, args):
 
 
 def normalize_structure(document, actor):
-    """Wrap newly created legacy bodies without moving their physical geometry."""
+    """Organize newly created bodies into reusable parts without moving geometry."""
     if not document.structure_version:
         return
     from .groups import remap_references
@@ -186,8 +187,15 @@ def validate_structure(document):
             continue  # ordinary document validation reports this
         if parent.structure_role == "layout" and child.structure_role not in {"part", "group"}:
             raise CadError("layout_membership", "Layouts contain parts and part groups, not individual components.")
-        if parent.structure_role == "group" and child.structure_role != "part":
-            raise CadError("group_membership", "A Part Group contains only parts.")
+        if child.structure_role == "group":
+            scope = group_scope(document, child.id)
+            if child.group_kind is not None and child.group_kind != scope:
+                raise CadError("group_scope", "Layout groups stay in layouts; part groups stay inside parts.")
+        if parent.structure_role == "group":
+            scope = parent.group_kind or group_scope(document, parent.id)
+            allowed = {"part", "group"} if scope == "layout" else {"part", "group", "component"}
+            if child.structure_role not in allowed or child.purpose == "tool":
+                raise CadError("group_membership", "Layout groups contain parts; part groups contain components and nested parts.")
         if parent.structure_role == "part" and (child.structure_role == "layout" or child.purpose == "tool"):
             raise CadError("part_membership", "Parts contain components, parts and part groups. Tool bodies stay in the library.")
         if i.variation and (i.variation not in document.variations or document.variations[i.variation].part != i.definition):
@@ -275,17 +283,20 @@ def structure_command(document, actor, name, args):
         return {}, [c.id], f"Delete part · {c.name}"
     if name == "part.component.create":
         c = require(document.components, args.get("part"), "part")
-        if c.structure_role != "part":
+        if c.structure_role != "part" and not (c.structure_role == "group" and (c.group_kind or group_scope(document,c.id)) == "part"):
             raise CadError("invalid_part", "Create components inside a part.")
         component, instance = create_component(document, actor, args.get("name") or "Component", parent=c.id)
         return {"component_id": component.id, "instance_id": instance.id}, [component.id], f"Create component · {component.name}"
-    if name == "partgroup.create":
+    if name in {"partgroup.create", "layoutgroup.create"}:
         parent = require(document.components, args.get("parent") or document.active_layout, "parent")
-        if parent.structure_role not in {"part", "layout"}:
-            raise CadError("invalid_group", "Create a Part Group in a layout or part.")
-        c, i = container(document, actor, args.get("name") or available_name(document, "Part Group", "group"), "group")
+        scope = "layout" if name == "layoutgroup.create" else "part"
+        if parent.structure_role != scope and not (parent.structure_role == "group" and (parent.group_kind or group_scope(document, parent.id)) == scope):
+            raise CadError("invalid_group", "Create layout groups in layouts and part groups inside parts.")
+        label = "Layout Group" if scope == "layout" else "Part Group"
+        c, i = container(document, actor, args.get("name") or available_name(document, label, "group"), "group")
+        c.group_kind = scope
         i.parent = parent.id
-        return {"component_id": c.id, "instance_id": i.id}, [c.id], f"Create Part Group · {c.name}"
+        return {"component_id": c.id, "instance_id": i.id}, [c.id], f"Create {label} · {c.name}"
     if name == "part.describe":
         c = require(document.components, args.get("id"), "part")
         if c.structure_role != "part":
@@ -347,14 +358,15 @@ def structure_command(document, actor, name, args):
 
 
 STRUCTURE_COMMANDS = {name: description for name, description in [
+    ("layoutgroup.create", "Create an organizational group of placed parts in a layout."),
     ("part.describe", "Edit the description of a part definition."),
     ("part.delete", "Delete a part definition, its variations and placements; retain child definitions and reject external parameter dependencies."),
-    ("structure.enable", "Undoable conversion of legacy bodies/groups into reusable parts and one layout; preserves geometry and placement."),
+    ("structure.enable", "Initialize parts and layouts for a new engine document."),
     ("part.create", "Create a uniquely named reusable part definition."),
     ("part.primitive", "Create a reusable box, sphere or cylinder part with explicit editable dimensions; shape and optional values."),
     ("part.component.create", "Create a body within part=<definition ID>; component names may repeat."),
     ("part.insert", "Place part=<definition ID> in parent=<part/group/layout ID>, optionally with variation and placement."),
-    ("partgroup.create", "Create a group that contains only parts, in parent=<part or layout ID>."),
+    ("partgroup.create", "Create a group of components and nested parts inside a part or part group."),
     ("layout.create", "Create and activate an independent arrangement using shared part definitions."),
     ("layout.select", "Select layout id."), ("layout.delete", "Remove a layout's placements, retaining library parts."),
     ("structure.rename", "Rename definition id; part and layout names must be unique."),

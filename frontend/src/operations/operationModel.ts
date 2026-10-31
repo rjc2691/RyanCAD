@@ -11,6 +11,7 @@ import {
 } from "./groupedSelection.ts";
 
 export type PickSlot =
+  | "target"
   | "origin"
   | "profile"
   | "plane"
@@ -229,6 +230,8 @@ export function initialOperation(
 ): OperationDraft {
   const initialMembers = selectionMembers(selection);
   selection = initialMembers[0] || null;
+  const fromWorldOrigin=!!selection?.worldOrigin;
+  if(fromWorldOrigin)selection=null;
   const planar =
     selection &&
     state.document.components[selection.definition]?.kind === "planar";
@@ -279,6 +282,7 @@ export function initialOperation(
     target: selection,
     origin: "reference",
     reference: ref,
+    ...(fromWorldOrigin?{originPinned:true}:{}),
     profileReference: selection?.face ? ref : null,
     pathReference: selection?.edge ? ref : null,
     plane: selection?.edge ? "perpendicular" : selection?.face ? "face" : "XY",
@@ -556,6 +560,36 @@ export function operationCommand(d: OperationDraft) {
     ),
   };
 }
+/** A geometry reference may supply an edit target only after an explicit effect choice. */
+export function operationTargetFromSelection(selection:Selection,state:State):Selection|null{
+  const editable=(id:string)=>{const c=state.document.components[id];return c&&c.kind!=="assembly"&&!c.read_only;};
+  if(selection.worldOrigin||selection.worldPlane)return null;
+  const row=state.occurrences.find(o=>o.id===selection.occurrence);
+  if(!row||row.suppressed)return null;
+  if(editable(row.definition))return {definition:row.definition,occurrence:row.id};
+  if(row.kind!=="assembly")return null;
+  const bodies=state.occurrences.filter(o=>o.id.startsWith(row.id+"/")&&!o.suppressed&&editable(o.definition));
+  return bodies.length===1?{definition:bodies[0].definition,occurrence:bodies[0].id}:null;
+}
+export function withOperationTarget(d:OperationDraft,selection:Selection,state:State):OperationDraft{
+  if(d.target)return d;
+  const target=operationTargetFromSelection(selection,state);
+  if(!target)return d;
+  const next={...d,target};
+  return d.profile==="face"&&!d.profileReference&&selection.face?.type==="PLANE"?inferOperationSelection(next,selection,state).draft:next;
+}
+export function withToolEffect(d:OperationDraft,result:OperationDraft["result"],state:State):OperationDraft{
+  const next={...d,result};
+  if(result==="new"||d.target)return next;
+  // A solid tool is a cutter, not its own modification target. Face profiles
+  // can identify their source body, provided all faces agree on one instance.
+  if(d.profile!=="face")return next;
+  const refs=referenceMembers(d,"profile");
+  const targets=refs.map(r=>operationTargetFromSelection(r.selection,state));
+  const target=targets[0];
+  if(!target||targets.some(t=>!t||t.definition!==target.definition||t.occurrence!==target.occurrence)||state.document.components[target.definition]?.purpose==="tool")return next;
+  return {...next,target};
+}
 export function operationProblem(d: OperationDraft): string | null {
   if (
     isFinish(d) &&
@@ -575,7 +609,7 @@ export function operationProblem(d: OperationDraft): string | null {
   )
     return "An implicit direction has no finite full length. Enter a distance, select a target point, or pick a finite path.";
   if (d.result !== "new" && !d.target)
-    return "Cancel this operation, select the component to edit, then press T.";
+    return "Pick the body to modify in Tool Effect.";
   if (isFinish(d) && (!d.target || !d.pathReference?.selection.edge))
     return "Pick an edge on the target component to finish.";
   if (["face", "body"].includes(d.profile) && !d.profileReference)

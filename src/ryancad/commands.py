@@ -188,15 +188,6 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
         component,instance=create_component(document,actor,label,"solid")
         component.purpose="tool"
         return {"component_id":component.id,"instance_id":instance.id,"occurrence_id":instance.id},[component.id,instance.id],f"Create tool body · {label}"
-    if name == "document.normalize_names":
-        seen=set();changed=[]
-        for c in document.components.values():
-            if c.id=='root':continue
-            base=c.name.strip()[:110] or 'Component';label=base;index=2
-            while label.casefold() in seen:label=f'{base} {index}';index+=1
-            seen.add(label.casefold())
-            if label!=c.name:c.name=label;c.modified_by=actor.id;changed.append(c.id)
-        return {'renamed':len(changed)},changed,'Make component names unique'
     if name == "component.rename":
         component = require(document.components, args["id"], "component")
         label=str(args["name"]).strip()[:120]
@@ -501,14 +492,13 @@ def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dic
 
 
 COMMANDS = {
-    "document.normalize_names": "Make legacy duplicate component names unique in one undoable action.",
     "toolbody.create": "Create an empty reusable solid tool body in its own local workbench, excluded from assembly counts and exports.",
     "group.reparent": "Move an occurrence to a parent group occurrence (empty parent means design root), preserving world placement and remapping references. Rejects cycles and shared/pattern structure edits.",
     "group.insert": "Create an empty solid component or assembly under a parent occurrence (empty parent means design root).",
     "operation.create": "Create a unified origin/profile/motion/result recipe with exact model/world-origin references, target-projected travel or full finite paths, parameter-backed inputs and native validation. Corner previews include actual perpendicular changed-material sections. Use previews before committing.",
     "component.stock": "Set parameter-backed planar stock thickness and optional display-only thickness preview; no extra physical part or authoritative solid.",
     "component.create": "Create a solid/planar part or assembly. Separate physical parts always get components.",
-    "group.create": "Group 1–200 sibling occurrence IDs in an assembly without moving them. Name and occurrences are required inputs. Native occurrence references follow the new paths.",
+    "group.create": "Group 1–200 sibling occurrence IDs without moving them. Parent context determines a layout group (placed parts) or part group (components/nested parts). Name and occurrences are required. Native occurrence references follow the new paths.",
     "group.add": "Add sibling occurrences to group=assembly occurrence ID, preserving their world placements; rotated/transformed groups rebase placement into new local parameters.",
     "group.copy": "Copy a group occurrence and its nested group structure. Physical part definitions stay linked; membership and placement are independently editable. offset defaults to [30,0,0] in parent coordinates.",
     "group.ungroup": "Dissolve one group occurrence while preserving child world placements and updating occurrence references. Undo restores the group; old unplaced definitions/parameters are retained for existing users.",

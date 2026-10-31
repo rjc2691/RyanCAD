@@ -1,16 +1,16 @@
 # Reference objects and supplied STL inventory
 
-**Inspected October 23, 2026. Source files retained unchanged in `stls/`.**
+**Inspected October 23, 2026. Historical inventory; the original sample files were purged during the authorized October 30 development-data reset.**
 
-The supplied meshes are useful real-world references. They are not native parametric documents and do not contain the editable constraints, root dimensions or feature history needed for regeneration tests. No application import/conversion capability has been implemented.
+The supplied meshes are useful real-world references. They are not native parametric documents and do not contain the editable constraints, root dimensions or feature history needed for regeneration tests. The current app supports bounded STL import; this inventory predates that implementation.
 
 ## Supplied files
 
 | File | Bytes | Triangles | Axis-aligned size, X × Y × Z |
 |---|---:|---:|---|
-| [bee vacuum flange.stl](../stls/bee%20vacuum%20flange.stl) | 203,984 | 4,078 | 76.20000 × 72.39000 × 76.20000 |
-| [NEW Second Mirror Main Body.stl](../stls/NEW%20Second%20Mirror%20Main%20Body.stl) | 116,984 | 2,338 | 36.33515 × 29.46790 × 49.00000 |
-| [Third Mirror and Lens Main Body.stl](../stls/Third%20Mirror%20and%20Lens%20Main%20Body.stl) | 2,437,884 | 48,756 | 57.97424 × 93.09998 × 126.97328 |
+| `bee vacuum flange.stl` | 203,984 | 4,078 | 76.20000 × 72.39000 × 76.20000 |
+| `NEW Second Mirror Main Body.stl` | 116,984 | 2,338 | 36.33515 × 29.46790 × 49.00000 |
+| `Third Mirror and Lens Main Body.stl` | 2,437,884 | 48,756 | 57.97424 × 93.09998 × 126.97328 |
 
 Sizes are **raw STL coordinate units**, rounded to five decimals. Millimeters have not been confirmed. Both mirror files have substantial coordinate offsets, so future reference loading should preserve original coordinates and offer explicit view/placement choices rather than silently recentering them.
 
@@ -41,4 +41,4 @@ For each fixture, retain the native source, exact creation commands, independent
 
 The mold benchmark will use simple analytic geometry initially. It does not require reconstructing a mold from the supplied STL meshes, a dedicated mold wizard, or an automatic demolding simulation.
 
-The original inventory above was recorded during planning. Implementation now generates editable native plate/pin and mold fixtures plus separate validated STLs under examples/. Native input and output remain connected through scripts/generate_examples.py. The supplied originals remain unchanged.
+The original inventory above was recorded during planning. Implementation now generates editable native plate/pin and mold fixtures plus separate validated STLs under examples/. Native input and output remain connected through scripts/generate_examples.py. Generated reference outputs are created on demand; previous outputs and supplied sample files have been removed.

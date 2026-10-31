@@ -7,7 +7,7 @@ export const PROFILE_SHAPE_LABELS: Record<string, string> = {
   sketch: "Existing sketch", body: "3D body", fillet: "Round corner", chamfer: "Bevel corner",
 };
 export const PATH_TYPE_LABELS: Record<string, string> = {
-  linear: "Straight travel / extrusion", sweep: "Follow a design edge / sweep",
+  sweep: "Follow along path", linear: "Straight travel / extrusion",
   revolve: "Rotate about an axis", helix: "Rotate and travel / helix",
   none: "No motion / placed Boolean", mirror: "Mirror about a plane", pattern: "Connected repeat along direction",
 };

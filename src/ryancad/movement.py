@@ -7,6 +7,7 @@ do not silently create an alignment constraint.
 import numpy as np
 
 from .errors import CadError
+from .structure_scopes import group_scope
 from .parameters import evaluate, dependencies
 from .placements import flatten_instances, local_matrix, bake_rotation
 
@@ -16,7 +17,9 @@ def move_component(document, actor, args):
 
     instance = require(document.instances, args.get("id"), "instance")
     if document.structure_version and document.components[instance.definition].structure_role == "group":
-        raise CadError("group_organization", "Part Groups organize membership. Move the part placements inside the group instead.")
+        group = document.components[instance.definition]
+        if (group.group_kind or group_scope(document, group.id)) == "part":
+            raise CadError("group_organization", "Part Groups organize membership. Move the members inside the group instead.")
     method = args.get("method", "axes")
     if method not in {"axes", "reference", "rotate", "point", "direction", "projected"}:
         raise CadError("invalid_move", "Choose axes, reference, or rotate movement.")

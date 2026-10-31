@@ -27,6 +27,7 @@ export default function LayoutList({state, run, disabled, onLayout}: {
     void action("structure.rename",{id,name:value},()=>setEditing(null));
   };
   return <div className="design-layout-children" aria-label="Design layouts">
+    <div className="sidebar-list-label nested-list-label"><span>Layouts</span><button className="icon-button sidebar-header-add" aria-label="Add layout" title="Add layout" disabled={disabled||pending} onClick={()=>void action("layout.create",{},onLayout)}><Plus size={14}/></button></div>
     {layouts.map(layout=><div className="structure-layout" key={layout.id} data-active={layout.id===state.document.active_layout} onContextMenu={e=>{e.preventDefault();e.stopPropagation();if(!disabled&&!pending)setMenu({id:layout.id,x:e.clientX,y:e.clientY});}}>
       <Layers size={14}/>
       {editing===layout.id ? <input autoFocus className="layout-name-input" aria-label="Layout name" maxLength={120}
@@ -37,7 +38,6 @@ export default function LayoutList({state, run, disabled, onLayout}: {
         }}/>:<button className="layout-name" disabled={disabled||pending} aria-current={layout.id===state.document.active_layout?"true":undefined}
         onClick={()=>void action("layout.select",{id:layout.id},onLayout)}>{layout.name}</button>}
     </div>)}
-    <button className="sidebar-add-row layout-add" disabled={disabled||pending} onClick={()=>void action("layout.create",{},onLayout)}><Plus size={14}/><i>add layout</i></button>
     {menu&&<ContextMenu x={menu.x} y={menu.y} title={state.document.components[menu.id]?.name||"Layout"} onClose={()=>setMenu(null)} actions={[{label:"Rename",disabled:disabled||pending,action:()=>{cancelled.current=false;setEditing(menu.id);setName(state.document.components[menu.id].name);}},{label:"Delete layout",disabled:disabled||pending||layouts.length<2,action:()=>confirmDelete(state.document.components[menu.id].name,"Delete this layout and its placements? Library parts are retained.",()=>void action("layout.delete",{id:menu.id},onLayout))}]}/>}
     {deleteDialog}
     {error&&<p className="structure-error" role="alert">{error}</p>}

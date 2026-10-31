@@ -15,6 +15,16 @@ def browser(client):
     return "; ".join(f"{name}={value}" for name, value in client.cookies.items())
 
 
+def test_no_standalone_fallback_and_missing_workspace_cookie_recovers(tmp_path):
+    with TestClient(create_app(tmp_path / "server", "token", testing=True)) as client:
+        unscoped = client.get('/api/state', headers={'Authorization': 'Bearer token'})
+        assert unscoped.json()['error']['code'] == 'workspace_required'
+        assert not (tmp_path / 'server' / 'journal.sqlite3').exists()
+        client.cookies.set('ryancad_workspace_8790', 'z'*48)
+        assert client.get('/').status_code == 200
+        assert client.get('/api/workspace').status_code == 200
+
+
 def headers(cookie, design=None):
     result = {"Cookie": cookie}
     if design:
@@ -100,21 +110,27 @@ def test_browser_workspaces_design_routing_restore_and_restart(tmp_path):
         assert request(client, "GET", "/api/state", restored_cookie, a2).json()["document"]["name"] == "Box"
 
 
-def test_existing_project_is_copied_deliberately_and_native_import_preserves_history(tmp_path):
+def test_standalone_projects_are_not_loaded_and_explicit_native_import_preserves_history(tmp_path):
     project = tmp_path / "existing"
     store = ProjectStore(project)
     original = store.load()
+    from ryancad.project_structure import structure_command
+    from ryancad.model import Actor
+    structure_command(original, Actor(), 'structure.enable', {})
     original.name = "Existing mold"
     original.revision = 1
     store.commit(original, None, "rename", "rename", {}, [0], [])
+    archive_path=tmp_path / "explicit.rycad.zip"
+    store.portable_snapshot(archive_path)
     store.close()
     with TestClient(create_app(project, "token", testing=True)) as client:
         cookie = browser(client)
         workspace = request(client, "GET", "/api/workspace", cookie).json()
         blank = workspace["active_design"]
-        assert workspace["legacy_available"]
+        assert "legacy_available" not in workspace
+        assert request(client, "POST", "/api/workspace/copy-existing", cookie).status_code == 404
         assert request(client, "GET", "/api/state", cookie, blank).json()["document"]["name"] == "Untitled design"
-        copied = request(client, "POST", "/api/workspace/copy-existing", cookie).json()["design_id"]
+        copied = request(client, "POST", "/api/workspace/import", cookie, content=archive_path.read_bytes()).json()["design_id"]
         assert request(client, "GET", "/api/state", cookie, copied).json()["document"]["name"] == "Existing mold"
         assert request(client, "GET", "/api/state", cookie, copied).json()["document"]["revision"] == 1
         archive = request(client, "GET", "/api/native", cookie, copied).content
@@ -182,8 +198,7 @@ def test_design_names_are_unique_across_creation_and_direct_rename(tmp_path):
     from ryancad.service import CadService
     from ryancad.model import Command, Actor
     from ryancad.errors import CadError
-    legacy=CadService(tmp_path/"legacy")
-    manager=WorkspaceManager(tmp_path/"workspace",legacy)
+    manager=WorkspaceManager(tmp_path/"workspace")
     try:
         code="w"*48
         manager.ensure(code)
@@ -198,4 +213,4 @@ def test_design_names_are_unique_across_creation_and_direct_rename(tmp_path):
         with pytest.raises(CadError,match="unique"):
             manager.unique_design_name(code,"bracket")
     finally:
-        manager.close();legacy.close()
+        manager.close()

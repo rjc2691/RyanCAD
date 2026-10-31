@@ -1,3 +1,4 @@
+import {worldAxisScales} from "./worldAxisExtent";
 import {syncMovementGhost} from "./movementGhost";
 import {createFadingGrid} from "./gridAppearance";
 import MoveAxisHandles,{type MoveAxisHandlesHandle} from "./MoveAxisHandles";
@@ -75,13 +76,16 @@ import {
 } from "./viewportOperationDisplay";
 
 interface Props {
+  uiBackground?:string;
   onMoveDistance?:(value:string)=>void;
   onMoveAxisSlide?:(axis:WorldAxis,distance:number)=>void;
   onWorldPlane?:(plane:WorldPlane)=>void;
   selectedWorldPlane?:WorldPlane;
   measurePoints?: MeasurePoint[] | null;
   onWorldAxis?: (axis: WorldAxis) => void;
+  onWorldOrigin?:()=>void;
   editingGroup?: string;
+  editingContext?:{name:string;label:string;onDone:()=>void;disabled:boolean};
   resolveHover?: (selection: Selection | null) => Selection | null;
   onDoubleSelect?: (selection: Selection | null) => void;
   sketch?: SketchDraft | null;
@@ -177,6 +181,7 @@ async function previewAsset(id: string, token: string, signal?: AbortSignal) {
 
 const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const container = useRef<HTMLDivElement>(null);
+  const worldOriginButton=useRef<HTMLButtonElement>(null);
   const movementGuide = useRef<MovementGuideHandle>(null);
   const moveAxisHandles=useRef<MoveAxisHandlesHandle>(null);
   const measureGuide = useRef<MeasureGuideHandle>(null);
@@ -483,6 +488,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const colorStamp = JSON.stringify(
     props.occurrences.map((o) => [o.id, o.color]),
   );
+  useEffect(()=>{const scene=sceneRef.current?.scene;if(scene)scene.background=new THREE.Color(props.uiBackground||"#171d26");},[props.uiBackground]);
   const appearanceStamp=JSON.stringify(props.activeAppearance);
   useEffect(()=>{const scene=sceneRef.current;if(scene)syncOperationAppearance(scene.parts,displayedPreview.current,propsRef.current);},[appearanceStamp,props.movementGuide]);
   const refreshSelection = () => {
@@ -547,7 +553,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   useEffect(() => {
     const host = container.current!;
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color("#171d26");
+    scene.background = new THREE.Color(propsRef.current.uiBackground||"#171d26");
     const camera = new THREE.OrthographicCamera(-100, 100, 80, -80, 0.1, 10000);
     camera.up.set(0, 0, 1);
     camera.position.set(150, -220, 165);
@@ -563,7 +569,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       return;
     }
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(host.clientWidth, host.clientHeight);
+    renderer.setSize(Math.max(1,host.clientWidth), Math.max(1,host.clientHeight), false);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
@@ -664,10 +670,15 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
       for(const sign of [1,-1]){
         const endpoint=direction.clone().multiplyScalar(500*sign),axis=(['X','Y','Z'] as const)[index];
         const pickLine=new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(),endpoint]),new THREE.LineBasicMaterial({visible:false}));
-        pickLine.userData.worldAxis=axis;pickLine.userData.axisPick=true;
+        pickLine.userData.worldAxis=axis;pickLine.userData.axisPick=true;pickLine.userData.axisIndex=index;
         const stroke=wideLines([0,0,0,...endpoint.toArray()],color,sign>0?2:1.1,[]);
         stroke.material.opacity=sign>0?.85:.27;stroke.material.depthTest=true;stroke.renderOrder=1;
-        stroke.userData.worldAxis=axis;stroke.userData.baseColor=color;stroke.userData.axisSign=sign;
+        stroke.userData.worldAxis=axis;stroke.userData.baseColor=color;stroke.userData.axisSign=sign;stroke.userData.axisIndex=index;
+        // Reference axes are unbounded, unlike scene geometry. Keep their
+        // projected tails from terminating at the camera's near/far planes.
+        stroke.frustumCulled=false;
+        stroke.material.onBeforeCompile=shader=>{shader.vertexShader=shader.vertexShader.replace("gl_Position = clip;","clip.z = clamp(clip.z, -clip.w * 0.9999, clip.w * 0.9999); gl_Position = clip;");};
+        stroke.material.customProgramCacheKey=()=>"world-axis-depth-clamp-v1";
         axes.add(pickLine,stroke);
       }
     }
@@ -1269,22 +1280,40 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     };
     const movementGhost=new THREE.Group();scene.add(movementGhost);
     sceneRef.current = state;
+    // ResizeObserver can run after animation callbacks, just before paint.
+    // Resizing the WebGL buffer there clears the last frame and exposes a blank
+    // canvas until the next animation tick. Queue dimensions only; resize and
+    // redraw together below, so the browser never paints that cleared buffer.
+    let pendingSize: {width:number;height:number}|null=null;
     const observer = new ResizeObserver(() => {
-      state.width = host.clientWidth;
-      state.height = host.clientHeight;
-      if (!state.width || !state.height) return;
-      renderer.setSize(state.width, state.height);
-      const h = camera.top - camera.bottom;
-      camera.left = (-h * state.width) / state.height / 2;
-      camera.right = -camera.left;
-      camera.updateProjectionMatrix();
+      pendingSize={width:host.clientWidth,height:host.clientHeight};
     });
     observer.observe(host);
     let frame = 0;
     const render = () => {
       updateEdgePulseTime(performance.now()/1000);
       frame = requestAnimationFrame(render);
+      if(pendingSize){
+        const {width,height}=pendingSize;pendingSize=null;
+        if(width>0&&height>0&&(width!==state.width||height!==state.height)){
+          state.width=width;state.height=height;
+          renderer.setSize(width,height,false);
+          const h=camera.top-camera.bottom;
+          camera.left=(-h*width)/height/2;camera.right=-camera.left;
+          camera.updateProjectionMatrix();
+        }
+      }
       controls.update();
+      camera.updateMatrixWorld();
+      const originButton=worldOriginButton.current;
+      if(originButton){
+        const point=new THREE.Vector3().project(camera);
+        const visible=Number.isFinite(point.x)&&Number.isFinite(point.y)&&Math.abs(point.x)<=1&&Math.abs(point.y)<=1;
+        originButton.hidden=!visible;
+        if(visible){originButton.style.left=`${(point.x+1)*state.width/2}px`;originButton.style.top=`${(1-point.y)*state.height/2}px`;}
+      }
+      const axisScales=worldAxisScales(camera);
+      for(const child of axes.children){const scale=axisScales[child.userData.axisIndex];child.visible=scale>0;child.scale.setScalar(scale||1);}
       const current=propsRef.current;
       updateGridFade(camera);
       worldPlanes.visible=!!current.worldPlanePicking&&!!current.onWorldPlane;
@@ -1435,7 +1464,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     s.grid.visible =
       props.grid && !preview && (!props.sketch || !!props.sketchPlanePicking);
     s.axes.visible =
-      props.grid && (!props.sketch || !!props.sketchPlanePicking || props.sketch.tool==="dimension");
+      !props.sketch || !!props.sketchPlanePicking || props.sketch.tool==="dimension";
     s.parts.visible = !props.sketch || props.sketch.showComponents;
   }, [
     props.grid,
@@ -1913,6 +1942,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
   const selectedCount = visibleSelections.length;
   return (
     <>
+      {props.onWorldOrigin&&<button ref={worldOriginButton} hidden className="world-origin-point" aria-label="Select world origin" aria-pressed={!!props.selected?.worldOrigin} title="World origin · X 0, Y 0, Z 0 mm" onClick={e=>{e.stopPropagation();if(e.ctrlKey)props.onSelect({worldOrigin:true,occurrence:"",definition:"root"},false,true);else props.onWorldOrigin?.();}} onContextMenu={e=>e.preventDefault()}><svg width="18" height="18" viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="5"/><path d="M10 1v5m0 8v5M1 10h5m8 0h5"/><circle className="origin-center" cx="10" cy="10" r="1.4"/></svg></button>}
       {rendererError&&<div className="viewport-renderer-error" role="alert">
         <h2>3D graphics unavailable</h2>
         <p>This browser could not start WebGL 2. The design remains on the server; the workspace and file menus are still available.</p>
@@ -1998,28 +2028,28 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
                 : ""}
         </small>
       </div>
-      {selectedOccurrence && !props.sketch && !props.measurePoints && (
+      {(selectedOccurrence || props.selected?.worldOrigin || props.editingContext) && !props.sketch && !props.measurePoints && (
         <div className="viewport-selection-summary" aria-live="polite">
           <span className="active-part-marker" />
           <span>
             <small>
-              {props.operationDraft
+              {props.editingContext ? props.editingContext.label : props.selected?.worldOrigin ? "WORLD REFERENCE" : props.operationDraft
                 ? "PICKED REFERENCE"
-                : selectedOccurrence.kind === "assembly"
+                : selectedOccurrence?.kind === "assembly"
                   ? "ACTIVE GROUP"
-                  : selectedOccurrence.purpose === "tool"
+                  : selectedOccurrence?.purpose === "tool"
                     ? "ACTIVE TOOL BODY"
                     : "ACTIVE COMPONENT"}
             </small>
-            <strong>{selectedOccurrence.name}</strong>
+            <strong>{props.editingContext?.name||(props.selected?.worldOrigin?"World origin":selectedOccurrence?.name)}</strong>
           </span>
-          <b>
-            {selectedCount > 1
+          {props.editingContext ? <button className="selection-summary-done" disabled={props.editingContext.disabled} onClick={props.editingContext.onDone}>Done</button> : <b>
+            {props.selected?.worldOrigin ? "X 0 · Y 0 · Z 0 mm" : selectedCount > 1
               ? `${selectedCount} ${edgeSelected ? "edges" : props.selected?.face ? "faces" : "components"} selected`
-              : selectedOccurrence.kind === "assembly"
+              : selectedOccurrence?.kind === "assembly"
                 ? "Group selected"
                 : `${entityName(props.selected, props.geometry[props.selected?.definition || ""])} selected`}
-          </b>
+          </b>}
         </div>
       )}
       <MoveAxisHandles ref={moveAxisHandles} target={props.placementTarget} rows={props.occurrences} geometry={props.geometry} guide={props.movementGuide} onSlide={props.onMoveAxisSlide} onDistance={props.onMoveDistance}/>

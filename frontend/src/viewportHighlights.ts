@@ -231,6 +231,7 @@ export function hoverIntent(
     return item.face?.type === "PLANE"
       ? "Click uses this face as the support plane"
       : "Choose a planar support face";
+  if (pick === "target") return "Click chooses this body to modify";
   if (pick === "origin") return `Click uses this ${kind} as Tool Origin`;
   if (pick === "profile" && draft?.profile === "body")
     return "Click uses this component as Tool Profile";

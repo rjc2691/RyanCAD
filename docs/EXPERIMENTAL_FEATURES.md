@@ -27,9 +27,29 @@ Switching off restores standard amber component styling immediately. **Reset thi
 
 Example feedback: “Slow down active-component-appearance” or “Use two pulses per edge and a softer glow.”
 
+## Dark UI palette
+
+Stable ID: `dark-ui-palette`. Default: off, with Midnight selected for the next trial.
+
+Enable the experiment and expand its settings to choose a palette using the color swatches:
+
+| Palette | Surfaces | Accent |
+| --- | --- | --- |
+| Midnight | Deep navy | Ice blue |
+| Graphite | Warm charcoal | Muted copper |
+| Tide | Deep teal | Sea glass |
+| Aubergine | Smoky plum | Lavender |
+| Forest | Dark olive | Sage |
+| Monochrome Light | Lighter charcoal | Silver |
+| Monochrome Dark | Near-black | Soft gray |
+
+Changes apply immediately to the application chrome, panels, inputs, menus and viewport background. Geometry colors, axis colors, selected objects and operation reference colors keep their existing meaning. Switching off restores the standard theme while retaining the selected palette for the next trial. Reset switches off and restores the Midnight choice. This preference is browser-local and independent of the active workspace.
+
+`themes.ts` holds the palette registry and root CSS-variable application; `themes.css` scopes the optional chrome rules to the root theme attribute. The viewport updates its background without replacing the renderer, camera or geometry. Both monochrome palettes use neutral grayscale UI tokens; geometry and reference colors remain meaningful. `scripts/ui_theme_palette_check.mjs` checks all seven palettes, persistence, disabled controls, original-theme restoration and unchanged document intent on an isolated server.
+
 ## Promoted: Toolbar between sidebars
 
-The toolbar layout is now permanent and no longer appears in this menu. It fits between sidebars when space permits and uses the full row when its buttons need more width. The old `sidebar-toolbar-layout` values are ignored without changing other experiment preferences. See [Toolbar customization](TOOLBAR_CUSTOMIZATION.md).
+The toolbar layout is now permanent and no longer appears in this menu. Its background always spans the window; buttons sit inside the sidebar margins when space permits. Those margins shrink gradually as buttons need more room, with full-width scrolling only when necessary. The old `sidebar-toolbar-layout` values are ignored without changing other experiment preferences. See [Toolbar customization](TOOLBAR_CUSTOMIZATION.md).
 
 ## Implementation and lifecycle
 

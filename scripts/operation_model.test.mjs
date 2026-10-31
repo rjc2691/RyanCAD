@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {initialOperation,operationPathPickProblem,withSketchProfile,applyPreset,operationCommand,operationProblem,operationFrame,inferOperationSelection,inferFacePath,reference} from '../frontend/src/operations/operationModel.ts';
+import {withToolEffect,withOperationTarget,initialOperation,operationPathPickProblem,withSketchProfile,applyPreset,operationCommand,operationProblem,operationFrame,inferOperationSelection,inferFacePath,reference} from '../frontend/src/operations/operationModel.ts';
 const identity=[[1,0,0,0],[0,1,0,0],[0,0,1,0],[0,0,0,1]];
 const edge={signature:'LINE:corner',type:'LINE',start:[0,0,0],end:[0,0,10],midpoint:[0,0,5],tangent:[0,0,1],center:[0,0,5]};
 const face={id:'face_0',signature:'PLANE:top',type:'PLANE',normal:[0,0,1],center:[0,0,10]};
@@ -221,4 +221,31 @@ test('replacing a corner-finishing profile with a sketch returns to ordinary ext
  const s=state();s.document.features.sk={id:'sk',type:'sketch',owner:'root',name:'Plate outline'};
  const d=withSketchProfile(initialOperation({definition:'p',occurrence:'i',edge},s),s,'sk');
  assert.equal(d.target.definition,'p');assert.equal(d.motion,'linear');assert.equal(d.direction,'normal');assert.equal(d.pathReference,null);
+});
+
+test('world origin starts a new operation with a pinned point, never a root body target',()=>{
+ const origin={worldOrigin:true,occurrence:'',definition:'root'};
+ const d=initialOperation(origin,state());assert.equal(d.target,null);assert.equal(d.result,'new');assert(d.originPinned);assert(d.reference.selection.worldOrigin);assert.equal(operationCommand(d).target,undefined);
+});
+
+
+test('explicit modify effect adopts a picked face body while blank creation and locked targets stay unchanged',()=>{
+ const s=state(),selection={definition:'p',occurrence:'i',face};
+ const d=inferOperationSelection(initialOperation(null,s),selection,s).draft;assert.equal(d.target,null);assert.equal(d.result,'new');
+ for(const result of ['auto','add','cut','intersect']){const next=withToolEffect(d,result,s);assert.deepEqual(next.target,{definition:'p',occurrence:'i'});assert.equal(next.result,result);assert.equal(next.profileReference,d.profileReference);}
+ assert.equal(withToolEffect(d,'new',s).target,null);
+ const locked=initialOperation(selection,s),other={definition:'other',occurrence:'elsewhere',face};s.document.components.other={id:'other',kind:'solid',feature_ids:[]};s.occurrences.push({id:'elsewhere',definition:'other',matrix:identity});
+ const replaced=inferOperationSelection(locked,other,s).draft;assert.equal(withToolEffect(replaced,'cut',s).target.definition,'p');assert.equal(withOperationTarget(locked,other,s),locked);
+});
+
+test('target picking fills an empty face profile and rejects read-only or ambiguous assembled bodies',()=>{
+ const s=state(),blank=withToolEffect(initialOperation(null,s),'cut',s);assert.equal(blank.target,null);
+ const next=withOperationTarget(blank,{definition:'p',occurrence:'i',face},s);assert.equal(next.target.definition,'p');assert.equal(next.profileReference.selection.face.signature,face.signature);assert.equal(next.result,'cut');
+ s.document.components.p.read_only=true;assert.equal(withOperationTarget(blank,{definition:'p',occurrence:'i',face},s).target,null);
+ s.document.components.part={id:'part',kind:'assembly'};s.occurrences.push({id:'assembly',definition:'part',kind:'assembly',matrix:identity});assert.equal(withOperationTarget(blank,{definition:'part',occurrence:'assembly'},s).target,null);
+});
+
+test('mixed face sources and placed solid tools require a deliberate target pick',()=>{
+ const s=state();s.document.components.q={id:'q',kind:'solid',feature_ids:[]};s.occurrences.push({id:'j',definition:'q',matrix:identity});let d=inferOperationSelection(initialOperation(null,s),{definition:'p',occurrence:'i',face},s).draft;d=inferOperationSelection(d,{definition:'q',occurrence:'j',face},s,true).draft;assert.equal(withToolEffect(d,'add',s).target,null);
+ const body={...d,profile:'body',profileReference:reference({definition:'p',occurrence:'i'},s)};assert.equal(withToolEffect(body,'cut',s).target,null);
 });

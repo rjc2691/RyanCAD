@@ -1,0 +1,37 @@
+/* Optional UI skins. Disabling the experiment removes the root attribute,
+   restoring the existing styles without filters or changes to model colors. */
+html[data-ui-theme] {
+  color-scheme:dark;
+  --panel:var(--theme-panel); --line:var(--theme-line); --muted:var(--theme-muted);
+  --accent:var(--theme-accent); --soft:var(--theme-accent); --hover:var(--theme-raised);
+  color:var(--theme-text);background:var(--theme-base);
+}
+html[data-ui-theme] :is(body,.app-shell,.app-header,.tool-strip,.timeline-panel) {background:var(--theme-base);color:var(--theme-text);border-color:var(--theme-line);}
+html[data-ui-theme] :is(.left-panel,.inspector-panel,.operation-panel,.operation-panel-host,.operation-footer,.sketch-commit,.sketch-panel-actions,.report-save-row) {background:var(--theme-panel);color:var(--theme-text);border-color:var(--theme-line);}
+html[data-ui-theme] :is(.modal,.experimental-popover,.bug-reports-popover,.file-action-menu,.account-dropdown,.design-context-menu,.section-controls,.parameter-suggestions) {background:var(--theme-panel);color:var(--theme-text);border-color:var(--theme-line);}
+html[data-ui-theme] :is(.modal header,.modal footer,.timeline-panel>header,.operation-header,.operation-section,.project-structure .section-heading,.structure-section,.sketch-tree,.experiment-settings,.experimental-popover section,.experimental-popover footer) {border-color:var(--theme-line);}
+html[data-ui-theme] :is(input:not([type=color]):not([type=range]):not([type=checkbox]):not([type=radio]),select,textarea) {background:var(--theme-input);color:var(--theme-text);border-color:var(--theme-line);}
+html[data-ui-theme] :is(input,select,textarea):focus-visible {outline-color:var(--theme-accent);}
+html[data-ui-theme] :is(.tool-button,.inactive-design-name,.layout-name,.structure-name,.sketch-tree-name,.tool-library-row button,.design-tree-name,.sidebar-list-label,.workspace-tree-title,.operation-header h2,.modal h2) {color:var(--theme-text)!important;}
+html[data-ui-theme] :is(.tool-button>svg,.structure-section>svg,.section-heading>svg,.design-layout-children .structure-layout>svg,.inactive-design-name>svg,.design-category,.structure-section,.section-heading,.field>span,.eyebrow,.experimental-popover p,.experimental-popover small,.experimental-popover footer) {color:var(--theme-muted);}
+html[data-ui-theme] :is(.tool-button,.icon-button,.inactive-design-name,.layout-name,.file-action-menu>button,.account-dropdown>button,.design-context-menu>button):hover:not(:disabled) {background:var(--theme-raised);color:var(--theme-text);}
+html[data-ui-theme] :is(.button.secondary,.import-button,.history-lane-label,.workspace-design-row,.experiment-toggle,.history-resize-handle,.design-structure-card,.design-overview-icon,.structure-form) {background:var(--theme-raised);border-color:var(--theme-line);color:var(--theme-text);}
+html[data-ui-theme] :is(.button.primary,.export-button) {background:var(--theme-accent);border-color:var(--theme-accent);color:var(--theme-base);}
+html[data-ui-theme] :is(.workspace-design-heading.active,.design-layout-children .structure-layout[data-active=true],.workspace-manager-list .workspace-design-row[data-active=true],.experiment-toggle[aria-checked=true]) {background:var(--theme-selection);color:var(--theme-text);}
+html[data-ui-theme] :is(.workspace-design-heading.active,.design-layout-children .structure-layout[data-active=true]) {box-shadow:inset 2px 0 color-mix(in srgb,var(--theme-accent) 55%,var(--theme-panel));}
+html[data-ui-theme] .left-panel {scrollbar-color:var(--theme-muted) var(--theme-panel);}
+html[data-ui-theme] .left-panel::-webkit-scrollbar-thumb {background:var(--theme-line);border-color:var(--theme-panel);}
+html[data-ui-theme] :is(.parameters-tool,.brand>svg,.text-button):hover {color:var(--theme-accent);}
+.theme-palette {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.experimental-popover .theme-choice {display:grid;grid-template-columns:auto 1fr;gap:6px;align-items:center;padding:10px;border:1px solid var(--line);border-radius:5px;cursor:pointer;background:var(--panel);}
+.experimental-popover .theme-choice[data-selected=true] {border-color:var(--accent);}
+.theme-choice:focus-within {outline:1px solid var(--accent);outline-offset:2px;}
+.theme-choice:has(input:disabled) {opacity:.5;cursor:default;}
+.theme-choice input {accent-color:var(--accent);margin:0;}
+.experimental-popover .theme-choice small {grid-column:1/-1;font-size:10px;line-height:1.5;}
+.theme-swatches {grid-column:1/-1;display:flex;gap:0;overflow:hidden;border-radius:3px;border:1px solid #ffffff20;height:20px;}
+.theme-swatches i {flex:1;}
+
+html[data-ui-theme] .inspector-section {border-color:var(--theme-line);}
+html[data-ui-theme] :is(.design-inspector .design-overview-heading h2,.design-structure-card span,.design-structure-card>strong,.section-heading h3) {color:var(--theme-text);}
+html[data-ui-theme] :is(.design-structure-card small,.design-properties .field-help,.design-layout-counts,.design-library-summary,.design-parameters-link) {color:var(--theme-muted);}

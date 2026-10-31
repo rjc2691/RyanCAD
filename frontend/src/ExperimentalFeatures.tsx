@@ -1,3 +1,4 @@
+import {DARK_UI_PALETTE_ID,darkThemes,defaultDarkPalette} from "./themes";
 import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { shortcutAttributes, shortcutLabel } from "./toolbarShortcuts";
@@ -68,6 +69,8 @@ export default function ExperimentalFeatures({
   const button = useRef<HTMLButtonElement>(null),
     panel = useRef<HTMLDivElement>(null);
   const setting = value[ACTIVE_APPEARANCE_ID];
+  const palette=value[DARK_UI_PALETTE_ID];
+  const updatePalette=(patch:Partial<typeof palette>)=>onChange({...value,[DARK_UI_PALETTE_ID]:{...palette,...patch}});
   const update = (patch: Partial<typeof setting>) =>
     onChange({ ...value, [ACTIVE_APPEARANCE_ID]: { ...setting, ...patch } });
   const close = () => {
@@ -126,7 +129,7 @@ export default function ExperimentalFeatures({
       >
         <FlaskConical size={18} />
         <span>Experimental features</span>
-        {setting.enabled && (
+        {(setting.enabled || palette.enabled) && (
           <i className="experiment-enabled-dot" />
         )}
       </button>
@@ -252,6 +255,19 @@ export default function ExperimentalFeatures({
                 <RotateCcw size={13} />
                 Reset this experiment
               </button>
+            </ExperimentSection>
+            <ExperimentSection id={DARK_UI_PALETTE_ID} title="Dark UI palette" enabled={palette.enabled} onToggle={()=>updatePalette({enabled:!palette.enabled})}>
+              <code>{DARK_UI_PALETTE_ID}</code>
+              <p>Try a palette across panels, tools, menus and the viewport. Off restores the standard theme.</p>
+              <div className="theme-palette" role="radiogroup" aria-label="Dark UI theme">
+                {darkThemes.map(theme=><label className="theme-choice" key={theme.id} title={theme.description} data-selected={palette.theme===theme.id}>
+                  <input type="radio" name="dark-ui-theme" value={theme.id} checked={palette.theme===theme.id} disabled={!palette.enabled} onChange={()=>updatePalette({theme:theme.id})}/>
+                  <span>{theme.name}</span><span className="theme-swatches" aria-hidden="true">{[theme.base,theme.panel,theme.raised,theme.accent].map((color,i)=><i key={i} style={{background:color}}/>)}</span>
+                  <small>{theme.description}</small>
+                </label>)}
+              </div>
+              <small>Selection and operation reference colors keep their existing meaning. Saved in this browser.</small>
+              <button className="text-button" onClick={()=>onChange({...value,[DARK_UI_PALETTE_ID]:defaultDarkPalette()})}><RotateCcw size={13}/>Reset this experiment</button>
             </ExperimentSection>
             <footer>
               Each experiment is independent. Refer to its ID when requesting

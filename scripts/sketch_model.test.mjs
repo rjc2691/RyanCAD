@@ -67,3 +67,9 @@ test('sketch tool shortcuts clear an unfinished chain without losing geometry or
  const next=chooseSketchTool(d,SKETCH_TOOL_KEYS.r);assert.equal(next.tool,'rectangle');assert.deepEqual(next.pending,[]);assert.equal(next.cursor,null);assert.equal(next.entities,d.entities);assert.equal(next.gridSnapEnabled,false);
  assert.equal(new Set(Object.values(SKETCH_TOOL_KEYS)).size,11);
 });
+
+test('world origin can be projected into an offset sketch without a component reference',()=>{
+ const d={...startSketch(state),frame:{origin:[10,20,30],normal:[0,0,1],u:[1,0,0],v:[0,1,0]},construction:false};
+ const projected=projectSketchReference(d,{worldOrigin:true,occurrence:'',definition:'root'},state);
+ assert.equal(projected.entities.length,1);assert.equal(projected.entities[0].type,'point');assert.equal(projected.entities[0].x,-10);assert.equal(projected.entities[0].y,-20);assert(!projected.construction);
+});

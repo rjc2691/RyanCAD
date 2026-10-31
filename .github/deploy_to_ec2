@@ -1,0 +1,35 @@
+# This workflow will restart the systemctl for the app and should update and rebuild the app
+# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
+
+name: Python application
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Debug all secrets
+        run: |
+          echo "HOST length: ${#HOST}"
+          echo "USER length: ${#USER}"
+          echo "KEY length: ${#KEY}"
+        env:
+          HOST: ${{ secrets.EC2_HOST }}
+          USER: ${{ secrets.EC2_USER }}
+          KEY: ${{ secrets.EC2_SSH_KEY }}   
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY  }}
+          script: |
+            cd /home/ec2-user/RyanCAD
+            sudo systemctl restart ryancad

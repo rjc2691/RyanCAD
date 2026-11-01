@@ -1,5 +1,6 @@
 export type WorkspaceInfo = {
   name: string;
+  public?:boolean;
   starter_design?:string|null;
   active_design: string;
   workspace_code: string;

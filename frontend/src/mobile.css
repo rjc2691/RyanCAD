@@ -18,6 +18,7 @@
 }
 
 @media (max-width: 999px) {
+  .left-panel {--sidebar-disclosure-width:36px;}
   .header-right .account-menu .avatar {display:grid;width:36px;height:36px;}
   .account-dropdown > button {min-height:44px;}
   .file-actions {gap:10px;}
@@ -152,9 +153,6 @@
   .tool-strip kbd {
     display: none;
   }
-  .toolbar-spacer {
-    flex: 0 0 8px;
-  }
 
   #root
     .app-shell
@@ -209,6 +207,8 @@
   .inspector-scroll {
     padding: 0 14px;
   }
+  .inspector-collapse-button {top:14px;right:7px;}
+  .design-inspector .design-overview-heading,.inspector-scroll .component-heading {padding-right:40px;}
   .inspector-scroll .button,
   .operation-panel .button,
   .group-commit button {
@@ -486,4 +486,19 @@
     width: 70px;
     height: 65px;
   }
+}
+
+@media(max-width:999px){
+  html,body,#root {width:100%;height:100%;min-height:0;}
+  #root > .app-shell {position:fixed;inset:0;align-content:stretch;}
+  .tool-strip {overflow:visible;}
+  .tool-strip > .tool-strip-content {padding:0 2px;overflow:visible;}
+  .toolbar-overflow-toggle {height:40px;}
+  .viewport-view-navigation > .view-controls {margin-top:-10px;}
+}
+
+@media(max-width:999px){
+  .button.agent-button {position:relative;}
+  .button.agent-button > .agent-status-dot {display:block;position:absolute;right:6px;bottom:6px;}
+  .primitive-parameters {margin-left:54px;}
 }

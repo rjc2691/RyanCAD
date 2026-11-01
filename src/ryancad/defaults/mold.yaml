@@ -1,0 +1,1606 @@
+schema_version: '0.2'
+id: bundled_mold
+name: Silicone mold · printed tooling
+revision: 0
+display_units: mm
+created_at: '2026-11-01T07:45:16.291337+00:00'
+modified_at: '2026-11-01T07:45:16.292339+00:00'
+parameters:
+  p_d9d809db1c83:
+    id: p_d9d809db1c83
+    name: Concrete casting diameter
+    named: true
+    owner: root
+    kind: length
+    expression: '44'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_96646f7239ba:
+    id: p_96646f7239ba
+    name: Concrete casting height
+    named: true
+    owner: root
+    kind: length
+    expression: '30'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_739f43640127:
+    id: p_739f43640127
+    name: Silicone wall allowance
+    named: true
+    owner: root
+    kind: length
+    expression: '8'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_b74486d0fd30:
+    id: p_b74486d0fd30
+    name: Silicone top allowance
+    named: true
+    owner: root
+    kind: length
+    expression: '10'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_cba1aaf55e7b:
+    id: p_cba1aaf55e7b
+    name: Printed form wall
+    named: true
+    owner: root
+    kind: length
+    expression: '10'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_1e01517832e0:
+    id: p_1e01517832e0
+    name: Tooling base thickness
+    named: true
+    owner: root
+    kind: length
+    expression: '6'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_bbfc23cd285d:
+    id: p_bbfc23cd285d
+    name: Diametral fit clearance
+    named: true
+    owner: root
+    kind: length
+    expression: '0.3'
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_fd5fca98861e:
+    id: p_fd5fca98861e
+    name: Parting gap
+    named: true
+    owner: root
+    kind: length
+    expression: '0.25'
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_c86d806eda68:
+    id: p_c86d806eda68
+    name: Alignment pin diameter
+    named: true
+    owner: root
+    kind: length
+    expression: '5'
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_8621e6d40a8a:
+    id: p_8621e6d40a8a
+    name: Alignment socket diameter
+    named: true
+    owner: root
+    kind: length
+    expression: p_c86d806eda68 + p_bbfc23cd285d
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_6da7111e9c8e:
+    id: p_6da7111e9c8e
+    name: Silicone outer diameter
+    named: true
+    owner: root
+    kind: length
+    expression: p_d9d809db1c83 + 2 * p_739f43640127
+    category: Derived envelope
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_f457539586c4:
+    id: p_f457539586c4
+    name: Form outer length
+    named: true
+    owner: root
+    kind: length
+    expression: p_6da7111e9c8e + 2 * p_cba1aaf55e7b
+    category: Derived envelope
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_ce322e6767d3:
+    id: p_ce322e6767d3
+    name: Form height
+    named: true
+    owner: root
+    kind: length
+    expression: p_96646f7239ba + p_b74486d0fd30
+    category: Derived envelope
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a2a4b58df80f:
+    id: p_a2a4b58df80f
+    name: Master locating peg diameter
+    named: true
+    owner: root
+    kind: length
+    expression: '8'
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_f381cf389c76:
+    id: p_f381cf389c76
+    name: Master socket diameter
+    named: true
+    owner: root
+    kind: length
+    expression: p_a2a4b58df80f + p_bbfc23cd285d
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_d0e8557ca19a:
+    id: p_d0e8557ca19a
+    name: Base plate · length
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: p_f457539586c4 + quantity(10, 'mm')
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_7238798c2ec4:
+    id: p_7238798c2ec4
+    name: Base plate · width
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: p_f457539586c4 + quantity(10, 'mm')
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_9fa56aee14e1:
+    id: p_9fa56aee14e1
+    name: Base plate · x
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_f949424bbac5:
+    id: p_f949424bbac5
+    name: Base plate · y
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_5d222f42abaf:
+    id: p_5d222f42abaf
+    name: Base plate · z
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_9dcc7f20fe22:
+    id: p_9dcc7f20fe22
+    name: Alignment post -1/-1 · height
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '4'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_04b467179f0c:
+    id: p_04b467179f0c
+    name: Alignment post -1/-1 · x
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: -1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_9e3c25e167f0:
+    id: p_9e3c25e167f0
+    name: Alignment post -1/-1 · y
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: -1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a690196b7afb:
+    id: p_a690196b7afb
+    name: Alignment post -1/+1 · height
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '4'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_049b4b7ad0a8:
+    id: p_049b4b7ad0a8
+    name: Alignment post -1/+1 · x
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: -1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_95d0c789a3f7:
+    id: p_95d0c789a3f7
+    name: Alignment post -1/+1 · y
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: 1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_22006e738855:
+    id: p_22006e738855
+    name: Alignment post +1/-1 · height
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '4'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_5541c7e6e781:
+    id: p_5541c7e6e781
+    name: Alignment post +1/-1 · x
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: 1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a028dc516375:
+    id: p_a028dc516375
+    name: Alignment post +1/-1 · y
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: -1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_63b454feb1c5:
+    id: p_63b454feb1c5
+    name: Alignment post +1/+1 · height
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '4'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_fb983da745ec:
+    id: p_fb983da745ec
+    name: Alignment post +1/+1 · x
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: 1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_fde2f662991a:
+    id: p_fde2f662991a
+    name: Alignment post +1/+1 · y
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: 1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_66abdc851702:
+    id: p_66abdc851702
+    name: Master locating socket · height
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '3.1'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_ed028b156177:
+    id: p_ed028b156177
+    name: Master locating socket · x
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_c6db8f2e89dd:
+    id: p_c6db8f2e89dd
+    name: Master locating socket · y
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_54a50405573f:
+    id: p_54a50405573f
+    name: Master locating socket · z
+    named: false
+    owner: part_91656c66931a
+    kind: length
+    expression: p_1e01517832e0 - quantity(3, 'mm')
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_063d672bd46b:
+    id: p_063d672bd46b
+    name: Form half stock · length
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: p_f457539586c4 / 2
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_11f7c37b0276:
+    id: p_11f7c37b0276
+    name: Form half stock · x
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: -1 * (p_f457539586c4 / 4 + p_fd5fca98861e / 2)
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_70c00909d955:
+    id: p_70c00909d955
+    name: Form half stock · y
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_4ea7e7080928:
+    id: p_4ea7e7080928
+    name: Silicone outer cavity · height
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: p_ce322e6767d3 + quantity(2, 'mm')
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a00e8f13fac3:
+    id: p_a00e8f13fac3
+    name: Silicone outer cavity · x
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_1bef02ff40b3:
+    id: p_1bef02ff40b3
+    name: Silicone outer cavity · y
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_811251fc8ae7:
+    id: p_811251fc8ae7
+    name: Silicone outer cavity · z
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: p_1e01517832e0 - quantity(1, 'mm')
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_ef0e4567d44d:
+    id: p_ef0e4567d44d
+    name: Base alignment sockets · depth
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: '10'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_238efa8c7592:
+    id: p_238efa8c7592
+    name: Base alignment sockets · x
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: -1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_45a8589f3d40:
+    id: p_45a8589f3d40
+    name: Base alignment sockets · y
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: -(p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_9675ace71c66:
+    id: p_9675ace71c66
+    name: Base alignment sockets · z
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: '0'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_516ae57d4475:
+    id: p_516ae57d4475
+    name: Base alignment sockets · count x
+    named: false
+    owner: part_14aedfcb5877
+    kind: count
+    expression: '1'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_3c89efe2fee0:
+    id: p_3c89efe2fee0
+    name: Base alignment sockets · count y
+    named: false
+    owner: part_14aedfcb5877
+    kind: count
+    expression: '2'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_006d6274ce22:
+    id: p_006d6274ce22
+    name: Base alignment sockets · spacing x
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: '20'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_3f71e905cc28:
+    id: p_3f71e905cc28
+    name: Base alignment sockets · spacing y
+    named: false
+    owner: part_14aedfcb5877
+    kind: length
+    expression: p_f457539586c4 - quantity(14, 'mm')
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_6d6f0d9d4597:
+    id: p_6d6f0d9d4597
+    name: Form half stock · length
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: p_f457539586c4 / 2
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_aa0a619ac307:
+    id: p_aa0a619ac307
+    name: Form half stock · x
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: 1 * (p_f457539586c4 / 4 + p_fd5fca98861e / 2)
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a6a99ac1e1f3:
+    id: p_a6a99ac1e1f3
+    name: Form half stock · y
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_2970db8a84e9:
+    id: p_2970db8a84e9
+    name: Silicone outer cavity · height
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: p_ce322e6767d3 + quantity(2, 'mm')
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_8d9b02db14d4:
+    id: p_8d9b02db14d4
+    name: Silicone outer cavity · x
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a87561b5472d:
+    id: p_a87561b5472d
+    name: Silicone outer cavity · y
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_8b91cdfb0aa6:
+    id: p_8b91cdfb0aa6
+    name: Silicone outer cavity · z
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: p_1e01517832e0 - quantity(1, 'mm')
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_0cb01a81fb7f:
+    id: p_0cb01a81fb7f
+    name: Base alignment sockets · depth
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: '10'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_fc0664d6a458:
+    id: p_fc0664d6a458
+    name: Base alignment sockets · x
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: 1 * (p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_bd2651f60754:
+    id: p_bd2651f60754
+    name: Base alignment sockets · y
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: -(p_f457539586c4 / 2 - quantity(7, 'mm'))
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_43d1f77207f1:
+    id: p_43d1f77207f1
+    name: Base alignment sockets · z
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: '0'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_0a2e48241611:
+    id: p_0a2e48241611
+    name: Base alignment sockets · count x
+    named: false
+    owner: part_6f9659f0694d
+    kind: count
+    expression: '1'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_925469978a3e:
+    id: p_925469978a3e
+    name: Base alignment sockets · count y
+    named: false
+    owner: part_6f9659f0694d
+    kind: count
+    expression: '2'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_bae27ce4203c:
+    id: p_bae27ce4203c
+    name: Base alignment sockets · spacing x
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: '20'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_442c823d2d41:
+    id: p_442c823d2d41
+    name: Base alignment sockets · spacing y
+    named: false
+    owner: part_6f9659f0694d
+    kind: length
+    expression: p_f457539586c4 - quantity(14, 'mm')
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a01f890d68b3:
+    id: p_a01f890d68b3
+    name: Master locating peg · height
+    named: false
+    owner: part_fd9f6e182a9d
+    kind: length
+    expression: '3'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_4cf12e7c4015:
+    id: p_4cf12e7c4015
+    name: Master locating peg · x
+    named: false
+    owner: part_fd9f6e182a9d
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_eaeaa659c58d:
+    id: p_eaeaa659c58d
+    name: Master locating peg · y
+    named: false
+    owner: part_fd9f6e182a9d
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_af9f811be279:
+    id: p_af9f811be279
+    name: Master locating peg · z
+    named: false
+    owner: part_fd9f6e182a9d
+    kind: length
+    expression: p_1e01517832e0 - quantity(3, 'mm')
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_b44c02ba8267:
+    id: p_b44c02ba8267
+    name: Concrete shape master · x
+    named: false
+    owner: part_fd9f6e182a9d
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_70f7e2e90be4:
+    id: p_70f7e2e90be4
+    name: Concrete shape master · y
+    named: false
+    owner: part_fd9f6e182a9d
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+components:
+  root:
+    id: root
+    name: Design
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_91656c66931a:
+    id: part_91656c66931a
+    name: Tooling base
+    kind: solid
+    purpose: part
+    feature_ids:
+    - ft_6e7cc91ce384
+    - ft_f415d87dde29
+    - ft_76eb97f42568
+    - ft_d22021ab1799
+    - ft_c65fe325107c
+    - ft_2ff4aca1f702
+    color: '#657487'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_14aedfcb5877:
+    id: part_14aedfcb5877
+    name: Left removable form
+    kind: solid
+    purpose: part
+    feature_ids:
+    - ft_810d8fbcc7ec
+    - ft_c122d0319157
+    - ft_4a761b63aba1
+    color: '#689ac5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_6f9659f0694d:
+    id: part_6f9659f0694d
+    name: Right removable form
+    kind: solid
+    purpose: part
+    feature_ids:
+    - ft_00f71037f5cd
+    - ft_a3cf7f5ebb2c
+    - ft_f0ca533e2ddb
+    color: '#70a997'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_fd9f6e182a9d:
+    id: part_fd9f6e182a9d
+    name: Removable casting master
+    kind: solid
+    purpose: part
+    feature_ids:
+    - ft_c86356047b53
+    - ft_1fd21999b7a8
+    color: '#c5aa68'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  layout_bd81a954895a:
+    id: layout_bd81a954895a
+    name: Layout 1
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: layout
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_0a7222a7d945:
+    id: part_0a7222a7d945
+    name: Tooling base
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: part
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_5078e51559ae:
+    id: part_5078e51559ae
+    name: Left removable form
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: part
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_b57817b0da87:
+    id: part_b57817b0da87
+    name: Right removable form
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: part
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_0d208863b631:
+    id: part_0d208863b631
+    name: Removable casting master
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: part
+    group_kind: null
+    read_only: false
+    reference_source: null
+instances:
+  inst_c69fc43c37e4:
+    id: inst_c69fc43c37e4
+    name: Tooling base
+    definition: part_0a7222a7d945
+    parent: layout_bd81a954895a
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_91fbd1267185:
+    id: inst_91fbd1267185
+    name: Left removable form
+    definition: part_5078e51559ae
+    parent: layout_bd81a954895a
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_edc88aeba3da:
+    id: inst_edc88aeba3da
+    name: Right removable form
+    definition: part_b57817b0da87
+    parent: layout_bd81a954895a
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_5c683c9da3af:
+    id: inst_5c683c9da3af
+    name: Removable casting master
+    definition: part_0d208863b631
+    parent: layout_bd81a954895a
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_3738f9676424:
+    id: inst_3738f9676424
+    name: Layout 1
+    definition: layout_bd81a954895a
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_40d527503648:
+    id: inst_40d527503648
+    name: Tooling base
+    definition: part_0a7222a7d945
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_76658268e774:
+    id: inst_76658268e774
+    name: Tooling base
+    definition: part_91656c66931a
+    parent: part_0a7222a7d945
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_4618800adb7d:
+    id: inst_4618800adb7d
+    name: Left removable form
+    definition: part_5078e51559ae
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_4c105e67f581:
+    id: inst_4c105e67f581
+    name: Left removable form
+    definition: part_14aedfcb5877
+    parent: part_5078e51559ae
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_380e2e7c2867:
+    id: inst_380e2e7c2867
+    name: Right removable form
+    definition: part_b57817b0da87
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_0a3e8d0c0115:
+    id: inst_0a3e8d0c0115
+    name: Right removable form
+    definition: part_6f9659f0694d
+    parent: part_b57817b0da87
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_c9c40b5ec9b0:
+    id: inst_c9c40b5ec9b0
+    name: Removable casting master
+    definition: part_0d208863b631
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_f42eddd20e9a:
+    id: inst_f42eddd20e9a
+    name: Removable casting master
+    definition: part_fd9f6e182a9d
+    parent: part_0d208863b631
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+features:
+  ft_6e7cc91ce384:
+    id: ft_6e7cc91ce384
+    owner: part_91656c66931a
+    name: Base plate
+    type: box
+    parameters:
+      length: p_d0e8557ca19a
+      width: p_7238798c2ec4
+      height: p_1e01517832e0
+      x: p_9fa56aee14e1
+      y: p_f949424bbac5
+      z: p_5d222f42abaf
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.292339+00:00'
+  ft_f415d87dde29:
+    id: ft_f415d87dde29
+    owner: part_91656c66931a
+    name: Alignment post -1/-1
+    type: cylinder
+    parameters:
+      diameter: p_c86d806eda68
+      height: p_9dcc7f20fe22
+      x: p_04b467179f0c
+      y: p_9e3c25e167f0
+      z: p_1e01517832e0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.293339+00:00'
+  ft_76eb97f42568:
+    id: ft_76eb97f42568
+    owner: part_91656c66931a
+    name: Alignment post -1/+1
+    type: cylinder
+    parameters:
+      diameter: p_c86d806eda68
+      height: p_a690196b7afb
+      x: p_049b4b7ad0a8
+      y: p_95d0c789a3f7
+      z: p_1e01517832e0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.293339+00:00'
+  ft_d22021ab1799:
+    id: ft_d22021ab1799
+    owner: part_91656c66931a
+    name: Alignment post +1/-1
+    type: cylinder
+    parameters:
+      diameter: p_c86d806eda68
+      height: p_22006e738855
+      x: p_5541c7e6e781
+      y: p_a028dc516375
+      z: p_1e01517832e0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.293339+00:00'
+  ft_c65fe325107c:
+    id: ft_c65fe325107c
+    owner: part_91656c66931a
+    name: Alignment post +1/+1
+    type: cylinder
+    parameters:
+      diameter: p_c86d806eda68
+      height: p_63b454feb1c5
+      x: p_fb983da745ec
+      y: p_fde2f662991a
+      z: p_1e01517832e0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.293339+00:00'
+  ft_2ff4aca1f702:
+    id: ft_2ff4aca1f702
+    owner: part_91656c66931a
+    name: Master locating socket
+    type: cylinder
+    parameters:
+      diameter: p_f381cf389c76
+      height: p_66abdc851702
+      x: p_ed028b156177
+      y: p_c6db8f2e89dd
+      z: p_54a50405573f
+    references: {}
+    options:
+      operation: cut
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.294340+00:00'
+  ft_810d8fbcc7ec:
+    id: ft_810d8fbcc7ec
+    owner: part_14aedfcb5877
+    name: Form half stock
+    type: box
+    parameters:
+      length: p_063d672bd46b
+      width: p_f457539586c4
+      height: p_ce322e6767d3
+      x: p_11f7c37b0276
+      y: p_70c00909d955
+      z: p_1e01517832e0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.294340+00:00'
+  ft_c122d0319157:
+    id: ft_c122d0319157
+    owner: part_14aedfcb5877
+    name: Silicone outer cavity
+    type: cylinder
+    parameters:
+      diameter: p_6da7111e9c8e
+      height: p_4ea7e7080928
+      x: p_a00e8f13fac3
+      y: p_1bef02ff40b3
+      z: p_811251fc8ae7
+    references: {}
+    options:
+      operation: cut
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.294340+00:00'
+  ft_4a761b63aba1:
+    id: ft_4a761b63aba1
+    owner: part_14aedfcb5877
+    name: Base alignment sockets
+    type: holes
+    parameters:
+      diameter: p_8621e6d40a8a
+      depth: p_ef0e4567d44d
+      x: p_238efa8c7592
+      y: p_45a8589f3d40
+      z: p_9675ace71c66
+      count_x: p_516ae57d4475
+      count_y: p_3c89efe2fee0
+      spacing_x: p_006d6274ce22
+      spacing_y: p_3f71e905cc28
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.294340+00:00'
+  ft_00f71037f5cd:
+    id: ft_00f71037f5cd
+    owner: part_6f9659f0694d
+    name: Form half stock
+    type: box
+    parameters:
+      length: p_6d6f0d9d4597
+      width: p_f457539586c4
+      height: p_ce322e6767d3
+      x: p_aa0a619ac307
+      y: p_a6a99ac1e1f3
+      z: p_1e01517832e0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.294340+00:00'
+  ft_a3cf7f5ebb2c:
+    id: ft_a3cf7f5ebb2c
+    owner: part_6f9659f0694d
+    name: Silicone outer cavity
+    type: cylinder
+    parameters:
+      diameter: p_6da7111e9c8e
+      height: p_2970db8a84e9
+      x: p_8d9b02db14d4
+      y: p_a87561b5472d
+      z: p_8b91cdfb0aa6
+    references: {}
+    options:
+      operation: cut
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.294340+00:00'
+  ft_f0ca533e2ddb:
+    id: ft_f0ca533e2ddb
+    owner: part_6f9659f0694d
+    name: Base alignment sockets
+    type: holes
+    parameters:
+      diameter: p_8621e6d40a8a
+      depth: p_0cb01a81fb7f
+      x: p_fc0664d6a458
+      y: p_bd2651f60754
+      z: p_43d1f77207f1
+      count_x: p_0a2e48241611
+      count_y: p_925469978a3e
+      spacing_x: p_bae27ce4203c
+      spacing_y: p_442c823d2d41
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.294340+00:00'
+  ft_c86356047b53:
+    id: ft_c86356047b53
+    owner: part_fd9f6e182a9d
+    name: Master locating peg
+    type: cylinder
+    parameters:
+      diameter: p_a2a4b58df80f
+      height: p_a01f890d68b3
+      x: p_4cf12e7c4015
+      y: p_eaeaa659c58d
+      z: p_af9f811be279
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.295340+00:00'
+  ft_1fd21999b7a8:
+    id: ft_1fd21999b7a8
+    owner: part_fd9f6e182a9d
+    name: Concrete shape master
+    type: cylinder
+    parameters:
+      diameter: p_d9d809db1c83
+      height: p_96646f7239ba
+      x: p_b44c02ba8267
+      y: p_70f7e2e90be4
+      z: p_1e01517832e0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.295340+00:00'
+feature_order:
+- ft_6e7cc91ce384
+- ft_f415d87dde29
+- ft_76eb97f42568
+- ft_d22021ab1799
+- ft_c65fe325107c
+- ft_2ff4aca1f702
+- ft_810d8fbcc7ec
+- ft_c122d0319157
+- ft_4a761b63aba1
+- ft_00f71037f5cd
+- ft_a3cf7f5ebb2c
+- ft_f0ca533e2ddb
+- ft_c86356047b53
+- ft_1fd21999b7a8
+fits:
+  fit_378bc49b024e:
+    id: fit_378bc49b024e
+    name: Form / base alignment
+    pin_parameter: p_c86d806eda68
+    socket_parameter: p_8621e6d40a8a
+    convention: diametral
+  fit_66864fd78bff:
+    id: fit_66864fd78bff
+    name: Master / locating socket
+    pin_parameter: p_a2a4b58df80f
+    socket_parameter: p_f381cf389c76
+    convention: diametral
+notes: Printed tooling for a silicone mold, which subsequently casts a small concrete
+  object. Left/right forms and master are independently removable components. Silicone
+  allowances and clearances are editable design inputs, not process recommendations.
+  Physical fit, sealing, release and shrinkage require calibration.
+actors:
+  local-human:
+    id: local-human
+    name: You
+    kind: human
+    identity_source: local_session
+structure_version: 1
+active_layout: layout_bd81a954895a
+variations: {}

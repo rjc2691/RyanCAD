@@ -1,3 +1,5 @@
-# Reference generation
+# Public workspace designs
 
-Use **Import → Reference designs** for current editable examples. Previously generated native archives and STL batches were removed during the authorized development-data cleanup. Run `uv run python scripts/generate_examples.py` to generate fresh reference snapshots and validated STL exports from the current engine.
+RyanCAD Public Workspace includes the mounting plate and silicone mold designs on first installation. Open them through the workspace manager or Import → Reference designs. They are persistent native designs; use the app's export controls for copies.
+
+See the [UI guide](../docs/product/USER_GUIDE.md) for workflows and the [architecture guide](../docs/development/ARCHITECTURE.md) for packaged seed data.

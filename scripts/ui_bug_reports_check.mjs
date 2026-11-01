@@ -12,7 +12,7 @@ try{
  // Disposable test server only: remove feedback left by an interrupted earlier check.
  await page.evaluate(async()=>{const {reports}=await(await fetch('/api/reports')).json();for(const r of reports)await fetch(`/api/reports/${r.id}?version=${r.version}`,{method:'DELETE'});});
  const before=JSON.stringify((await read()).document),png=await page.screenshot({clip:{x:0,y:0,width:60,height:40}}),base64=png.toString('base64');
- const prev=await page.getByRole('button',{name:'Experimental features',exact:true}).boundingBox(),next=await button.boundingBox();assert(next.x>=prev.x+prev.width);
+ const prev=await page.getByRole('button',{name:'Testing',exact:true}).boundingBox(),next=await button.boundingBox();assert(next.x>=prev.x+prev.width);
  await button.click();await panel.getByRole('button',{name:'New report'}).click();
  await panel.getByLabel('Title',{exact:true}).fill('Test viewport report');await panel.getByLabel('Steps to reproduce',{exact:true}).fill('Select a face.\nPress T.');await panel.getByLabel('Error message',{exact:true}).fill('Example error');await panel.getByLabel('Additional information',{exact:true}).fill('Screenshot attachment test');
  const env=await panel.getByLabel('Browser / device information',{exact:true}).inputValue();assert(env.includes('User agent:')&&env.includes('Platform (browser reported):'));

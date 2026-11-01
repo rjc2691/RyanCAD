@@ -1,3 +1,4 @@
+from ryancad.public_workspace import seed_document
 import json
 import struct
 import time
@@ -8,6 +9,17 @@ import pytest
 from ryancad.geometry import validate_mesh
 from ryancad.model import Actor, Command
 from ryancad.service import CadService
+
+
+def seed_payload(name,actor=None):
+    document=seed_document(name)
+    if actor:
+        document.actors[actor.id]=actor
+        for collection in (document.features,document.components,document.parameters,document.instances):
+            for item in collection.values():
+                if hasattr(item,'created_by'):item.created_by=actor.id
+                if hasattr(item,'modified_by'):item.modified_by=actor.id
+    return {'document':document.model_dump(mode='json')}
 
 
 def wait(service, submitted):
@@ -39,7 +51,7 @@ def execute(service, name, args=None, actor=None, request_id=None):
 
 
 def test_plate_geometry_parameter_edit_linked_instances_undo_and_recovery(service):
-    execute(service, "recipe.load", {"recipe": "plate"})
+    execute(service, "document.replace", seed_payload("plate"))
     state = service.state()
     assert state["summary"]["instances"] == 3
     assert state["summary"]["definitions"] == 2
@@ -94,7 +106,7 @@ def test_initial_disconnected_addition_previews_automatic_component_but_regenera
 
 def test_shared_parameter_edit_attributes_affected_features_to_human_without_erasing_creator(service):
     agent = service.register_agent("Part author")
-    execute(service, "recipe.load", {"recipe": "mold"}, actor=agent)
+    execute(service, "document.replace", seed_payload("mold", agent), actor=agent)
     root = next(p for p in service.document.parameters.values() if p.name == "Concrete casting diameter")
     execute(service, "parameter.set", {"id": root.id, "value": 46})
     changed = [f for f in service.document.features.values() if f.modified_by == "local-human"]
@@ -105,7 +117,7 @@ def test_shared_parameter_edit_attributes_affected_features_to_human_without_era
 
 def test_agent_authorship_stale_revision_and_duplicate_request(service):
     actor = service.register_agent("Test CAD agent")
-    command = Command(name="recipe.load", args={"recipe": "plate"}, expected_revision=0, request_id="same-action")
+    command = Command(name="document.replace", args=seed_payload("plate", actor), expected_revision=0, request_id="same-action")
     first = wait(service, service.submit("command", actor, command=command))
     second = wait(service, service.submit("command", actor, command=command))
     assert first == second
@@ -120,7 +132,7 @@ def test_agent_authorship_stale_revision_and_duplicate_request(service):
 
 
 def test_failed_geometry_keeps_last_durable_part(service):
-    execute(service, "recipe.load", {"recipe": "plate"})
+    execute(service, "document.replace", seed_payload("plate"))
     radius = next(p for p in service.document.parameters.values() if p.name == "Standard edge fillet")
     revision = service.document.revision
     job = service.submit("command", command=Command(name="parameter.set", args={"id": radius.id, "value": "100 mm"}, expected_revision=revision))
@@ -133,7 +145,7 @@ def test_failed_geometry_keeps_last_durable_part(service):
 
 
 def test_mold_batch_exports_independent_watertight_stls(service):
-    execute(service, "recipe.load", {"recipe": "mold"})
+    execute(service, "document.replace", seed_payload("mold"))
     assert service.state()["summary"]["instances"] == 4
     exported = wait(service, service.submit("export", expected_revision=service.document.revision))
     assert len(exported["files"]) == 4
@@ -153,9 +165,9 @@ def test_mold_batch_exports_independent_watertight_stls(service):
 
 
 def test_linked_copy_becomes_independent_without_mutating_original(service):
-    execute(service, "recipe.load", {"recipe": "plate"})
+    execute(service, "document.replace", seed_payload("plate"))
     state = service.state()
-    pins = [i for i in state["occurrences"] if service.document.components[i["definition"]].name == "Alignment pin"]
+    pins = [i for i in state["occurrences"] if i["kind"]!="assembly" and i.get("layout")==service.document.active_layout and service.document.components[i["definition"]].name == "Alignment pin"]
     assert pins[0]["definition"] == pins[1]["definition"]
     result = execute(service, "component.independent", {"instance_id": pins[1]["source_id"]})
     assert result["component_id"] != pins[0]["definition"]
@@ -174,27 +186,27 @@ def test_revoked_agent_cannot_commit(service):
 
 
 def test_component_patterns_remain_linked_and_regenerate_count(service):
-    execute(service, "recipe.load", {"recipe": "plate"})
+    execute(service, "document.replace", seed_payload("plate"))
     state = service.state()
-    pin = next(i for i in state["occurrences"] if service.document.components[i["definition"]].name == "Alignment pin")
+    pin = next(i for i in state["occurrences"] if i["kind"]!="assembly" and i.get("layout")==service.document.active_layout and service.document.components[i["definition"]].name == "Alignment pin")
     execute(service, "component.pattern", {"instance_id": pin["source_id"], "mode": "circular", "axis": "Z", "count": 4, "angle": 90})
     assert service.state()["summary"]["instances"] == 6
     pattern = service.document.instances[pin["source_id"]]
     execute(service, "parameter.set", {"id": pattern.pattern["count"], "value": 3})
     assert service.state()["summary"]["instances"] == 5
-    generated = next(i for i in service.state()["occurrences"] if i["source_id"] == pin["source_id"] and i["pattern_index"] == 1)
+    generated = next(i for i in service.state()["occurrences"] if i.get("layout")==service.document.active_layout and i["source_id"] == pin["source_id"] and i["pattern_index"] == 1)
     before = generated["matrix"]
     result = execute(service, "component.independent", {"instance_id": pin["source_id"], "pattern_index": 1})
-    independent = next(i for i in service.state()["occurrences"] if i["definition"] == result["component_id"])
+    independent = next(i for i in service.state()["occurrences"] if i.get("layout")==service.document.active_layout and i["definition"] == result["component_id"])
     assert np.asarray(independent["matrix"]) == pytest.approx(np.asarray(before))
     assert service.state()["summary"]["instances"] == 5
 
 
 def test_static_placed_measurement_and_visibility_quantities(service):
-    execute(service, "recipe.load", {"recipe": "plate"})
+    execute(service, "document.replace", seed_payload("plate"))
     state = service.state()
-    plate = next(i for i in state["occurrences"] if service.document.components[i["definition"]].name == "Mounting plate")
-    pin = next(i for i in state["occurrences"] if service.document.components[i["definition"]].name == "Alignment pin")
+    plate = next(i for i in state["occurrences"] if i["kind"]!="assembly" and i.get("layout")==service.document.active_layout and service.document.components[i["definition"]].name == "Mounting plate")
+    pin = next(i for i in state["occurrences"] if i["kind"]!="assembly" and i.get("layout")==service.document.active_layout and service.document.components[i["definition"]].name == "Alignment pin")
     measurement = wait(service, service.submit("measure", first=plate["id"], second=pin["id"]))
     assert measurement["intersection_volume"] == pytest.approx(0, abs=1e-6)
     assert measurement["distance"] == pytest.approx(0, abs=1e-6)  # shoulder touches the underside
@@ -215,7 +227,7 @@ def test_nested_assembly_cycles_are_rejected_even_if_unreachable(service):
 
 
 def test_native_worker_cancel_and_restart_keeps_durable_state(service):
-    command = Command(name="recipe.load", args={"recipe": "plate"}, expected_revision=0)
+    command = Command(name="document.replace", args=seed_payload("plate"), expected_revision=0)
     submitted = service.submit("command", command=command)
     until = time.monotonic() + 10
     while service.geometry.status != "starting" and time.monotonic() < until:
@@ -225,13 +237,13 @@ def test_native_worker_cancel_and_restart_keeps_durable_state(service):
     while service.current_actor is not None and time.monotonic() < until:
         time.sleep(.01)
     assert service.store.load().revision == 0
-    execute(service, "recipe.load", {"recipe": "plate"})
+    execute(service, "document.replace", seed_payload("plate"))
     assert service.document.revision == 1
     assert service.state()["summary"]["instances"] == 3
 
 
 def test_feature_rollback_is_cached_read_only_and_does_not_replace_live_geometry(service):
-    execute(service, "recipe.load", {"recipe": "plate"})
+    execute(service, "document.replace", seed_payload("plate"))
     first = service.document.feature_order[0]
     current = service.document.revision
     live = service.evaluation

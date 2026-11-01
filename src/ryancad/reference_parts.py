@@ -115,26 +115,6 @@ def customize(document, actor, args):
 from functools import lru_cache
 
 
-@lru_cache(maxsize=2)
-def bundled_document(recipe):
-    from .model import Actor
-    from .recipes import build_recipe
-    from .project_structure import normalize_structure
-    if recipe not in {"plate", "mold"}:
-        raise CadError("unknown_recipe", "Choose a bundled reference design.")
-    document=Document(id="bundled_"+recipe,structure_version=1)
-    build_recipe(document,Actor(kind="system"),recipe)
-    normalize_structure(document,Actor(kind="system"))
-    return document
-
-
-def bundled_catalog():
-    return [{"workspace":"builtin","workspace_name":"Included with RyanCAD","id":recipe,
-             "name":bundled_document(recipe).name,"bundled":True,
-             "parts":[{"id":c.id,"name":c.name} for c in bundled_document(recipe).components.values()
-                      if c.structure_role=="part"]} for recipe in ("plate","mold")]
-
-
 @lru_cache(maxsize=3)
 def primitive_document(shape):
     from .model import Actor

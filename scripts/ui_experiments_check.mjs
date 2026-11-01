@@ -19,9 +19,9 @@ try{
  });
  await page.locator('.component-select').nth(1).waitFor();await page.locator('.component-select').first().click();await page.keyboard.press('f');await page.waitForTimeout(600);
  const before=await readDocument(),baseline=await pixels();
- const button=page.getByRole('button',{name:'Experimental features',exact:true});
+ const button=page.getByRole('button',{name:'Testing',exact:true});
  const parameters=await page.locator('.parameters-tool').boundingBox(),position=await button.boundingBox();assert(position.x>=parameters.x+parameters.width);
- await button.click();const panel=page.getByRole('dialog',{name:'Experimental features',exact:true}),enabled=panel.getByRole('switch',{name:'Active component appearance',exact:true}),disclosure=panel.getByRole('button',{name:'Active component appearance settings',exact:true});
+ await button.click();const panel=page.getByRole('dialog',{name:'Testing',exact:true}),enabled=panel.getByRole('switch',{name:'Active component appearance',exact:true}),disclosure=panel.getByRole('button',{name:'Active component appearance settings',exact:true});
  assert.equal(await enabled.getAttribute('aria-checked'),'false');assert.equal(await disclosure.getAttribute('aria-expanded'),'false');assert.equal(await panel.getByRole('checkbox').count(),0);
  await enabled.click();assert.equal(await enabled.textContent(),'On');assert.equal(await disclosure.getAttribute('aria-expanded'),'false','toggle does not expand section');
  await disclosure.click();assert(await panel.getByText('active-component-appearance',{exact:true}).isVisible());assert.equal(await panel.getByLabel('Active component appearance style',{exact:true}).count(),0);
@@ -33,7 +33,7 @@ try{
  await disclosure.click();await enabled.click();assert.equal(await pixels(),baseline,'Disabling restores original pixels exactly');await enabled.click();
  await page.reload();await page.locator('.component-select').first().waitFor();await page.locator('.component-select').first().click();await button.click();assert.equal(await enabled.getAttribute('aria-checked'),'true');await disclosure.click();
  assert.equal(await panel.getByLabel('Active component pulse count',{exact:true}).inputValue(),'5');assert.equal(Number(await panel.getByLabel('Active component pulse speed',{exact:true}).inputValue()),1);assert.equal(await panel.getByLabel('Active component pulse color',{exact:true}).inputValue(),'#b387ff');
- await page.getByRole('button',{name:'Close experimental features'}).click();
+ await page.getByRole('button',{name:'Close testing'}).click();
  await page.getByRole('button',{name:'Tool operation',exact:true}).click();await page.getByLabel('Tool Profile Shape',{exact:true}).selectOption('rectangle');await page.getByLabel('Profile plane',{exact:true}).selectOption('XY');await page.getByLabel('Path distance',{exact:true}).fill('5');await page.getByLabel('Tool Effect Type',{exact:true}).selectOption('new');
  await page.waitForFunction(()=>[...document.querySelectorAll('.operation-panel-host button')].some(b=>b.textContent.trim()==='Apply operation'&&!b.disabled));
  await page.getByRole('button',{name:'Section view',exact:true}).click();await page.getByLabel('Section position',{exact:true}).fill('2');await pixels();

@@ -214,3 +214,13 @@ def test_primitive_copy_rejects_nonpart_and_readonly_destinations():
     part=edit(d,'part.create')['component_id'];d.components[part].read_only=True
     with pytest.raises(CadError,match='editable active part'):
         edit(d,'part.primitive',shape='sphere',parent=part)
+
+
+def test_layout_description_is_editable_without_changing_structure():
+    d=Document();edit(d,'structure.enable')
+    layout=d.active_layout
+    edit(d,'layout.describe',id=layout,description='  Assembly for casting  ')
+    assert d.components[layout].description=='Assembly for casting'
+    part=edit(d,'part.create')['component_id']
+    with pytest.raises(CadError):edit(d,'layout.describe',id=part,description='Wrong target')
+    with pytest.raises(CadError):edit(d,'layout.describe',id=layout,description='x'*4001)

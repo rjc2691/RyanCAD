@@ -6,6 +6,7 @@ export default function MCPSetup() {
     [error, setError] = useState(""),
     [copied, setCopied] = useState(""),
     [retry, setRetry] = useState(0);
+  const [harness,setHarness]=useState("Codex");
   const text = useRef<HTMLTextAreaElement>(null),
     design = currentDesignId();
   useEffect(() => {
@@ -41,18 +42,10 @@ export default function MCPSetup() {
   };
   return (
     <section className="mcp-setup" aria-label="Codex MCP setup">
-      <header>
-        <strong>Connect Codex</strong>
-        {setup && (
-          <button
-            className="button secondary small"
-            onClick={() => void copy()}
-          >
-            {copied === "Copied" ? <Check size={14} /> : <Copy size={14} />}Copy
-            Codex config
-          </button>
-        )}
-      </header>
+      <header><strong>Connect an agent</strong></header>
+      <div className="agent-harness-tabs" role="tablist" aria-label="Agent app">{["Codex","Claude Desktop","Cursor","Other"].map(name=><button key={name} role="tab" aria-selected={harness===name} aria-controls="agent-harness-instructions" id={`harness-${name.replaceAll(' ','-')}`} onClick={()=>setHarness(name)}>{name}</button>)}</div>
+      <div role="tabpanel" id="agent-harness-instructions" aria-labelledby={`harness-${harness.replaceAll(' ','-')}`}>
+      {harness!=="Codex"?<p>Setup instructions for {harness} are coming soon. RyanCAD supports MCP through its local stdio connector.</p>:<>
       <p>
         Run Codex on the computer hosting RyanCAD. Keep RyanCAD running while
         the agent is connected.
@@ -81,18 +74,18 @@ export default function MCPSetup() {
               this design.
             </li>
           </ol>
-          <p>
-            Codex uses <strong>TOML</strong>, rather than YAML. This block
-            targets <strong>{setup.design_name}</strong>; copy it again to
-            connect a different design.
-          </p>
+          <p>The connector finds open browser designs automatically and stays connected to the chosen design. If several designs are open, the agent can list them and ask which one to use.</p>
+          <div className="mcp-config-block">
+          <button className="button secondary small mcp-config-copy" onClick={()=>void copy()}>{copied==="Copied"?<Check size={14}/>:<Copy size={14}/>}Copy</button>
           <textarea
+            rows={12}
             ref={text}
             readOnly
             spellCheck={false}
             aria-label="Codex MCP configuration"
             value={setup.config}
           />
+          </div>
           <span role="status">{copied}</span>
           {!setup.connection_ready && (
             <p className="mcp-setup-warning">
@@ -116,6 +109,8 @@ export default function MCPSetup() {
           </a>
         </>
       )}
+      </>}
+      </div>
     </section>
   );
 }

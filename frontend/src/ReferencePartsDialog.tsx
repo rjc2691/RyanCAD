@@ -11,8 +11,8 @@ export default function ReferencePartsDialog({revision,onClose,onImported}:{revi
  const [preview,setPreview]=useState<ReferencePreviewSource|null>(null);
  const key=(d:any,p:any)=>JSON.stringify([d.workspace,d.id,p.id]);
  const groups=[
-  {id:'yours',title:'Your designs',icon:UserRound,designs:designs?.filter(d=>!d.bundled&&!d.shared)||[],empty:'No designs available.'},
-  {id:'stock',title:'Stock / standard designs',icon:Library,designs:designs?.filter(d=>d.bundled)||[],empty:'No stock designs available.'},
+  {id:'yours',title:'Your designs',icon:UserRound,designs:designs?.filter(d=>!d.public&&!d.shared)||[],empty:'No designs available.'},
+  {id:'public',title:'RyanCAD Public Workspace',icon:Library,designs:designs?.filter(d=>d.public)||[],empty:'No public designs available.'},
   {id:'shared',title:'Shared designs',icon:Users,designs:[],empty:'Public design sharing is not available yet.'},
  ];
  return <Modal wide title="Import Reference Parts" eyebrow="PART LIBRARY" onClose={()=>{if(!busy)onClose();}}>

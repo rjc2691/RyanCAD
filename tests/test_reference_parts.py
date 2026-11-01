@@ -61,9 +61,9 @@ def test_reference_placement_is_movable_without_changing_definition():
     assert target.components[part].read_only
 
 @pytest.mark.parametrize('recipe',['plate','mold'])
-def test_bundled_design_parts_import_individually(recipe):
-    from ryancad.reference_parts import bundled_document
-    source=bundled_document(recipe)
+def test_public_seed_parts_import_individually(recipe):
+    from ryancad.public_workspace import seed_document
+    source=seed_document(recipe)
     for part in [c for c in source.components.values() if c.structure_role=='part']:
         target=Document();edit(target,'structure.enable')
         imported=edit(target,'reference.import',sources=[{'document':source.model_dump(mode='json'),'part':part.id}])['parts'][0]
@@ -74,9 +74,9 @@ def test_bundled_design_parts_import_individually(recipe):
 @pytest.mark.parametrize('recipe',['plate','mold'])
 def test_part_preview_contains_only_requested_definition_and_preserves_document(recipe):
     import base64,struct
-    from ryancad.reference_parts import bundled_document
+    from ryancad.public_workspace import seed_document
     from ryancad.placements import flatten_instances
-    source=bundled_document(recipe);before=source.model_dump(mode='json');engine=Evaluator()
+    source=seed_document(recipe);before=source.model_dump(mode='json');engine=Evaluator()
     part=next(c for c in source.components.values() if c.structure_role=='part')
     result=engine.reference_preview(before,part.id)
     assert result['placements'] and result['meshes']

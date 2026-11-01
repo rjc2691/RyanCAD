@@ -1,3 +1,4 @@
+from ryancad.public_workspace import PUBLIC_WORKSPACE_CODE
 import copy
 import time
 import pytest
@@ -44,19 +45,15 @@ def test_invalid_profile_names_are_rejected(tmp_path,name):
         assert client.get('/api/workspace/profile').json()=={'name':''}
 
 
-def test_startup_reference_copies_are_unique_and_preserve_existing_designs(tmp_path):
+def test_startup_opens_public_design_without_creating_reference_copies(tmp_path):
+    from ryancad.public_workspace import PUBLIC_WORKSPACE_CODE,PUBLIC_DESIGNS
     with TestClient(create_app(tmp_path/'server','test',testing=True)) as client:
-        client.get('/');client.post('/api/workspace/profile',json={'name':'Alex'}).raise_for_status()
-        original=client.get('/api/workspace').json()['active_design']
-        result=client.post('/api/workspace/start',json={'kind':'reference','recipe':'plate'}).json();assert result['design_id']==original;finish(client,result,original)
-        first=client.get('/api/state',headers={'X-RyanCAD-Design':original}).json()['document']
-        result=client.post('/api/workspace/start',json={'kind':'reference','recipe':'plate'}).json();second=result['design_id'];assert second!=original;finish(client,result,second)
-        assert client.get('/api/state',headers={'X-RyanCAD-Design':original}).json()['document']==first
-        rows=client.get('/api/workspace').json()['designs'];assert len({d['name'] for d in rows})==2
-        assert all(d['modified_at'] and not d['is_empty'] for d in rows)
-        third=client.post('/api/workspace/start',json={'kind':'blank'}).json()['design_id'];assert third not in {original,second}
-        assert client.post('/api/workspace/start',json={'kind':'existing','design':original}).json()['design_id']==original
-        assert client.post('/api/workspace/start',json={'kind':'existing','design':'not-owned'}).status_code==400
+        client.get('/');original=client.get('/api/workspace').json()
+        assert client.post('/api/workspace/start',json={'kind':'reference','recipe':'plate'}).status_code==400
+        client.post('/api/design-library/select',json={'workspace':PUBLIC_WORKSPACE_CODE,'design':PUBLIC_DESIGNS['plate']}).raise_for_status()
+        assert len(client.get('/api/workspace').json()['designs'])==2
+        client.post('/api/design-library/select',json={'workspace':original['workspace_code'],'design':original['active_design']}).raise_for_status()
+        assert len(client.get('/api/workspace').json()['designs'])==1
 
 
 def test_name_changes_update_only_automatically_named_workspaces(tmp_path):
@@ -75,7 +72,7 @@ def test_design_picker_lists_accessible_workspaces_and_can_switch_without_copyin
         client.post('/api/workspace/new',json={'name':'Tools'}).raise_for_status()
         second=client.get('/api/workspace').json();id2=second['active_design']
         data=client.get('/api/design-library').json();groups=data['workspaces']
-        assert [g['id'] for g in groups]==[second['workspace_code'],first['workspace_code'],'builtin']
+        assert [g['id'] for g in groups]==[second['workspace_code'],first['workspace_code'],PUBLIC_WORKSPACE_CODE]
         assert groups[0]['current'] and not groups[1]['current']
         assert groups[0]['designs'][0]['last_active']
         assert not groups[0]['designs'][0]['last_edited']  # untouched automatic blank

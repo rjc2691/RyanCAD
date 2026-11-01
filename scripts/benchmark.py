@@ -1,3 +1,4 @@
+from ryancad.public_workspace import seed_document
 """Reproducible local engine timings, including durable acknowledgments."""
 from __future__ import annotations
 
@@ -42,7 +43,7 @@ def main():
     directory = Path(".cache/benchmarks") / uuid4().hex
     service = CadService(directory)
     try:
-        cold = command(service, "recipe.load", {"recipe": "mold"})
+        cold = command(service, "document.replace", {"document":seed_document("mold").model_dump(mode="json")})
         root = next(p for p in service.document.parameters.values() if p.name == "Concrete casting diameter")
         geometry, metadata, state = [], [], []
         for index in range(20):

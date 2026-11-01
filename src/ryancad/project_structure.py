@@ -305,6 +305,13 @@ def structure_command(document, actor, name, args):
         c.group_kind = scope
         i.parent = parent.id
         return {"component_id": c.id, "instance_id": i.id}, [c.id], f"Create {label} · {c.name}"
+    if name=="layout.describe":
+        c=require(document.components,args.get("id"),"layout")
+        if c.structure_role!="layout":raise CadError("invalid_layout","Choose a layout.")
+        value=args.get("description","")
+        if not isinstance(value,str) or len(value)>4000:raise CadError("invalid_description","Use at most 4000 characters.")
+        c.description=value.strip()
+        return {},[c.id],"Update layout description"
     if name == "part.describe":
         c = require(document.components, args.get("id"), "part")
         if c.structure_role != "part":
@@ -366,6 +373,7 @@ def structure_command(document, actor, name, args):
 
 
 STRUCTURE_COMMANDS = {name: description for name, description in [
+    ("layout.describe","Edit layout description."),
     ("reference.import", "Import immutable part definitions from source document snapshots."),
     ("reference.customize", "Create an independent editable copy of a reference part."),
     ("layoutgroup.create", "Create an organizational group of placed parts in a layout."),

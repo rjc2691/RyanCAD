@@ -77,6 +77,8 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
         allowed_hosts.add("testserver")
         allowed_origins.add("http://testserver")
     workspaces = WorkspaceManager(project)
+    from .agent_access import AgentAccess
+    agent_access = AgentAccess(workspaces, port)
     service = _RequestService()
     from .worker import GeometryWorker
     reference_viewer = GeometryWorker()
@@ -95,6 +97,7 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
     app.state.workspaces = workspaces
     app.state.token = token
     app.state.lan_urls = lan_urls
+    app.state.agent_access = agent_access
 
     @app.middleware("http")
     async def local_access(request: Request, call_next):
@@ -114,6 +117,8 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
                 return JSONResponse({"error": {"code": "unauthorized", "message": "Open RyanCAD locally or connect using the registered service token."}}, status_code=401)
         workspace_code = request.cookies.get(workspace_cookie, "")
         if request.headers.get("authorization") == f"Bearer {token}":
+            if not agent_access.enabled and request.url.path.startswith('/api/') and request.url.path != '/api/health':
+                return JSONResponse({"error":{"code":"mcp_disabled","message":"The user disabled the MCP server. Enable it in External agents before connecting."}},status_code=403)
             workspace_code = request.headers.get("x-ryancad-workspace", workspace_code)
         request.state.workspace_code = workspace_code
         request.state.design_id = None
@@ -182,6 +187,8 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
         return FileResponse(path, media_type=media)
 
     def actor_for(request):
+        if request.headers.get("authorization"):
+            agent_access.require_enabled()
         identifier = request.headers.get("x-ryancad-actor")
         if identifier:
             if identifier not in service.agents:
@@ -210,6 +217,31 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
     def admin_signature(owner):
         return hmac.new(token.encode(), owner.encode(), hashlib.sha256).hexdigest()
 
+    @app.get('/api/workspace/agents/status')
+    def agent_status():
+        return agent_access.status()
+
+    @app.post('/api/workspace/agents/status')
+    async def toggle_agent_access(request: Request):
+        if request.headers.get('authorization'):
+            raise CadError('browser_required','Only the browser can enable or disable MCP.')
+        browser_owner(request)
+        body=await request.json()
+        return agent_access.set_enabled(body.get('enabled'))
+
+    @app.post('/api/workspace/presence')
+    async def browser_presence(request: Request):
+        if request.headers.get('authorization'):
+            raise CadError('browser_required','Only a browser can publish an active design.')
+        body=await request.json()
+        agent_access.presence(browser_owner(request),workspace_code_for(request),body.get('design'),body.get('tab'))
+        return {'ok':True}
+
+    @app.get('/api/workspace/agent-targets')
+    def agent_targets():
+        agent_access.require_enabled()
+        return {'targets':agent_access.targets()}
+
     def accessible_workspaces(request):
         owner=browser_owner(request)
         admin=secrets.compare_digest(request.cookies.get(admin_cookie,""),admin_signature(owner))
@@ -230,26 +262,38 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
         kind=body.get("kind")
         if kind=="existing":
             workspaces.select(code,body.get("design"));return {"design_id":body["design"]}
-        if kind not in {"blank","reference"}:raise CadError("invalid_selection","Choose an existing, blank or reference design.")
-        recipe=body.get("recipe")
-        if kind=="reference" and recipe not in {"plate","mold"}:raise CadError("unknown_recipe","Choose one of the included designs.")
+        if kind!="blank":raise CadError("invalid_selection","Choose a blank design or open a design from the workspace picker.")
         info=workspaces.describe(code)
         starter=next((d for d in info["designs"] if body.get("reuse_starter",True) and d["id"]==info.get("starter_design") and d["is_empty"] and not d["deleted"]),None)
-        identifier=starter["id"] if starter else workspaces.create(code,"Untitled design" if kind=="blank" else "Reference design")
+        identifier=starter["id"] if starter else workspaces.create(code,"Untitled design")
         workspaces.select(code,identifier)
-        if kind=="blank":return {"design_id":identifier}
-        identifier,current=workspaces.acquire(code,identifier)
-        try:
-            label=workspaces.unique_design_name(code,"Mounting plate · fit study" if recipe=="plate" else "Silicone mold · printed tooling",excluding=identifier,automatic=True)
-            command=Command(name="batch",args={"commands":[{"name":"recipe.load","args":{"recipe":recipe}},{"name":"document.rename","args":{"name":label}}]},expected_revision=current.document.revision)
-            return {"design_id":identifier,**current.submit("command",Actor(),command=command)}
-        finally:workspaces.release(code,identifier)
+        return {"design_id":identifier}
 
     @app.get("/api/workspaces")
     def list_browser_workspaces(request: Request):
         owner = browser_owner(request)
         admin = secrets.compare_digest(request.cookies.get(admin_cookie, ""), admin_signature(owner))
         return {"admin": admin, "workspaces": workspaces.list_workspaces(owner, admin)}
+
+    @app.post("/api/workspaces/rename")
+    async def rename_listed_workspace(request:Request):
+        body=await request.json();code=body.get("code")
+        if not isinstance(code,str) or code not in {w["code"] for w in accessible_workspaces(request)}:
+            raise CadError("missing_workspace","Choose a workspace from your workspace list.")
+        workspaces.rename_workspace(code,body.get("name"))
+        return {"ok":True}
+
+    @app.post("/api/workspaces/delete")
+    async def delete_workspace(request:Request):
+        owner=browser_owner(request)
+        if not secrets.compare_digest(request.cookies.get(admin_cookie,""),admin_signature(owner)):raise CadError("admin_required","Unlock the admin workspace list first.")
+        body=await request.json();code=body.get("code");workspaces.delete_workspace(code)
+        if code==request.state.workspace_code:
+            replacement=workspaces.create_workspace(owner)
+            response=JSONResponse({"deleted":True,"reload":True})
+            response.set_cookie(workspace_cookie,replacement,max_age=60*60*24*365*5,httponly=True,samesite="strict",path="/",secure=bool(secure_public_host and request.headers.get("host","").lower()==secure_public_host))
+            return response
+        return {"deleted":True,"reload":False}
 
     @app.post("/api/workspaces/admin")
     async def unlock_workspaces(request: Request):
@@ -302,9 +346,8 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
 
     @app.get("/api/design-library")
     def design_library(request:Request):
-        from .reference_parts import bundled_document
         current_code=workspace_code_for(request);groups=[];deleted=[];warnings=[]
-        available=sorted(accessible_workspaces(request),key=lambda w:(w["code"]!=current_code,w["name"].casefold()))
+        available=sorted(accessible_workspaces(request),key=lambda w:(bool(w.get("public")),w["code"]!=current_code,w["name"].casefold()))
         for workspace in available:
             code=workspace["code"]
             try:info=workspaces.describe(code)
@@ -312,10 +355,9 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
             rows=sorted([d for d in info["designs"] if not d["deleted"]],key=lambda d:d.get("modified_at",""),reverse=True)
             edited=next((d["id"] for d in rows if not(d["id"]==info.get("starter_design") and d.get("is_empty"))),None)
             active=request.state.design_id if code==current_code else info["active_design"]
-            groups.append({"id":code,"name":info["name"],"source":"yours","current":code==current_code,"starter_design":info.get("starter_design"),
+            groups.append({"id":code,"name":info["name"],"source":"public" if workspace.get("public") else "yours","current":code==current_code,"starter_design":info.get("starter_design"),
                            "designs":[{**d,"active":code==current_code and d["id"]==request.state.design_id,"last_active":d["id"]==active,"last_edited":d["id"]==edited} for d in rows]})
             if code==current_code:deleted=[d for d in info["designs"] if d["deleted"]]
-        groups.append({"id":"builtin","name":"RyanCAD stock / standard workspace","source":"stock","current":False,"designs":[{"id":r,"name":bundled_document(r).name} for r in ("plate","mold")]})
         return {"workspaces":groups,"deleted":deleted,"warnings":warnings}
 
     @app.post("/api/design-library/select")
@@ -327,26 +369,25 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
         response.set_cookie(workspace_cookie,code,max_age=60*60*24*365*5,httponly=True,samesite="strict",path="/",secure=bool(secure_public_host and request.headers.get("host","").lower()==secure_public_host))
         return response
 
+    def library_document(code,design,allowed):
+        if code not in allowed:
+            raise CadError("missing_workspace","Choose an accessible workspace.")
+        identifier,current=workspaces.acquire(code,design)
+        try:
+            with current.write_lock:return current.document.model_dump(mode="json")
+        finally:workspaces.release(code,identifier)
+
     @app.post("/api/design-library/preview")
     async def design_library_preview(request:Request):
         from starlette.concurrency import run_in_threadpool
-        body=await request.json();code=body.get("workspace");browser_owner(request)
-        if code=="builtin":
-            from .reference_parts import bundled_document
-            source=bundled_document(body.get("design")).model_dump(mode="json")
-        else:
-            if code not in {w["code"] for w in accessible_workspaces(request)}:raise CadError("missing_workspace","Choose a design in an accessible workspace or the stock workspace.")
-            identifier,current=workspaces.acquire(code,body.get("design"))
-            try:
-                with current.write_lock:source=current.document.model_dump(mode="json")
-            finally:workspaces.release(code,identifier)
+        body=await request.json()
+        source=library_document(body.get("workspace"),body.get("design"),{w["code"] for w in accessible_workspaces(request)})
         return await run_in_threadpool(reference_viewer.call,"design_preview",payload=source)
 
     @app.get("/api/reference-parts")
     def reference_parts_catalog(request: Request):
-        from .reference_parts import bundled_catalog
-        catalog=bundled_catalog();warnings=[]
-        for workspace in workspaces.list_workspaces(browser_owner(request)):
+        catalog=[];warnings=[]
+        for workspace in accessible_workspaces(request):
             code=workspace["code"]
             try:designs=workspaces.describe(code)["designs"]
             except CadError as error:
@@ -359,7 +400,7 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
                     with current.write_lock:
                         parts=[{"id":c.id,"name":c.name} for c in current.document.components.values()
                                if c.structure_role=="part" and not c.read_only]
-                    catalog.append({"workspace":code,"workspace_name":workspace["name"],"id":identifier,"name":design["name"],"parts":parts})
+                    catalog.append({"workspace":code,"workspace_name":workspace["name"],"id":identifier,"name":design["name"],"parts":parts,"public":bool(workspace.get("public"))})
                 except CadError as error:warnings.append(f"{design['name']}: {error.message}")
                 finally:
                     if identifier:workspaces.release(code,identifier)
@@ -372,16 +413,8 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
         if code=="primitive":
             from .reference_parts import primitive_document
             document,part=primitive_document(body.get("design"));source=document.model_dump(mode="json");body["part"]=part
-        elif code=="builtin":
-            from .reference_parts import bundled_document
-            source=bundled_document(body.get("design")).model_dump(mode="json")
         else:
-            if code not in {w["code"] for w in workspaces.list_workspaces(browser_owner(request))}:
-                raise CadError("missing_workspace","Choose one of your workspaces.")
-            identifier,current=workspaces.acquire(code,body.get("design"))
-            try:
-                with current.write_lock:source=current.document.model_dump(mode="json")
-            finally:workspaces.release(code,identifier)
+            source=library_document(code,body.get("design"),{w["code"] for w in accessible_workspaces(request)})
         return await run_in_threadpool(reference_viewer.call,"reference_preview",payload=source,part=body.get("part"))
 
     @app.post("/api/reference-parts/import")
@@ -389,23 +422,14 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
         body=await request.json();selected=body.get("parts",[])
         if not isinstance(selected,list) or not 1<=len(selected)<=50:
             raise CadError("invalid_selection","Choose between 1 and 50 parts.")
-        allowed={w["code"] for w in workspaces.list_workspaces(browser_owner(request))}
+        allowed={w["code"] for w in accessible_workspaces(request)}
         sources=[];seen=set()
         for entry in selected:
             code=entry.get("workspace",workspace_code_for(request));key=(code,entry.get("design"),entry.get("part"))
-            if code=="builtin":
-                from .reference_parts import bundled_document
-                source=bundled_document(entry.get("design")).model_dump(mode="json")
-                if key not in seen:sources.append({"document":source,"part":entry.get("part")});seen.add(key)
-                continue
-            if code not in allowed:raise CadError("missing_workspace","Choose one of your workspaces.")
             if key in seen:continue
             seen.add(key)
-            identifier,current=workspaces.acquire(code,entry.get("design"))
-            try:
-                with current.write_lock:source=current.document.model_dump(mode="json")
-                sources.append({"document":source,"part":entry.get("part")})
-            finally:workspaces.release(code,identifier)
+            source=library_document(code,entry.get("design"),allowed)
+            sources.append({"document":source,"part":entry.get("part")})
         return service.submit("command",actor_for(request),command=Command(name="reference.import",args={"sources":sources},expected_revision=body.get("expected_revision")))
 
     @app.post("/api/workspace/designs")
@@ -554,6 +578,7 @@ def create_app(project: Path, token: str, port: int = 8790, frontend: Path | Non
 
     @app.post("/api/agents")
     async def register_agent(request: Request):
+        agent_access.require_enabled()
         # Agent registration requires the bearer capability, not only a browser cookie.
         if request.headers.get("authorization") != f"Bearer {token}":
             raise CadError("unauthorized", "Register external agents using the local service bearer token.")

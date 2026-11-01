@@ -16,7 +16,7 @@ def main():
     parser = argparse.ArgumentParser(description="RyanCAD external-agent MCP connector; start RyanCAD first")
     parser.add_argument("--connection", type=Path, default=Path("runtime/connection.json"))
     parser.add_argument("--name", default="External CAD agent")
-    parser.add_argument("--workspace", required=True, help="Browser workspace recovery code")
+    parser.add_argument("--workspace", help="Optional explicit workspace; otherwise discover the open browser design")
     parser.add_argument("--design", help="Design ID within the selected browser workspace")
     arguments = parser.parse_args()
     if arguments.design and not arguments.workspace:
@@ -52,11 +52,31 @@ def main():
         with registration_lock:
             if pulse_thread is not None:
                 return
+            if not client.headers.get('X-RyanCAD-Workspace'):
+                targets=read_targets()
+                if len(targets)!=1:
+                    raise ValueError('Open RyanCAD in a browser.' if not targets else 'Multiple designs are open. Call cad_sessions, then cad_select_session with the intended workspace and design before editing.')
+                select_target(targets[0]['workspace'],targets[0]['design'])
             response = client.post("/api/agents", json={"name": arguments.name})
             response.raise_for_status()
             client.headers["X-RyanCAD-Actor"] = response.json()["id"]
             pulse_thread = threading.Thread(target=heartbeat, name="ryancad-agent-heartbeat", daemon=True)
             pulse_thread.start()
+
+    def read_targets():
+        result=client.get('/api/workspace/agent-targets')
+        result.raise_for_status()
+        return result.json()['targets']
+
+    def select_target(workspace,design):
+        if pulse_thread is not None:
+            if client.headers.get('X-RyanCAD-Workspace')==workspace and client.headers.get('X-RyanCAD-Design')==design:
+                return
+            raise ValueError('This connector is pinned to its design. Reconnect before switching so pending actions cannot target another document.')
+        if not any(t['workspace']==workspace and t['design']==design for t in read_targets()):
+            raise ValueError('That design is not open in a browser. Call cad_sessions for the current list.')
+        client.headers['X-RyanCAD-Workspace']=workspace
+        client.headers['X-RyanCAD-Design']=design
 
     def get(path):
         ensure_agent()
@@ -81,6 +101,18 @@ def main():
                 return job
             time.sleep(.1)
         return get(f"/api/jobs/{result['job_id']}")
+
+    @server.tool()
+    def cad_sessions() -> dict:
+        """List open browser workspaces/designs without registering an agent. If ambiguous, ask the user which design, then call cad_select_session."""
+        return {'targets':read_targets(),'selected':{'workspace':client.headers.get('X-RyanCAD-Workspace'),'design':client.headers.get('X-RyanCAD-Design')}}
+
+    @server.tool()
+    def cad_select_session(workspace: str, design: str) -> dict:
+        """Choose an open browser target before the first modeling action. The connector stays pinned for its lifetime."""
+        with registration_lock:
+            select_target(workspace,design)
+        return {'workspace':workspace,'design':design,'pinned':True}
 
     @server.tool()
     def cad_capabilities() -> dict:

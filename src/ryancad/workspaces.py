@@ -1,6 +1,7 @@
 """Persistent browser workspaces and independent, revisioned design sessions."""
 from __future__ import annotations
 
+from datetime import datetime, timezone
 import hashlib
 import json
 import os
@@ -37,6 +38,8 @@ class WorkspaceManager:
         self.lock = threading.RLock()
         self.services: dict[tuple[str, str], CadService] = {}
         self.in_flight: dict[tuple[str, str], int] = {}
+        from .public_workspace import initialize
+        initialize(self)
 
     @staticmethod
     def valid_code(code: str) -> bool:
@@ -77,7 +80,7 @@ class WorkspaceManager:
             directory = self._directory(code)
             directory.mkdir(parents=True, exist_ok=True)
             identifier = self._new_project(directory, "Untitled design")
-            self._write(code, {"version": 1, "recovery_code": code, "active_design": identifier,
+            self._write(code, {"version": 1, "created_at": datetime.now(timezone.utc).isoformat(), "recovery_code": code, "active_design": identifier,
                                "designs": [{"id": identifier, "deleted": False}], "starter_design": identifier})
 
     @staticmethod
@@ -151,7 +154,7 @@ class WorkspaceManager:
             if not data.get("recovery_code"):
                 data["recovery_code"] = code
                 self._write(code, data)
-            return {"active_design": data["active_design"], "workspace_code": code, "name": data.get("name", "Local Workspace"), "starter_design":data.get("starter_design"),
+            return {"active_design": data["active_design"], "workspace_code": code, "name": data.get("name", "Local Workspace"), "public":bool(data.get("public")), "starter_design":data.get("starter_design"),
                     "designs": [{"id": entry["id"], **self._design_info(code, entry["id"]),
                                  "deleted": bool(entry.get("deleted"))} for entry in data["designs"]]}
 
@@ -174,13 +177,27 @@ class WorkspaceManager:
                     code = data.get("recovery_code", "")
                     if not self.exists(code) or not file.parent.samefile(self._directory(code)):
                         continue
-                    if not admin and key not in data.get("browser_owners", []):
+                    if not admin and not data.get("public") and key not in data.get("browser_owners", []):
                         continue
-                    result.append({"code": code, "name": data.get("name", "Local Workspace"),
-                                   "design_count": sum(not e.get("deleted") for e in data["designs"])})
+                    result.append({"code": code, "name": data.get("name", "Local Workspace"), "public":bool(data.get("public")),
+                                   "design_count": sum(not e.get("deleted") for e in data["designs"]),
+                                   "created_at":data.get("created_at") or datetime.fromtimestamp(file.stat().st_ctime,timezone.utc).isoformat(),
+                                   "changed_at":max([self._design_info(code,e["id"])["modified_at"] for e in data["designs"] if not e.get("deleted")]+[datetime.fromtimestamp(file.stat().st_mtime,timezone.utc).isoformat()])})
                 except (OSError, ValueError, CadError):
                     continue
         return result
+
+    def delete_workspace(self,code):
+        # Move into a server-side trash directory so deletion can be recovered.
+        with self.lock:
+            directory=self._directory(code).resolve()
+            if directory.parent!=self.root.resolve() or not self.exists(code):raise CadError("missing_workspace","Workspace unavailable.")
+            targets=[(key,value) for key,value in self.services.items() if key[0]==code]
+            if any(self.in_flight.get(key,0) or any(j["status"] in {"queued","running","waiting"} for j in value.jobs.values()) for key,value in targets):
+                raise CadError("workspace_busy","Wait for workspace operations to finish.")
+            for key,value in targets:value.close();self.services.pop(key,None)
+            trash=self.root/"deleted-workspaces";trash.mkdir(exist_ok=True)
+            directory.rename(trash/(directory.name+"-"+secrets.token_hex(6)))
 
     def rename_workspace(self, code: str, name):
         if not isinstance(name, str) or not name.strip() or len(name) > 120:

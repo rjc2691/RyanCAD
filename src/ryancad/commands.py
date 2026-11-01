@@ -494,11 +494,6 @@ def _reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[di
             affected += changed
             descriptions.append(description)
         return {"steps": results, "descriptions": descriptions}, list(dict.fromkeys(affected)), args.get("description", f"Atomic batch · {len(commands)} steps")
-    if name == "recipe.load":
-        from .recipes import build_recipe
-        if len(document.features) and not args.get("replace", False):
-            raise CadError("replace_required", "Loading a reference design replaces the current design. Set replace=true; undo remains available.")
-        return build_recipe(document, actor, args.get("recipe", "mold"))
     raise CadError("unknown_command", f"Command '{name}' is not supported.")
 
 
@@ -543,7 +538,6 @@ COMMANDS = {
     "batch": "Apply a bounded atomic command sequence; staged work commits together.",
     "document.describe": "Edit the design description, stored in native document notes.",
     "document.rename": "Rename the design.", "document.units": "Change display units without changing physical geometry.",
-    "recipe.load": "Load a native reference design: mold, plate or blank; replace requires explicit intent.",
     "history.undo": "Undo the latest transaction, preserving the audit trail.",
     "history.redo": "Redo the latest undone transaction.",
     "checkpoint.create": "Create a named durable checkpoint.",

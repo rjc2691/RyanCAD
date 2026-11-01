@@ -7,13 +7,12 @@ os.environ.setdefault("XDG_CACHE_HOME", str(Path(".cache").resolve()))
 
 from ryancad.geometry import Evaluator
 from ryancad.model import Actor, Document
-from ryancad.recipes import build_recipe
+from ryancad.public_workspace import seed_document
 from ryancad.parameters import evaluate
 
 engine = Evaluator()
 for name in ("plate", "mold"):
-    document = Document()
-    build_recipe(document, Actor(), name)
+    document = seed_document(name)
     started = time.perf_counter()
     result = engine.evaluate(document.model_dump(mode="json"))
     print(name, "seconds", round(time.perf_counter() - started, 3), "parameters", len(evaluate(document)))

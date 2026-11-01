@@ -1,0 +1,920 @@
+schema_version: '0.2'
+id: bundled_plate
+name: Mounting plate · fit study
+revision: 0
+display_units: mm
+created_at: '2026-11-01T07:45:16.181143+00:00'
+modified_at: '2026-11-01T07:45:16.181143+00:00'
+parameters:
+  p_837b1529a52e:
+    id: p_837b1529a52e
+    name: Plate length
+    named: true
+    owner: root
+    kind: length
+    expression: '80'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_ecc9623a409b:
+    id: p_ecc9623a409b
+    name: Plate width
+    named: true
+    owner: root
+    kind: length
+    expression: '40'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_2a0f5df56ed2:
+    id: p_2a0f5df56ed2
+    name: Plate thickness
+    named: true
+    owner: root
+    kind: length
+    expression: '6'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_261ca5163088:
+    id: p_261ca5163088
+    name: Hole edge offset
+    named: true
+    owner: root
+    kind: length
+    expression: '8'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_08b72eface8d:
+    id: p_08b72eface8d
+    name: Mounting hole diameter
+    named: true
+    owner: root
+    kind: length
+    expression: '5'
+    category: Design inputs
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_57a42797cb75:
+    id: p_57a42797cb75
+    name: Standard edge fillet
+    named: true
+    owner: root
+    kind: length
+    expression: '3'
+    category: Shared standards
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_6f18821c4431:
+    id: p_6f18821c4431
+    name: Alignment pin diameter
+    named: true
+    owner: root
+    kind: length
+    expression: '6'
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_33825c07a64b:
+    id: p_33825c07a64b
+    name: Diametral clearance
+    named: true
+    owner: root
+    kind: length
+    expression: '0.3'
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_f9a4c08735ba:
+    id: p_f9a4c08735ba
+    name: Alignment socket diameter
+    named: true
+    owner: root
+    kind: length
+    expression: p_6f18821c4431 + p_33825c07a64b
+    category: Fit
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_f589b0c24f3b:
+    id: p_f589b0c24f3b
+    name: Plate stock · x
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_f938d4cc95d4:
+    id: p_f938d4cc95d4
+    name: Plate stock · y
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_d6c4b179a15d:
+    id: p_d6c4b179a15d
+    name: Plate stock · z
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '0'
+    category: Box
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_d44ea149a77e:
+    id: p_d44ea149a77e
+    name: Four mounting holes · depth
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '10'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_25d2bbc4256e:
+    id: p_25d2bbc4256e
+    name: Four mounting holes · x
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: -p_837b1529a52e / 2 + p_261ca5163088
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_81844a254f95:
+    id: p_81844a254f95
+    name: Four mounting holes · y
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: -p_ecc9623a409b / 2 + p_261ca5163088
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_f8c6062b82cb:
+    id: p_f8c6062b82cb
+    name: Four mounting holes · z
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '0'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_cb72ec85bbae:
+    id: p_cb72ec85bbae
+    name: Four mounting holes · count x
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: count
+    expression: '2'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_22e148b1dcdb:
+    id: p_22e148b1dcdb
+    name: Four mounting holes · count y
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: count
+    expression: '2'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_12a576030f97:
+    id: p_12a576030f97
+    name: Four mounting holes · spacing x
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: p_837b1529a52e - 2 * p_261ca5163088
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_07c3ba4ed291:
+    id: p_07c3ba4ed291
+    name: Four mounting holes · spacing y
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: p_ecc9623a409b - 2 * p_261ca5163088
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_10efd8fd33d5:
+    id: p_10efd8fd33d5
+    name: Alignment sockets · depth
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '10'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_c9b72a3e4e01:
+    id: p_c9b72a3e4e01
+    name: Alignment sockets · x
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: -p_837b1529a52e / 4
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_939f71e4f1d5:
+    id: p_939f71e4f1d5
+    name: Alignment sockets · y
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '0'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_63398db2ce35:
+    id: p_63398db2ce35
+    name: Alignment sockets · z
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '0'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_b320b4705df8:
+    id: p_b320b4705df8
+    name: Alignment sockets · count x
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: count
+    expression: '2'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_0b457c7907f0:
+    id: p_0b457c7907f0
+    name: Alignment sockets · count y
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: count
+    expression: '1'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_4ee9c01afdb6:
+    id: p_4ee9c01afdb6
+    name: Alignment sockets · spacing x
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: p_837b1529a52e / 2
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_a913d8615c6c:
+    id: p_a913d8615c6c
+    name: Alignment sockets · spacing y
+    named: false
+    owner: part_fb0dc1c1a840
+    kind: length
+    expression: '20'
+    category: Holes
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_7255a6fc03b9:
+    id: p_7255a6fc03b9
+    name: Alignment pin · X
+    named: false
+    owner: root
+    kind: length
+    expression: -p_837b1529a52e / 4
+    category: Placement
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_6995ff9afa3d:
+    id: p_6995ff9afa3d
+    name: Pin shoulder · diameter
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '10'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_69b95138e2a6:
+    id: p_69b95138e2a6
+    name: Pin shoulder · height
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '2'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_1d9d50df67c3:
+    id: p_1d9d50df67c3
+    name: Pin shoulder · x
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_e21718afb868:
+    id: p_e21718afb868
+    name: Pin shoulder · y
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_3bb08705bab0:
+    id: p_3bb08705bab0
+    name: Pin shoulder · z
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '-2'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_b76f4e03325d:
+    id: p_b76f4e03325d
+    name: Pin shank · height
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '12'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_564fcdf8172a:
+    id: p_564fcdf8172a
+    name: Pin shank · x
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_19b97daa1849:
+    id: p_19b97daa1849
+    name: Pin shank · y
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_51e158a63e5d:
+    id: p_51e158a63e5d
+    name: Pin shank · z
+    named: false
+    owner: part_10d9975fe39a
+    kind: length
+    expression: '0'
+    category: Cylinder
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+  p_76ae757aaf7f:
+    id: p_76ae757aaf7f
+    name: Alignment pin · second · X
+    named: false
+    owner: root
+    kind: length
+    expression: p_837b1529a52e / 4
+    category: Placement
+    description: ''
+    favorite: false
+    tolerance: null
+    created_by: local-human
+    modified_by: local-human
+components:
+  root:
+    id: root
+    name: Design
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_fb0dc1c1a840:
+    id: part_fb0dc1c1a840
+    name: Mounting plate
+    kind: solid
+    purpose: part
+    feature_ids:
+    - ft_3964464dbf99
+    - ft_457d22c1a208
+    - ft_60caa492f5e9
+    - ft_5a4bb43146a9
+    color: '#689ac5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_10d9975fe39a:
+    id: part_10d9975fe39a
+    name: Alignment pin
+    kind: solid
+    purpose: part
+    feature_ids:
+    - ft_a7457941cb55
+    - ft_6b5da32436dd
+    color: '#c5aa68'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: component
+    group_kind: null
+    read_only: false
+    reference_source: null
+  layout_5c5389821b9e:
+    id: layout_5c5389821b9e
+    name: Layout 1
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: layout
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_0ee3699d699a:
+    id: part_0ee3699d699a
+    name: Mounting plate
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: part
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_157687f86f0e:
+    id: part_157687f86f0e
+    name: Alignment pin
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: part
+    group_kind: null
+    read_only: false
+    reference_source: null
+  part_10d97376058c:
+    id: part_10d97376058c
+    name: Alignment pin 2
+    kind: assembly
+    purpose: part
+    feature_ids: []
+    color: '#9eafc5'
+    description: ''
+    created_by: local-human
+    modified_by: local-human
+    source_definition: null
+    stock_thickness: null
+    stock_preview: false
+    structure_role: part
+    group_kind: null
+    read_only: false
+    reference_source: null
+instances:
+  inst_a460c7d35e8a:
+    id: inst_a460c7d35e8a
+    name: Mounting plate
+    definition: part_0ee3699d699a
+    parent: layout_5c5389821b9e
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_bb912ba9ffbc:
+    id: inst_bb912ba9ffbc
+    name: Alignment pin
+    definition: part_157687f86f0e
+    parent: layout_5c5389821b9e
+    placement:
+      x: p_7255a6fc03b9
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_0a4a2a0ad32b:
+    id: inst_0a4a2a0ad32b
+    name: Alignment pin 2
+    definition: part_10d97376058c
+    parent: layout_5c5389821b9e
+    placement:
+      x: p_76ae757aaf7f
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_09b5abefed54:
+    id: inst_09b5abefed54
+    name: Layout 1
+    definition: layout_5c5389821b9e
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_01774924298f:
+    id: inst_01774924298f
+    name: Mounting plate
+    definition: part_0ee3699d699a
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_1aebeee50452:
+    id: inst_1aebeee50452
+    name: Mounting plate
+    definition: part_fb0dc1c1a840
+    parent: part_0ee3699d699a
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_038fa16d6366:
+    id: inst_038fa16d6366
+    name: Alignment pin
+    definition: part_157687f86f0e
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_5a40e1b291fb:
+    id: inst_5a40e1b291fb
+    name: Alignment pin
+    definition: part_10d9975fe39a
+    parent: part_157687f86f0e
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_6cf64267eef2:
+    id: inst_6cf64267eef2
+    name: Alignment pin 2
+    definition: part_10d97376058c
+    parent: root
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+  inst_f4de2a19a441:
+    id: inst_f4de2a19a441
+    name: Alignment pin
+    definition: part_10d9975fe39a
+    parent: part_10d97376058c
+    placement: {}
+    visible: true
+    suppressed: false
+    created_by: local-human
+    pattern_mode: null
+    pattern_axis: X
+    pattern: {}
+    omitted_indices: []
+    variation: null
+features:
+  ft_3964464dbf99:
+    id: ft_3964464dbf99
+    owner: part_fb0dc1c1a840
+    name: Plate stock
+    type: box
+    parameters:
+      length: p_837b1529a52e
+      width: p_ecc9623a409b
+      height: p_2a0f5df56ed2
+      x: p_f589b0c24f3b
+      y: p_f938d4cc95d4
+      z: p_d6c4b179a15d
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.182141+00:00'
+  ft_457d22c1a208:
+    id: ft_457d22c1a208
+    owner: part_fb0dc1c1a840
+    name: Standard outer corners
+    type: fillet
+    parameters:
+      radius: p_57a42797cb75
+    references: {}
+    options:
+      selector:
+        group: vertical
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.182141+00:00'
+  ft_60caa492f5e9:
+    id: ft_60caa492f5e9
+    owner: part_fb0dc1c1a840
+    name: Four mounting holes
+    type: holes
+    parameters:
+      diameter: p_08b72eface8d
+      depth: p_d44ea149a77e
+      x: p_25d2bbc4256e
+      y: p_81844a254f95
+      z: p_f8c6062b82cb
+      count_x: p_cb72ec85bbae
+      count_y: p_22e148b1dcdb
+      spacing_x: p_12a576030f97
+      spacing_y: p_07c3ba4ed291
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.182141+00:00'
+  ft_5a4bb43146a9:
+    id: ft_5a4bb43146a9
+    owner: part_fb0dc1c1a840
+    name: Alignment sockets
+    type: holes
+    parameters:
+      diameter: p_f9a4c08735ba
+      depth: p_10efd8fd33d5
+      x: p_c9b72a3e4e01
+      y: p_939f71e4f1d5
+      z: p_63398db2ce35
+      count_x: p_b320b4705df8
+      count_y: p_0b457c7907f0
+      spacing_x: p_4ee9c01afdb6
+      spacing_y: p_a913d8615c6c
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.182141+00:00'
+  ft_a7457941cb55:
+    id: ft_a7457941cb55
+    owner: part_10d9975fe39a
+    name: Pin shoulder
+    type: cylinder
+    parameters:
+      diameter: p_6995ff9afa3d
+      height: p_69b95138e2a6
+      x: p_1d9d50df67c3
+      y: p_e21718afb868
+      z: p_3bb08705bab0
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.182141+00:00'
+  ft_6b5da32436dd:
+    id: ft_6b5da32436dd
+    owner: part_10d9975fe39a
+    name: Pin shank
+    type: cylinder
+    parameters:
+      diameter: p_6f18821c4431
+      height: p_b76f4e03325d
+      x: p_564fcdf8172a
+      y: p_19b97daa1849
+      z: p_51e158a63e5d
+    references: {}
+    options: {}
+    suppressed: false
+    created_by: local-human
+    modified_by: local-human
+    created_at: '2026-11-01T07:45:16.182141+00:00'
+feature_order:
+- ft_3964464dbf99
+- ft_457d22c1a208
+- ft_60caa492f5e9
+- ft_5a4bb43146a9
+- ft_a7457941cb55
+- ft_6b5da32436dd
+fits:
+  fit_f4a58ca91201:
+    id: fit_f4a58ca91201
+    name: Pin / plate socket
+    pin_parameter: p_6f18821c4431
+    socket_parameter: p_f9a4c08735ba
+    convention: diametral
+notes: Editable reference plate. Four mounting holes preserve their edge offsets.
+  Two linked pins share one definition. Clearance is diametral and requires printer
+  calibration.
+actors:
+  local-human:
+    id: local-human
+    name: You
+    kind: human
+    identity_source: local_session
+structure_version: 1
+active_layout: layout_5c5389821b9e
+variations: {}

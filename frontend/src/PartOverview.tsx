@@ -24,7 +24,7 @@ export default function PartOverview({state,part,measurements,onParameters,run,d
   const placements=placed.length, layouts=new Set(placed.map(o=>o.layout)).size;
   const parameters=(state.part_parameters?.[part.definition]||[]).filter(id=>doc.parameters[id]?.named).length;
   return <div className="design-inspector part-inspector" aria-label="Part overview">
-    <div className="design-overview-heading"><span className="design-overview-icon" aria-hidden="true"><Boxes size={24} strokeWidth={1.4}/></span><div><span className="eyebrow">Part</span><h2>{definition?.name||part.name}</h2></div></div>
+    <div className="design-overview-heading"><span className="design-overview-icon" aria-hidden="true"><Boxes size={24} strokeWidth={1.4}/></span><div><span className="eyebrow">Part Info</span><h2>{definition?.name||part.name}</h2></div></div>
     <section className="inspector-section design-properties" aria-label="Part properties"><div className="section-heading"><h3>Part properties</h3>{saving&&<small role="status">Saving…</small>}</div>
       {part.variation&&<div className="property-row"><span>Variation</span><strong>{doc.variations?.[part.variation]?.name||"Variation"}</strong></div>}
       <label className="field"><span>Description</span><textarea aria-label="Part description" rows={3} maxLength={4000} disabled={disabled||saving} value={description} placeholder="Add a part description" onChange={e=>setDescription(e.target.value)} onBlur={()=>void saveDescription()} onKeyDown={e=>{if(e.key==="Escape"){e.preventDefault();e.stopPropagation();setDescription(savedDescription);}else if(e.key==="Enter"&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.currentTarget.blur();}}}/></label>

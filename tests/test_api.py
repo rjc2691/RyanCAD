@@ -1,3 +1,4 @@
+from ryancad.public_workspace import PUBLIC_DESIGNS,PUBLIC_WORKSPACE_CODE
 import time
 
 import pytest
@@ -261,15 +262,15 @@ def test_no_effect_corner_preview_retains_profile_details_without_committing(cli
     assert client.get("/api/state").json()["document"]["revision"] == 1
 
 
-def test_reference_catalog_includes_bundled_designs_and_imports_one_part(client):
+def test_reference_catalog_includes_public_designs_and_imports_one_part(client):
     catalog=client.get('/api/reference-parts');assert catalog.status_code==200
     designs=catalog.json()['designs']
-    stock=[d for d in designs if d.get('bundled')]
-    assert {d['id'] for d in stock}=={'mold','plate'}
+    stock=[d for d in designs if d.get('public')]
+    assert {d['id'] for d in stock}==set(PUBLIC_DESIGNS.values())
     assert all(d['parts'] for d in stock)
-    design=next(d for d in stock if d['id']=='plate')
+    design=next(d for d in stock if d['id']==PUBLIC_DESIGNS['plate'])
     before=client.get('/api/state').json()
-    imported=wait(client,client.post('/api/reference-parts/import',json={'parts':[{'workspace':'builtin','design':design['id'],'part':design['parts'][0]['id']}],'expected_revision':before['document']['revision']}))
+    imported=wait(client,client.post('/api/reference-parts/import',json={'parts':[{'workspace':design['workspace'],'design':design['id'],'part':design['parts'][0]['id']}],'expected_revision':before['document']['revision']}))
     assert imported['status']=='complete',imported
     after=client.get('/api/state').json()
     assert after['document']['components'][imported['result']['parts'][0]]['reference_source']['design_name']==design['name']
@@ -278,14 +279,14 @@ def test_reference_catalog_includes_bundled_designs_and_imports_one_part(client)
 
 
 def test_reference_preview_is_read_only_and_scoped(client):
-    stock=next(d for d in client.get('/api/reference-parts').json()['designs'] if d.get('bundled') and d['id']=='plate')
+    stock=next(d for d in client.get('/api/reference-parts').json()['designs'] if d.get('public') and d['id']==PUBLIC_DESIGNS['plate'])
     before=client.get('/api/state').json()['document']
-    preview=client.post('/api/reference-parts/preview',json={'workspace':'builtin','design':'plate','part':stock['parts'][0]['id']})
+    preview=client.post('/api/reference-parts/preview',json={'workspace':PUBLIC_WORKSPACE_CODE,'design':PUBLIC_DESIGNS['plate'],'part':stock['parts'][0]['id']})
     assert preview.status_code==200,preview.text
     assert preview.json()['meshes'] and preview.json()['placements']
     assert client.get('/api/state').json()['document']==before
     assert client.post('/api/reference-parts/preview',json={'workspace':'someone-else','design':'missing','part':'missing'}).status_code==400
-    missing=client.post('/api/reference-parts/preview',json={'workspace':'builtin','design':'plate','part':'missing'})
+    missing=client.post('/api/reference-parts/preview',json={'workspace':PUBLIC_WORKSPACE_CODE,'design':PUBLIC_DESIGNS['plate'],'part':'missing'})
     assert missing.status_code==400 and missing.json()['error']['code']=='missing_part'
 
 
@@ -298,21 +299,19 @@ def test_primitive_template_preview_does_not_create_a_part(client,shape):
     assert client.get('/api/state').json()['document']==before
 
 
-def test_design_library_stock_preview_and_copy_leave_existing_design_intact(client):
-    catalog=client.get('/api/design-library');assert catalog.status_code==200
-    groups=catalog.json()['workspaces'];assert [g['source'] for g in groups]==['yours','stock']
-    own,stock=groups;assert stock['id']=='builtin' and {d['id'] for d in stock['designs']}=={'plate','mold'}
+def test_design_library_public_preview_and_open_use_saved_workspace(client):
+    groups=client.get('/api/design-library').json()['workspaces']
+    assert [g['source'] for g in groups]==['yours','public']
+    own,public=groups
+    assert public['id']==PUBLIC_WORKSPACE_CODE
+    assert {d['id'] for d in public['designs']}==set(PUBLIC_DESIGNS.values())
     before=client.get('/api/state').json()['document'];old=own['designs'][0]['id']
-    preview=client.post('/api/design-library/preview',json={'workspace':own['id'],'design':old})
-    assert preview.status_code==200 and not preview.json()['placements']
-    preview=client.post('/api/design-library/preview',json={'workspace':'builtin','design':'plate'})
-    assert preview.status_code==200 and preview.json()['placements'] and preview.json()['layout_name']
+    preview=client.post('/api/design-library/preview',json={'workspace':PUBLIC_WORKSPACE_CODE,'design':PUBLIC_DESIGNS['plate']})
+    assert preview.status_code==200 and preview.json()['placements']
     assert client.get('/api/state').json()['document']==before
-    assert client.post('/api/design-library/preview',json={'workspace':'other','design':old}).status_code==400
-    result=client.post('/api/workspace/start',json={'kind':'reference','recipe':'plate','reuse_starter':False}).json()
-    assert result['design_id']!=old
-    # Jobs are scoped to their newly created design, while the old document remains untouched.
-    from test_startup import finish
-    finish(client,result,result['design_id'])
-    assert client.get('/api/state',headers={'X-RyanCAD-Design':old}).json()['document']==before
-    assert len(client.get('/api/workspace').json()['designs'])==2
+    client.post('/api/design-library/select',json={'workspace':public['id'],'design':PUBLIC_DESIGNS['plate']}).raise_for_status()
+    workspace=client.get('/api/workspace').json()
+    assert workspace['workspace_code']==PUBLIC_WORKSPACE_CODE and len(workspace['designs'])==2
+    client.post('/api/design-library/select',json={'workspace':own['id'],'design':old}).raise_for_status()
+    assert client.get('/api/state').json()['document']==before
+    assert len(client.get('/api/workspace').json()['designs'])==1

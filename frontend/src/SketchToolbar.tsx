@@ -1,3 +1,4 @@
+import OverflowToolbar from "./OverflowToolbar";
 import {shortcutAttributes,shortcutLabel} from './toolbarShortcuts';
 import {
   Check,
@@ -51,7 +52,7 @@ export default function SketchToolbar({
   onUndo: () => void;
 }) {
   return (
-    <>
+    <OverflowToolbar>
       {tools.map((t) => (
         <button
           key={t.id}
@@ -69,7 +70,6 @@ export default function SketchToolbar({
           <kbd>{shortcutLabel("sketch_"+t.id)}</kbd>
         </button>
       ))}
-      <div className="tool-divider" />
       <button
         className="tool-button"
         disabled={disabled}
@@ -81,7 +81,6 @@ export default function SketchToolbar({
         <span>Undo</span>
         <kbd>Ctrl/⌘+Z</kbd>
       </button>
-      <div className="toolbar-spacer" />
       <button
         className="tool-button primary-tool"
         disabled={disabled || !draft.entities.length}
@@ -104,6 +103,6 @@ export default function SketchToolbar({
         <span>Cancel sketch</span>
         <kbd>Esc</kbd>
       </button>
-    </>
+    </OverflowToolbar>
   );
 }

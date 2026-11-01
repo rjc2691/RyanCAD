@@ -30,7 +30,7 @@ export default function DesignOverview({state,run,disabled,measurements,onParame
   return <div className="design-inspector" aria-label="Design overview">
     <div className="design-overview-heading">
       <span className="design-overview-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M4 4h16v16H4zM4 13h6m4 0h6M13 4v5m0 4v7M10 13v-3M10 10a3 3 0 0 1 3 3M2 2v3m0-3h3M22 19v3h-3"/></svg></span>
-      <div><span className="eyebrow">Design</span><h2>{doc.name}</h2></div>
+      <div><span className="eyebrow">Design Info</span><h2>{doc.name}</h2></div>
     </div>
     <section className="inspector-section design-properties" aria-label="Design properties">
       <div className="section-heading"><h3>Design properties</h3>{saving&&<small role="status">Saving…</small>}</div>
@@ -57,9 +57,23 @@ export default function DesignOverview({state,run,disabled,measurements,onParame
     {info.activeLayout&&<section className="inspector-section design-active-layout" aria-label="Active layout summary">
       <div className="section-heading"><h3>Active layout</h3></div>
       <div className="design-active-layout-name"><Layers size={14}/><strong>{info.activeLayout}</strong></div>
+      <LayoutDescription key={doc.active_layout} id={doc.active_layout!} value={doc.components[doc.active_layout||""]?.description||""} disabled={disabled} run={run}/>
       <div className="design-layout-counts"><span>{info.activeParts} part {info.activeParts===1?"placement":"placements"}</span><span>{info.activeComponents} {info.activeComponents===1?"component":"components"}</span></div>
     </section>}
     {measurements}
     <button className="design-parameters-link" onClick={onParameters}><GitBranch size={14}/><span>Named parameters</span><strong>{info.parameters}</strong></button>
   </div>;
+}
+
+function LayoutDescription({id,value,disabled,run}:{id:string;value:string;disabled:boolean;run:RunCommand}){
+  const [draft,setDraft]=useState(value),[saving,setSaving]=useState(false),[error,setError]=useState('');
+  const base=useRef(value);
+  useEffect(()=>{const old=base.current;base.current=value;setDraft(current=>current===old?value:current);},[value]);
+  const save=async()=>{
+    if(disabled||saving||draft.trim()===value)return;
+    setSaving(true);setError('');
+    try{await run('layout.describe',{id,description:draft.trim()});setDraft(draft.trim());}
+    catch(e:any){setError(e.message||'Could not save layout description.');}finally{setSaving(false);}
+  };
+  return <><label className="field"><span>Layout description{saving?' · Saving…':''}</span><textarea aria-label="Layout description" rows={3} maxLength={4000} value={draft} disabled={disabled||saving} onChange={e=>setDraft(e.target.value)} onBlur={()=>void save()} onKeyDown={e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();setDraft(value);}else if(e.key==='Enter'&&(e.ctrlKey||e.metaKey)){e.preventDefault();e.currentTarget.blur();}}}/></label>{error&&<p role="alert" className="error-text">{error}</p>}</>;
 }

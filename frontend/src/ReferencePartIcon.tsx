@@ -1,5 +1,5 @@
 import type {SVGProps} from 'react';
-/** Simple ribbed cylinder for reusable reference parts. */
+/** Faceted mechanical part with a bore, distinct from folders and trash. */
 export default function ReferencePartIcon({size=16,...props}:SVGProps<SVGSVGElement>&{size?:number}){
- return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}><ellipse cx="12" cy="5" rx="7" ry="3"/><path d="M5 5v14c0 1.7 3.1 3 7 3s7-1.3 7-3V5M9 11v7m3-6v7m3-8v7"/></svg>;
+ return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}><path d="m4 8 5-4 11 4v10l-6 3-10-4Z M4 8l10 4 6-4M14 12v9"/><ellipse cx="12" cy="8" rx="2" ry="1"/></svg>;
 }

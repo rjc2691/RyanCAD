@@ -1,3 +1,5 @@
+import {useAgentServer,AgentServerControls} from "./useAgentServer";
+import OverflowToolbar from "./OverflowToolbar";
 import RyanCADLogo from "./RyanCADLogo";
 import StartupDialog from "./StartupDialog";
 import {PrimitiveEditor,PrimitiveInspector} from "./PrimitiveEditor";
@@ -9,7 +11,6 @@ import {applyDarkTheme,DARK_UI_PALETTE_ID,resolveDarkTheme} from "./themes";
 import "./themes.css";
 import type {SketchDimensionEditorState} from "./sketchDimensions";
 import {editorContext} from "./editorContext";
-import {useAdaptiveToolbar} from "./useAdaptiveToolbar";
 import DesignOverview from "./DesignOverview";
 import PartOverview from "./PartOverview";
 import ToolBodyIcon from "./ToolBodyIcon";
@@ -242,11 +243,13 @@ const featureIcon: Record<string, any> = {
 function OrderedToolbar({order,children}:{order:string[];children:ReactNode}) {
  const flatten=(nodes:ReactNode):any[]=>Children.toArray(nodes).flatMap((node:any)=>isValidElement(node)&&node.type===Fragment?flatten((node.props as any).children):[node]);
  const rank=(node:any)=>{const id=node.props?.['data-toolbar-action']||(node.type===ExperimentalFeatures?'experiments':node.type===BugReports?'reports':null);return id?order.indexOf(id):Math.min(...['experiments','reports','settings'].map(id=>order.indexOf(id)))-.5;};
- return <>{flatten(children).sort((a,b)=>rank(a)-rank(b))}</>;
+ return <OverflowToolbar pinnedAction="settings">{flatten(children).sort((a,b)=>rank(a)-rank(b))}</OverflowToolbar>;
 }
 
 
 export default function App() {
+  const [structureWidth,setStructureWidth]=useState(()=>Math.max(200,Math.min(420,Number(localStorage.getItem("ryancad-structure-width"))||248)));
+  useEffect(()=>{localStorage.setItem("ryancad-structure-width",String(structureWidth));},[structureWidth]);
   const [browserProfile,setBrowserProfile]=useState<{name:string}|null>(null);
   const [startupOpen,setStartupOpen]=useState(()=>!sessionStorage.getItem("ryancad-startup-complete"));
   const startupActive=useRef(false);
@@ -286,6 +289,7 @@ export default function App() {
   const launchRef = useRef<(kind: string) => void>(() => {});
   const [state, setState] = useState<State | null>(null);
   const [workspace, setWorkspace] = useState<WorkspaceInfo | null>(null);
+  const agentServer=useAgentServer(state?.document.id);
   const stateRef = useRef<State | null>(null);
   const [appearance, setAppearance] = useState<{
     definition: string;
@@ -345,8 +349,7 @@ export default function App() {
   const [dialog, setDialog] = useState<string | null>(null);
   const [toolbarPrefs,setToolbarPrefs]=useState(getToolbarPreferences);
   useEffect(()=>subscribeToolbar(()=>setToolbarPrefs(getToolbarPreferences())),[]);
-  const appShellRef=useRef<HTMLDivElement>(null),toolbarContentRef=useRef<HTMLDivElement>(null);
-  const toolbarLayout=useAdaptiveToolbar(appShellRef,toolbarContentRef);
+  const appShellRef=useRef<HTMLDivElement>(null);
   const toolbarDrag=useRef<string|null>(null),toolbarDragEnd=useRef(0);
   const [measure,setMeasure]=useState<MeasurePoint[]|null>(null);
   const [measureReplace,setMeasureReplace]=useState<number|null>(null);
@@ -1001,7 +1004,7 @@ export default function App() {
     const id = groupScopeRef.current,
       o = stateRef.current?.occurrences.find((o) => o.id === id);
     if(stateRef.current?.document.structure_version && (!parentPath(id) || id===layoutScope)){
-      setPartWorkbench(null);setGroupScope(layoutScope);
+      setPartWorkbench(null);setGroupScope(layoutScope);setSelection(null);setSelectionSet([]);return;
     }else setGroupScope(parentPath(id));
     setSelection(o ? { occurrence: o.id, definition: o.definition } : null);
     setSelectionSet(o ? [o.id] : []);
@@ -1256,6 +1259,7 @@ export default function App() {
         }
         return;
       }
+      if (["Enter","Escape"].includes(event.key)&&(event.target as HTMLElement).closest('[data-inline-rename]')) return;
       if (
         operationActive.current &&
         !event.isComposing &&
@@ -1292,7 +1296,7 @@ export default function App() {
           return;
         }
         if (input) return;
-        if (groupScopeRef.current && !input) {
+        if (groupScopeRef.current && stateRef.current?.document.components[stateRef.current?.occurrences.find(o=>o.id===groupScopeRef.current)?.definition||""]?.structure_role!=="layout" && !input) {
           event.preventDefault();
           endGroupEditingRef.current();
           return;
@@ -1665,7 +1669,7 @@ export default function App() {
     <div
       data-mobile-pane={mobilePane}
       ref={appShellRef}
-      data-toolbar-layout={toolbarLayout.mode}
+      data-toolbar-layout="centered"
       className={
         "app-shell " +
         (!leftVisible ? "left-hidden " : "") +
@@ -1677,9 +1681,8 @@ export default function App() {
       }
       style={
         {
+          "--structure-width": `${structureWidth}px`,
           "--timeline-requested": `${48 + lanes.length * 96}px`,
-          "--toolbar-left-inset": `${toolbarLayout.left}px`,
-          "--toolbar-right-inset": `${toolbarLayout.right}px`,
         } as React.CSSProperties
       }
     >
@@ -1697,13 +1700,14 @@ export default function App() {
           <button
             aria-label="Agents"
             {...shortcutAttributes('agents')}
-            title="Agents · Shift+N"
+            title={`Agents · MCP ${agentServer.status?agentServer.status.enabled?"enabled":"disabled":"checking"} · ${shortcutLabel("agents")}`}
             className={
               "button agent-button " + (state?.agents.some(a=>a.connected&&!a.revoked) ? "connected" : "")
             }
             onClick={() => setDialog("agents")}
           >
             <Activity size={15} />
+            <span className={`agent-status-dot ${agentServer.status?.enabled?"enabled":""}`} aria-label={agentServer.status?.enabled?"MCP enabled":"MCP disabled"}/>
             <span>Agents</span>
             <small>
               {state?.agents.filter((a) => !a.revoked && a.connected).length ||
@@ -1723,7 +1727,7 @@ export default function App() {
         onDragEnd={()=>{toolbarDrag.current=null;toolbarDragEnd.current=Date.now();}}
         onClickCapture={e=>{if(Date.now()-toolbarDragEnd.current<300){e.preventDefault();e.stopPropagation();}}}
       >
-        <div className="tool-strip-content" ref={toolbarContentRef}>
+        <div className="tool-strip-content">
         {sketch ? (
           <SketchToolbar
             draft={sketch}
@@ -1793,7 +1797,7 @@ export default function App() {
                   "fit",
                   "measure",
                   "checkpoint",
-                ].includes(t.id)&&!(editor==="Layout Editor"&&t.id==="duplicate"),
+                ].includes(t.id)&&!["duplicate","component_pattern"].includes(t.id),
               )
               .sort((a, b) =>
                 a.id === "transform" ? -1 : b.id === "transform" ? 1 : 0,
@@ -1842,7 +1846,6 @@ export default function App() {
               <span>Parameters</span>
               <kbd>{shortcutLabel('parameters')}</kbd>
             </button>
-            <div className="toolbar-spacer" />
             <ExperimentalFeatures value={experiments} onChange={setExperiments} />
             <BugReports />
             <button
@@ -1859,8 +1862,16 @@ export default function App() {
         </div>
       </nav>
 
+      {leftVisible&&!mobileLayout&&<div className="structure-resizer" role="separator" tabIndex={0} aria-label="Resize project sidebar" aria-orientation="vertical" aria-valuemin={200} aria-valuemax={420} aria-valuenow={structureWidth}
+        onPointerDown={e=>{if(e.button!==0)return;e.preventDefault();e.currentTarget.setPointerCapture(e.pointerId);e.currentTarget.dataset.dragging='true';}}
+        onPointerMove={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))setStructureWidth(Math.max(200,Math.min(420,e.clientX-(appShellRef.current?.getBoundingClientRect().left||0))));}}
+        onPointerUp={e=>{if(e.currentTarget.hasPointerCapture(e.pointerId))e.currentTarget.releasePointerCapture(e.pointerId);delete e.currentTarget.dataset.dragging;}}
+        onPointerCancel={e=>{delete e.currentTarget.dataset.dragging;}}
+        onLostPointerCapture={e=>{delete e.currentTarget.dataset.dragging;}}
+        onKeyDown={e=>{if(['ArrowLeft','ArrowRight','Home','End'].includes(e.key)){e.preventDefault();setStructureWidth(w=>e.key==='Home'?200:e.key==='End'?420:Math.max(200,Math.min(420,w+(e.key==='ArrowRight'?10:-10))));}}}/>}
       {(leftVisible || mobileLayout) && (
         <aside className="left-panel">
+          <div className="sidebar-list-label"><span>Workspace</span></div>
           <div className="panel-title">
             <div className="workspace-root-heading">
             <button className="workspace-tree-title workspace-tree-button" title="Manage workspaces" aria-label="Manage workspaces" onClick={() => { void refreshWorkspace().catch(report); setDialog("workspaces"); }}>
@@ -2653,18 +2664,15 @@ export default function App() {
         onHover={setOperationHover} onClose={closeMeasure}/>}
       {(rightVisible || mobileLayout) && !featureEdit && !operation && !move && !sketch && !grouping && measure===null && (
         <aside className="inspector-panel">
-          <div className="panel-title">
-            <span>INSPECTOR</span>
             <button
-              className="icon-button"
+              className="icon-button inspector-collapse-button"
               aria-label="Hide inspector"
               onClick={() => mobileLayout ? setMobilePane("viewport") : setRightVisible(false)}
             >
               <PanelRightClose size={14} />
             </button>
-          </div>
           <div className="inspector-scroll">
-            {primitivePreview ? <PrimitiveInspector template={primitivePreview.template}/> : showingPartOverview && state && activePart ? <PartOverview key={activePart.definition} state={state} part={activePart} measurements={measurementSection} onParameters={()=>setDialog("parameters")} run={run} disabled={busy||!!historyView}/> : component ? (
+            {primitivePreview ? <PrimitiveInspector template={primitivePreview.template}/> : showingPartOverview && state && activePart ? <PartOverview key={activePart.definition} state={state} part={activePart} measurements={measurementSection} onParameters={()=>setDialog("parameters")} run={run} disabled={busy||!!historyView}/> : component && component.structure_role!=="layout" ? (
               <>
                 <div className="component-heading">
                   <div
@@ -2676,7 +2684,7 @@ export default function App() {
                   <div>
                     <span className="eyebrow">
                       {component.kind === "assembly"
-                        ? (component.structure_role === "part" ? "PART" : component.structure_role === "layout" ? "LAYOUT" : occurrence?.layout&&!occurrence.library ? "LAYOUT GROUP" : "PART GROUP")
+                        ? (component.structure_role === "part" ? "PART" : occurrence?.layout&&!occurrence.library ? "LAYOUT GROUP" : "PART GROUP")
                         : component.kind === "planar"
                           ? "PLANAR PART"
                           : component.purpose === "tool"
@@ -3039,13 +3047,7 @@ export default function App() {
               state&&<DesignOverview key={state.document.id} state={state} run={run} disabled={busy||!!historyView} measurements={measurementSection} onParameters={()=>setDialog("parameters")}/>
             )}
           </div>
-          <div className="inspector-footer">
-            <span className="status-orb small" />
-            {historyView
-              ? "Measurements in inspected build stage"
-              : "Measurements in current revision"}
-            <span>{unit}</span>
-          </div>
+
         </aside>
       )}
 
@@ -3507,26 +3509,13 @@ export default function App() {
         </Modal>
       )}
       {dialog === "workspaces" && <WorkspaceManagerDialog workspace={workspace} canSwitch={!busy&&!operationActive.current&&!sketch&&!grouping} onClose={()=>setDialog(null)} onRefresh={async()=>{await refreshWorkspace();}}/>}
-      {["workspace","references","design-library"].includes(dialog||"")&&<DesignLibraryDialog key={dialog} initial={dialog==="references"?"stock":dialog==="workspace"?"blank":"yours"} activeDesign={currentDesignId()} canSwitch={!treeEditingDisabled} onClose={()=>setDialog(null)} onRefresh={async()=>{await refreshWorkspace();await refresh(true);}}/>}
+      {["workspace","references","design-library"].includes(dialog||"")&&<DesignLibraryDialog key={dialog} initial={dialog==="references"?"public":dialog==="workspace"?"blank":"yours"} activeDesign={currentDesignId()} canSwitch={!treeEditingDisabled} onClose={()=>setDialog(null)} onRefresh={async()=>{await refreshWorkspace();await refresh(true);}}/>}
       {state && dialog === "agents" && (
         <Modal
           title="External agents"
           eyebrow="MCP CONNECTIONS"
           onClose={() => setDialog(null)}
         >
-          <p className="dialog-copy">
-            An agent uses the same modeling operations as you. Each accepted
-            action is visible, attributed and autosaved in this live document.
-          </p>
-          <MCPSetup />
-          <label className="check-field">
-            <input
-              type="checkbox"
-              checked={followAgent}
-              onChange={(e) => setFollowAgent(e.target.checked)}
-            />
-            Follow affected features as agents work
-          </label>
           <div className="agent-list">
             {state.agents.map((agent) => (
               <section key={agent.actor.id}>
@@ -3558,7 +3547,7 @@ export default function App() {
                 <div className="agent-controls">
                   <button
                     className="button secondary small"
-                    disabled={agent.revoked || !agent.connected}
+                    disabled={!agentServer.status?.enabled || agent.revoked || !agent.connected}
                     onClick={() =>
                       controlAgent(
                         agent.actor.id,
@@ -3571,7 +3560,7 @@ export default function App() {
                   </button>
                   <button
                     className="button secondary small"
-                    disabled={agent.revoked || !agent.connected}
+                    disabled={!agentServer.status?.enabled || agent.revoked || !agent.connected}
                     onClick={() =>
                       controlAgent(
                         agent.actor.id,
@@ -3586,7 +3575,7 @@ export default function App() {
                   </button>
                   <button
                     className="text-button danger"
-                    disabled={agent.revoked || !agent.connected}
+                    disabled={!agentServer.status?.enabled || agent.revoked || !agent.connected}
                     onClick={() => controlAgent(agent.actor.id, "revoke")}
                   >
                     Revoke
@@ -3598,10 +3587,24 @@ export default function App() {
               <div className="no-agents">
                 <Activity size={25} />
                 <strong>No external agents connected</strong>
-                <span>Manual modeling is fully available.</span>
+
               </div>
             )}
           </div>
+          <AgentServerControls status={agentServer.status} toggle={agentServer.toggle}/>
+          <p className="dialog-copy">
+            An agent uses the same modeling operations as you. Each accepted
+            action is visible, attributed and autosaved in this live document.
+          </p>
+          <label className="check-field">
+            <input
+              type="checkbox"
+              checked={followAgent}
+              onChange={(e) => setFollowAgent(e.target.checked)}
+            />
+            Follow affected features as agents work
+          </label>
+          <MCPSetup />
         </Modal>
       )}
       {state && dialog === "checkpoints" && (

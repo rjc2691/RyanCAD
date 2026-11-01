@@ -117,7 +117,7 @@ export default function FileActions({
                 onReferences();
               }}
             >
-              Reference designs <small>Stock / standard workspace</small>
+              Reference designs <small>RyanCAD Public Workspace</small>
             </button>
           </div>
         )}

@@ -120,15 +120,15 @@ export default function ExperimentalFeatures({
       <button
         ref={button}
         className={`tool-button experimental-tool ${open ? "active" : ""}`}
-        aria-label="Experimental features"
+        aria-label="Testing"
         {...shortcutAttributes("experiments")}
         aria-expanded={open}
         aria-controls="experimental-features-panel"
-        title={`Experimental features · ${shortcutLabel("experiments")}`}
+        title={`Testing · ${shortcutLabel("experiments")}`}
         onClick={() => setOpen(!open)}
       >
         <FlaskConical size={18} />
-        <span>Experimental features</span>
+        <span>Testing</span>
         {(setting.enabled || palette.enabled) && (
           <i className="experiment-enabled-dot" />
         )}
@@ -139,7 +139,7 @@ export default function ExperimentalFeatures({
             ref={panel}
             id="experimental-features-panel"
             role="dialog"
-            aria-label="Experimental features"
+            aria-label="Testing"
             className="experimental-popover"
             style={{
               left: position.left,
@@ -157,11 +157,11 @@ export default function ExperimentalFeatures({
             <header>
               <strong>
                 <FlaskConical size={17} />
-                Experimental features
+                Testing
               </strong>
               <button
                 className="icon-button"
-                aria-label="Close experimental features"
+                aria-label="Close testing"
                 onClick={close}
               >
                 <X size={17} />

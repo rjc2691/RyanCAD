@@ -1290,6 +1290,7 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
     });
     observer.observe(host);
     let frame = 0;
+    let originOcclusionCheck=0;
     const render = () => {
       updateEdgePulseTime(performance.now()/1000);
       frame = requestAnimationFrame(render);
@@ -1310,7 +1311,22 @@ const Viewport = forwardRef<ViewportHandle, Props>((props, ref) => {
         const point=new THREE.Vector3().project(camera);
         const visible=Number.isFinite(point.x)&&Number.isFinite(point.y)&&Math.abs(point.x)<=1&&Math.abs(point.y)<=1;
         originButton.hidden=!visible;
-        if(visible){originButton.style.left=`${(point.x+1)*state.width/2}px`;originButton.style.top=`${(1-point.y)*state.height/2}px`;}
+        if(visible){
+          // Picking all model triangles every animation frame is unnecessary
+          // for this small marker. Navigation still positions it every frame.
+          if(performance.now()-originOcclusionCheck>100){
+            originOcclusionCheck=performance.now();
+            raycaster.setFromCamera(new THREE.Vector2(point.x,point.y),camera);
+            const surfaces=parts.children.filter(g=>g.visible).flatMap(g=>
+              g.children.filter(o=>o.visible&&o.type==='Mesh'&&!o.userData.overlay));
+            const distance=raycaster.ray.origin.length();
+            const cover=raycaster.intersectObjects(surfaces,false).find(h=>
+              h.distance<distance-1e-5&&(!propsRef.current.section||sectionKeeps(h.point,propsRef.current.sectionPlane)));
+            originButton.dataset.occluded=String(!!cover);
+          }
+          originButton.style.left=`${(point.x+1)*state.width/2}px`;
+          originButton.style.top=`${(1-point.y)*state.height/2}px`;
+        }
       }
       const axisScales=worldAxisScales(camera);
       for(const child of axes.children){const scale=axisScales[child.userData.axisIndex];child.visible=scale>0;child.scale.setScalar(scale||1);}

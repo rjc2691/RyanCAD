@@ -1,0 +1,2 @@
+import type {SVGProps} from "react";
+export default function DesignIcon(props:SVGProps<SVGSVGElement>){return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}><path d="M4 4h16v16H4zM4 13h6m4 0h6M13 4v5m0 4v7M10 13v-3"/><path d="M10 10a3 3 0 0 1 3 3M2 2v3m0-3h3M22 19v3h-3"/></svg>;}

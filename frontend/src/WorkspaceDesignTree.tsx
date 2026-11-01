@@ -1,3 +1,4 @@
+import DesignIcon from "./DesignIcon";
 import {useState, useEffect, type ReactNode} from "react";
 import {ChevronDown, ChevronRight, Layers} from "lucide-react";
 import {api, designHeaders, setCurrentDesignId, waitJob} from "./api";
@@ -38,7 +39,7 @@ export default function WorkspaceDesignTree({workspace,activeId,activeRow,active
       return <div key={d.id} role="treeitem" aria-expanded={isOpen} className="workspace-design-branch">
         <div className={`workspace-design-heading ${active?"active":""}`} aria-current={active?'true':undefined} onContextMenu={e=>{e.preventDefault();e.stopPropagation();onManageDesigns();}}>
           <button className="icon-button" aria-label={`${isOpen?"Collapse":"Expand"} ${d.name}`} onClick={()=>void toggle(d.id)}>{isOpen?<ChevronDown size={12}/>:<ChevronRight size={12}/>}</button>
-          {active?activeRow:<button className="inactive-design-name" disabled={disabled||pending} onClick={()=>void open(d.id)}><BlueprintIcon/><span>{d.name}</span></button>}
+          {active?activeRow:<button className="inactive-design-name" disabled={disabled||pending} onClick={()=>void open(d.id)}><DesignIcon/><span>{d.name}</span></button>}
         </div>
         {isOpen&&(active?activeLayouts:<div className="design-layout-children" role="group">
           <div className="sidebar-list-label nested-list-label">Layouts</div>
@@ -50,4 +51,3 @@ export default function WorkspaceDesignTree({workspace,activeId,activeRow,active
   </div>;
 }
 
-function BlueprintIcon(){return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M4 4h16v16H4zM4 13h6m4 0h6M13 4v5m0 4v7M10 13v-3"/><path d="M10 10a3 3 0 0 1 3 3M2 2v3m0-3h3M22 19v3h-3"/></svg>;}

@@ -23,10 +23,10 @@ def test_address_discovery_handles_offline_name_resolution(monkeypatch):
     assert network.local_ipv4_addresses() == []
 
 
-def test_default_listener_does_not_enable_lan_hosts(tmp_path, monkeypatch):
+def test_app_factory_without_lan_keeps_hosts_local(tmp_path, monkeypatch):
     monkeypatch.delenv("RYANCAD_PUBLIC_URL", raising=False)
     def unexpected_discovery():
-        raise AssertionError("LAN discovery must remain opt-in")
+        raise AssertionError("The local-only app factory must not discover LAN hosts")
     monkeypatch.setattr(api, "local_ipv4_addresses", unexpected_discovery)
     app = api.create_app(tmp_path / "local", "test-capability", testing=True)
     with TestClient(app) as client:
@@ -78,20 +78,20 @@ def test_cli_rejects_an_existing_loopback_listener_even_in_lan_mode(tmp_path, mo
         listener.bind(("127.0.0.1", 0))
         listener.listen()
         port = listener.getsockname()[1]
-        monkeypatch.setattr("sys.argv", ["ryancad", "--port", str(port), "--no-browser", "--no-tray"] + (["--lan"] if lan else []))
+        monkeypatch.setattr("sys.argv", ["ryancad", "--port", str(port), "--no-browser", "--no-tray"] + (["--lan"] if lan else ["--no-lan"]))
         with pytest.raises(SystemExit) as error:
             cli.main()
     assert error.value.code == 2
     assert "already in use" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("lan", [False, True])
-def test_cli_probe_listener_and_connection_metadata_share_lan_mode(tmp_path, monkeypatch, capsys, lan):
+@pytest.mark.parametrize("flags,lan", [([], True), (["--lan"], True), (["--no-lan"], False)])
+def test_cli_probe_listener_and_connection_metadata_share_lan_mode(tmp_path, monkeypatch, capsys, flags, lan):
     import uvicorn
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
     monkeypatch.setenv("PYTHONUTF8", "1")
-    monkeypatch.setattr("sys.argv", ["ryancad", "--no-browser", "--no-tray"] + (["--lan"] if lan else []))
+    monkeypatch.setattr("sys.argv", ["ryancad", "--no-browser", "--no-tray"] + flags)
     probes, configs, modes, metadata = [], [], [], []
     class Probe:
         def __enter__(self): return self

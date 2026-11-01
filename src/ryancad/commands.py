@@ -139,7 +139,18 @@ def create_feature(document, actor, owner, feature_type, values=None, options=No
     return feature
 
 
-def reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dict, list[str], str]:
+def reduce(document: Document, actor: Actor, name: str, args: dict):
+    from .reference_parts import protected_state
+    before = protected_state(document)
+    result = _reduce(document, actor, name, args)
+    after = protected_state(document)
+    for root, signature in before.items():
+        if root in document.components and after.get(root) != signature:
+            raise CadError("read_only_part", "Reference parts cannot be edited. Create a custom part from the reference first.")
+    return result
+
+
+def _reduce(document: Document, actor: Actor, name: str, args: dict) -> tuple[dict, list[str], str]:
     """Mutate an isolated candidate; evaluator/persistence decide whether it can commit."""
     from .project_structure import STRUCTURE_COMMANDS, structure_command
     if name in STRUCTURE_COMMANDS:

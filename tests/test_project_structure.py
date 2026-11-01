@@ -193,3 +193,24 @@ def test_default_part_names_start_at_one_and_skip_existing_names():
     edit(d,"part.create",name="Part 2")
     third=edit(d,"part.create")
     assert d.components[third["component_id"]].name=="Part 3"
+
+
+def test_primitive_copy_can_be_added_to_an_existing_part():
+    d=Document();edit(d,'structure.enable')
+    parent=edit(d,'part.create',name='Fixture')['component_id']
+    made=edit(d,'part.primitive',shape='cylinder',name='Locator',parent=parent,values={'diameter':6,'height':12},place=True)
+    assert d.instances[made['instance_id']].parent==parent
+    assert not any(i.parent==d.active_layout and i.definition==made['component_id'] for i in d.instances.values())
+    body=d.features[made['primitive_feature_id']].owner
+    assert Evaluator().evaluate(d.model_dump(mode='json'))['components'][body]['volume']==pytest.approx(np.pi*3**2*12)
+    other=edit(d,'part.primitive',shape='cylinder',parent=parent,values={'diameter':8,'height':12})
+    assert made['component_id']!=other['component_id']
+
+
+def test_primitive_copy_rejects_nonpart_and_readonly_destinations():
+    d=Document();edit(d,'structure.enable')
+    with pytest.raises(CadError,match='editable active part'):
+        edit(d,'part.primitive',shape='box',parent=d.active_layout)
+    part=edit(d,'part.create')['component_id'];d.components[part].read_only=True
+    with pytest.raises(CadError,match='editable active part'):
+        edit(d,'part.primitive',shape='sphere',parent=part)

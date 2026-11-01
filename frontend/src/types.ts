@@ -29,6 +29,7 @@ export interface Component {
   description: string;
   structure_role?: "component" | "part" | "group" | "layout";
   read_only?: boolean;
+  reference_source?: {design_name:string;part_name:string;revision:number};
   id: string;
   name: string;
   kind: "assembly" | "solid" | "planar";

@@ -20,8 +20,8 @@
 @media (max-width: 999px) {
   .header-right .account-menu .avatar {display:grid;width:36px;height:36px;}
   .account-dropdown > button {min-height:44px;}
-  .file-actions {gap:3px;}
-  .file-actions .button {width:36px;min-height:44px;padding:8px;gap:0;}
+  .file-actions {gap:10px;}
+  .file-actions .button {width:44px;min-height:44px;padding:12px;gap:0;justify-content:center;}
   .file-actions .button > span,.file-actions .button > svg:last-child {display:none;}
   .file-action-menu {position:fixed;left:8px;top:calc(52px + env(safe-area-inset-top, 0px));}
   #root > .app-shell {
@@ -95,7 +95,7 @@
   .app-header {
     min-width: 0;
     padding: 0 10px;
-    gap: 6px;
+    gap: 12px;
   }
   .brand {
     width: auto;
@@ -116,11 +116,11 @@
     display: none;
   }
   .header-right {
-    gap: 3px;
+    gap: 10px;
   }
   .button.agent-button,
   .button.export-button {
-    width: 40px;
+    width: 44px;
     min-height: 44px;
     padding: 10px;
     gap: 0;
@@ -194,6 +194,10 @@
   .component-row > .icon-button,
   .sketch-tree-row > .icon-button {
     min-width: 36px;
+  }
+  /* Match part rows' wider touch disclosure slot. */
+  .tool-library-row {
+    padding-left: 69px;
   }
   .component-color-mode {
     width: 40px;

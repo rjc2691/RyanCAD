@@ -216,6 +216,9 @@ def validate_structure(document):
 
 def structure_command(document, actor, name, args):
     from .commands import create_component, create_instance, require
+    if name in {"reference.import", "reference.customize"}:
+        from .reference_parts import import_parts, customize
+        return import_parts(document, actor, args) if name == "reference.import" else customize(document, actor, args)
     if name == "structure.enable":
         if document.structure_version:
             return {}, [], "Parts and layouts already enabled"
@@ -244,11 +247,16 @@ def structure_command(document, actor, name, args):
         kind = args.get("shape", "box")
         if kind not in {"box", "sphere", "cylinder"}:
             raise CadError("invalid_primitive", "Choose Box, Sphere or Cylinder.")
+        parent=args.get("parent")
+        if parent:
+            destination=require(document.components,parent,"part")
+            if destination.structure_role!="part" or destination.read_only:
+                raise CadError("invalid_owner","Choose an editable active part to receive the primitive copy.")
         part, library = container(document, actor, available_name(document, args.get("name") or kind.title(), "part"), "part")
         body, _ = create_component(document, actor, "Component", parent=part.id)
         feature = create_feature(document, actor, body.id, kind, args.get("values"), name=kind.title())
-        if args.get("place"):
-            placed = create_instance(document, actor, part.id, parent=document.active_layout)
+        if args.get("place") or parent:
+            placed = create_instance(document, actor, part.id, parent=parent or document.active_layout)
             return {"component_id": part.id, "instance_id": placed.id, "primitive_feature_id": feature.id}, [part.id, body.id, feature.id, placed.id], f"Place {kind} copy · {part.name}"
         return {"component_id": part.id, "instance_id": library.id, "primitive_feature_id": feature.id}, [part.id, body.id, feature.id], f"Create {kind} part · {part.name}"
     if name == "layout.select":
@@ -358,12 +366,14 @@ def structure_command(document, actor, name, args):
 
 
 STRUCTURE_COMMANDS = {name: description for name, description in [
+    ("reference.import", "Import immutable part definitions from source document snapshots."),
+    ("reference.customize", "Create an independent editable copy of a reference part."),
     ("layoutgroup.create", "Create an organizational group of placed parts in a layout."),
     ("part.describe", "Edit the description of a part definition."),
     ("part.delete", "Delete a part definition, its variations and placements; retain child definitions and reject external parameter dependencies."),
     ("structure.enable", "Initialize parts and layouts for a new engine document."),
     ("part.create", "Create a uniquely named reusable part definition."),
-    ("part.primitive", "Create a reusable box, sphere or cylinder part with explicit editable dimensions; shape and optional values."),
+    ("part.primitive", "Create an independent box, sphere or cylinder part with editable dimensions; shape and optional values. place=true inserts in the active layout; parent=<editable part ID> inserts a nested copy in that part."),
     ("part.component.create", "Create a body within part=<definition ID>; component names may repeat."),
     ("part.insert", "Place part=<definition ID> in parent=<part/group/layout ID>, optionally with variation and placement."),
     ("partgroup.create", "Create a group of components and nested parts inside a part or part group."),

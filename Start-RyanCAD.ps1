@@ -1,4 +1,4 @@
-param([string]$Project = "runtime/projects/default.rycad", [int]$Port = 8790, [switch]$Background, [switch]$NoBrowser, [switch]$Lan)
+param([string]$Project = "runtime/projects/default.rycad", [int]$Port = 8790, [switch]$Background, [switch]$NoBrowser, [switch]$Lan = $true)
 $ErrorActionPreference = "Stop"
 Set-Location -LiteralPath $PSScriptRoot
 $taskPython = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
@@ -7,7 +7,7 @@ if (-not (Test-Path -LiteralPath $taskPython)) {
 }
 $taskArguments = @('-m', 'ryancad', '--project', $Project, '--port', "$Port")
 if ($NoBrowser) { $taskArguments += '--no-browser' }
-if ($Lan) { $taskArguments += '--lan' }
+if ($Lan) { $taskArguments += '--lan' } else { $taskArguments += '--no-lan' }
 if ($Background) {
     if ($Port -lt 1024 -or $Port -gt 65535) { throw "Choose a port from 1024 to 65535." }
     $probeAddress = if ($Lan) { [System.Net.IPAddress]::Any } else { [System.Net.IPAddress]::Loopback }

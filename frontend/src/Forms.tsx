@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import {
   ArrowRight,
@@ -18,18 +19,22 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  dismissible = true,
+  branding,
 }: {
   title: string;
   eyebrow?: string;
   children: React.ReactNode;
   onClose: () => void;
   wide?: boolean;
+  dismissible?: boolean;
+  branding?: React.ReactNode;
 }) {
-  return (
+  return createPortal(
     <div
       className="modal-backdrop"
       onMouseDown={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (dismissible && e.target === e.currentTarget) onClose();
       }}
     >
       <section
@@ -39,21 +44,23 @@ export function Modal({
         className={"modal " + (wide ? "wide" : "")}
       >
         <header>
-          <div>
+          <div className="modal-heading-text">
+            {branding}
             {eyebrow !== "" && <span className="eyebrow">{eyebrow || "DESIGN TOOLS"}</span>}
             <h2>{title}</h2>
           </div>
-          <button
+          {dismissible&&<button
             className="icon-button"
             aria-label="Close dialog"
             onClick={onClose}
           >
             <X size={18} />
-          </button>
+          </button>}
         </header>
         {children}
       </section>
-    </div>
+    </div>,
+    document.body
   );
 }
 

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { UserRound, Settings, LogIn, UserPlus } from "lucide-react";
 import { Modal } from "./Forms";
 import {shortcutAttributes} from './toolbarShortcuts';
-export default function AccountMenu() {
+export default function AccountMenu({username="Guest"}:{username?:string}) {
   const [open, setOpen] = useState(false),
     [panel, setPanel] = useState<string | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -31,12 +31,12 @@ export default function AccountMenu() {
         title="Account menu · Shift+U"
         onClick={() => setOpen(!open)}
       >
-        R
+        {Array.from(username.trim())[0]?.toLocaleUpperCase()||"?"}
       </button>
       {open && (
         <div className="account-dropdown" role="menu" aria-label="Account">
           <header>
-            <strong>Ryan</strong>
+            <strong>{username}</strong>
             <span>Personal workspace</span>
             <small>Account preview · Not signed in</small>
           </header>
@@ -76,11 +76,11 @@ export default function AccountMenu() {
           </p>
           <label className="field">
             <span>Name</span>
-            <input disabled value="Ryan" readOnly />
+            <input disabled value={username} readOnly />
           </label>
           <label className="field">
             <span>Email</span>
-            <input disabled value="ryan@example.com" readOnly />
+            <input disabled value="" placeholder="Not set" readOnly />
           </label>
           {(panel === "Sign in" || panel === "Create account") && (
             <label className="field">

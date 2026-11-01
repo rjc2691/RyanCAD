@@ -1,3 +1,8 @@
+import RyanCADLogo from "./RyanCADLogo";
+import StartupDialog from "./StartupDialog";
+import {PrimitiveEditor,PrimitiveInspector} from "./PrimitiveEditor";
+import type {PrimitiveTemplate} from "./PrimitiveLibrary";
+import DesignIcon from "./DesignIcon";
 import {copyLayoutParts,pasteLayoutParts,type LayoutClipboard} from "./layoutClipboard";
 import EndMillIcon from "./EndMillIcon";
 import {applyDarkTheme,DARK_UI_PALETTE_ID,resolveDarkTheme} from "./themes";
@@ -30,7 +35,8 @@ import FileActions from "./FileActions";
 import SketchToolbar from "./SketchToolbar";
 import ParametersWindow from "./ParametersWindow";
 import { NamedParameterProvider } from "./NumericInput";
-import WorkspaceDialog, { type WorkspaceInfo } from "./WorkspaceDialog";
+import type { WorkspaceInfo } from "./WorkspaceDialog";
+import DesignLibraryDialog from "./DesignLibraryDialog";
 import WorkspaceManagerDialog from './WorkspaceManagerDialog';
 import FeatureHistory from "./FeatureHistory";
 import FeatureEditPanel, { type FeatureEditHandle } from "./FeatureEditPanel";
@@ -239,22 +245,11 @@ function OrderedToolbar({order,children}:{order:string[];children:ReactNode}) {
  return <>{flatten(children).sort((a,b)=>rank(a)-rank(b))}</>;
 }
 
-function Logo() {
-  return (
-    <svg width="30" height="32" viewBox="0 0 30 32" fill="none">
-      <path
-        d="M15 2 27 9v14l-12 7-12-7V9L15 2Z"
-        stroke="#a3dfd0"
-        strokeWidth="1.5"
-      />
-      <path d="m3 9 12 7 12-7M15 16v14" stroke="#6b9c94" strokeWidth="1.2" />
-      <path d="m9 12 6-3 6 3-6 3-6-3Z" fill="#a3dfd0" />
-      <path d="M15 19v5l6-3v-5l-6 3Z" fill="#a3dfd0" fillOpacity=".65" />
-    </svg>
-  );
-}
 
 export default function App() {
+  const [browserProfile,setBrowserProfile]=useState<{name:string}|null>(null);
+  const [startupOpen,setStartupOpen]=useState(()=>!sessionStorage.getItem("ryancad-startup-complete"));
+  const startupActive=useRef(false);
   const [move, setMove] = useState<{
     target: Selection | null;
     axisRequest?: { axis: WorldAxis; id: number };
@@ -319,6 +314,8 @@ export default function App() {
   const selectedMembers = selectionMembers(selection);
   const [selectionSet, setSelectionSet] = useState<string[]>([]);
   const [groupScope, setGroupScope] = useState("");
+  const [primitivePreview,setPrimitivePreview]=useState<{template:PrimitiveTemplate;context:(x:number,y:number)=>void}|null>(null);
+  const primitivePreviewRef=useRef(primitivePreview);primitivePreviewRef.current=primitivePreview;
   const [partWorkbench, setPartWorkbench] = useState<string|null>(null);
   const layoutScope = state?.occurrences.find(o=>o.parent==="root" && o.definition===state.document.active_layout)?.id || "";
   useEffect(()=>{
@@ -473,6 +470,12 @@ export default function App() {
         setCurrentDesignId(info.designs.some((design) => design.id === stored && !design.deleted) ? stored : info.active_design);
         workspaceReady.current = true;
         await refresh(true);
+        try {
+          const profile=await api('/workspace/profile');
+          if(!cancelled)setBrowserProfile(profile);
+        }catch(error:any){
+          if(!cancelled)setError({message:error.message||"Could not load the browser profile.",code:error.code||"request_failed"});
+        }
       } catch (error: any) {
         if (!cancelled) {
           setConnectionError(true);
@@ -619,6 +622,7 @@ export default function App() {
     setSectionPicking(false);setSectionNotice("");
   };
   const select = (item: Selection | null, add = false, fromTree = false, removeOnly=false) => {
+    setPrimitivePreview(null);
     if (featureEditActive.current) return;
     if(removeOnly){
       if(sketchActive.current||operationActive.current||moveActive.current||measureActive.current||sectionPicking)return;
@@ -709,6 +713,7 @@ export default function App() {
     ]);
   };
   const selectSketch = (id: string,removeOnly=false) => {
+    setPrimitivePreview(null);
     if(removeOnly){if(!featureEditActive.current&&!sectionPicking&&!measureActive.current&&!sketchActive.current&&!moveActive.current&&!groupingActive.current&&!operationActive.current&&selectedSketch===id)setSelectedSketch(null);return;}
     if (featureEditActive.current) return;
     if(sectionPicking){captureSectionSketch(id);return;}
@@ -725,6 +730,7 @@ export default function App() {
     setSelectedFeature(null);
   };
   const chooseTool = (kind: string) => {
+    setPrimitivePreview(null);
     if (featureEditActive.current) {
       setToast("Apply or cancel the feature edit before opening another tool.");
       return;
@@ -1076,21 +1082,6 @@ export default function App() {
       setLocalJob(null);
     }
   };
-  const loadRecipe = async (recipe: string) => {
-    if (operationActive.current || sketch || grouping || busy) {
-      setToast("Finish or cancel the current operation before opening a reference design.");
-      return;
-    }
-    setLocalJob({ status: "queued", description: "Create reference design" });
-    try {
-      const created = await api("/workspace/designs", { method: "POST", body: JSON.stringify({ name: recipe === "mold" ? "Silicone mold tooling" : "Mounting plate and pins" }) });
-      const submission = await api("/commands", { method: "POST", headers: designHeaders(created.design_id), body: JSON.stringify({ name: "recipe.load", args: { recipe }, expected_revision: 0, request_id: newRequestId() }) });
-      await waitJob(submission, setLocalJob, 120, created.design_id);
-      setCurrentDesignId(created.design_id);
-      window.location.reload();
-    } catch (error) { report(error); }
-    finally { setLocalJob(null); }
-  };
   const exportSTL = async (options: Record<string, any> = {}) => {
     if (!state) return;
     setLocalJob({ status: "queued", description: "Validate and export STL" });
@@ -1193,7 +1184,13 @@ export default function App() {
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if((event.target as HTMLElement).closest('[data-shortcut-capture]'))return;
+      if((event.target as HTMLElement).closest('[data-shortcut-capture],[data-primitive-copy],[data-startup-form]'))return;
+      if(startupActive.current)return;
+      if(primitivePreviewRef.current&&!(event.target as HTMLElement).closest('input,textarea,select,[contenteditable],[role=dialog],[role=menu]')){
+        if(event.key==='Escape'){event.preventDefault();event.stopImmediatePropagation();setPrimitivePreview(null);}
+        else if(event.key.toLowerCase()==='f'){event.preventDefault();document.querySelector<HTMLButtonElement>('.primitive-editor-view [aria-label="Fit preview"]')?.click();}
+        return;
+      }
       if(sketchActive.current&&event.code==="Space"&&bindingFor("sketch_select")?.code==="Space"&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.isComposing&&(event.target as HTMLElement).closest('.sketch-dimension-inline')){
         event.preventDefault();event.stopImmediatePropagation();sketchRef.current?.selectTool();return;
       }
@@ -1595,6 +1592,7 @@ export default function App() {
       toolReturnSelection.current = selection;
       toolReturnScope.current = groupScope;
     }
+    setPrimitivePreview(null);
     setToolWorkbench(id);
     setGroupScope("");
     setHistoryView(null);
@@ -1661,6 +1659,7 @@ export default function App() {
       await run("group.insert", { parent, kind });
     } catch {}
   };
+  startupActive.current=startupOpen&&!!workspace&&!!browserProfile;
   return (
     <NamedParameterProvider parameters={state ? Object.values(state.document.parameters) : []} values={Object.fromEntries(Object.entries(state?.parameter_graph || {}).map(([id, info]) => [id, info.value]))}>
     <div
@@ -1684,9 +1683,10 @@ export default function App() {
         } as React.CSSProperties
       }
     >
+      {startupOpen&&workspace&&browserProfile&&<StartupDialog activeDesign={currentDesignId()} username={browserProfile.name} onName={name=>{setBrowserProfile({name});void refreshWorkspace().catch(()=>{});}} onDismiss={()=>{sessionStorage.setItem("ryancad-startup-complete","1");setStartupOpen(false);}} onComplete={id=>{sessionStorage.setItem("ryancad-startup-complete","1");setCurrentDesignId(id);window.location.reload();}}/>}
       <header className="app-header">
         <div className="brand-container">
-          <div className="brand"><Logo /><span>Ryan<span>CAD</span></span></div>
+          <div className="brand"><RyanCADLogo className="brand-mark" /><span>Ryan<span>CAD</span></span></div>
         </div>
           <FileActions state={state} disabled={!state || busy || !!featureEdit || !!operation || !!move || !!grouping || !!sketch || !!historyView}
             onBusy={(value) => setLocalJob(value ? {status: "running", description: "Transfer design file"} : null)}
@@ -1710,11 +1710,12 @@ export default function App() {
                 0}
             </small>
           </button>
-          <AccountMenu />
+          <AccountMenu username={browserProfile?.name||"Guest"} />
         </div>
       </header>
       <nav
         className="tool-strip"
+        inert={!!primitivePreview}
         aria-label={sketch ? "Sketch tools" : "Modeling tools"}
         onDragStart={e=>{const b=(e.target as HTMLElement).closest<HTMLElement>('[data-toolbar-action]');if(!b||!b.draggable)return;toolbarDrag.current=b.dataset.toolbarAction!;e.dataTransfer.setData('text/ryancad-toolbar',toolbarDrag.current);e.dataTransfer.effectAllowed='move';}}
         onDragOver={e=>{if(toolbarDrag.current&&(e.target as HTMLElement).closest('[data-toolbar-action]')){e.preventDefault();e.dataTransfer.dropEffect='move';}}}
@@ -1876,7 +1877,7 @@ export default function App() {
             </button>
           </div>
           <div className="sidebar-list-label"><span>Designs</span><button className="icon-button sidebar-header-add" aria-label="Add design" title="Add design" disabled={treeEditingDisabled} onClick={()=>setDialog("workspace")}><Plus size={14}/></button></div>
-          <WorkspaceDesignTree workspace={workspace} activeId={currentDesignId()} disabled={treeEditingDisabled} onError={report} onManageDesigns={()=>setDialog('workspace')}
+          <WorkspaceDesignTree workspace={workspace} activeId={currentDesignId()} disabled={treeEditingDisabled} onError={report} onManageDesigns={()=>setDialog('design-library')}
             activeRow={<>          <div
             className="structure-root current-design-row"
             aria-current="page"
@@ -1948,12 +1949,13 @@ export default function App() {
           </div>
           </>}
             activeLayouts={<>          {state?.document.structure_version ? <LayoutList state={state} run={run} disabled={treeEditingDisabled}
-            onLayout={()=>{setPartWorkbench(null);setGroupScope(stateRef.current?.occurrences.find(o=>o.parent==="root" && o.definition===stateRef.current?.document.active_layout)?.id||"");setSelection(null);setSelectionSet([]);}} /> : null}
+            onLayout={()=>{setPrimitivePreview(null);setPartWorkbench(null);setGroupScope(stateRef.current?.occurrences.find(o=>o.parent==="root" && o.definition===stateRef.current?.document.active_layout)?.id||"");setSelection(null);setSelectionSet([]);}} /> : null}
           </>} />
 
 
-          {state && <ProjectStructure onMove={()=>chooseTool("transform")} state={state} run={run} disabled={treeEditingDisabled} scope={groupScope} selection={selection} groupMembers={grouping}
+          {state && <ProjectStructure activePrimitive={primitivePreview?.template.shape} onPreviewPrimitive={(template,context)=>{setPrimitivePreview({template,context});setHistoryView(null);if(mobileLayout)setMobilePane("viewport");}} onRefresh={async()=>{await refresh(true);}} onMove={()=>chooseTool("transform")} state={state} run={run} disabled={treeEditingDisabled} scope={groupScope} selection={selection} groupMembers={grouping}
             onSelect={(item,remove,add=false)=>{
+              setPrimitivePreview(null);
               if(remove){select(item,false,true,true);return;}
               if(!treeEditingDisabled){
                 const root=state.occurrences.find(o=>o.parent==="root"&&o.library&&(item.occurrence===o.id||item.occurrence.startsWith(o.id+"/")));
@@ -1964,12 +1966,13 @@ export default function App() {
             }}
             onEdit={row=>{
               if(treeEditingDisabled)return;
+              setPrimitivePreview(null);
               setToolWorkbench(null);setHistoryView(null);
               const root=state.occurrences.find(o=>o.parent==="root" && o.library && (row.id===o.id||row.id.startsWith(o.id+"/")));
               setPartWorkbench(root?.id||null);setGroupScope(row.id);
               setSelection(row.kind==="assembly"?null:{occurrence:row.id,definition:row.definition});setSelectionSet([]);
             }}
-            onLayout={()=>{setPartWorkbench(null);setGroupScope(stateRef.current?.occurrences.find(o=>o.parent==="root" && o.definition===stateRef.current?.document.active_layout)?.id||"");setSelection(null);setSelectionSet([]);}}
+            onLayout={()=>{setPrimitivePreview(null);setPartWorkbench(null);setGroupScope(stateRef.current?.occurrences.find(o=>o.parent==="root" && o.definition===stateRef.current?.document.active_layout)?.id||"");setSelection(null);setSelectionSet([]);}}
  />}
           <details open className="tool-body-library sidebar-library" aria-label="3D Tool Bodies">
             <summary className="structure-section design-category">
@@ -2104,8 +2107,9 @@ export default function App() {
       )}
 
       <main
-        className={`viewport-area ${toolWorkbench ? "tool-workbench-view" : ""}`}
+        className={`viewport-area ${primitivePreview ? "primitive-preview-active" : ""} ${toolWorkbench ? "tool-workbench-view" : ""}`}
       >
+        {primitivePreview&&<PrimitiveEditor template={primitivePreview.template} onDone={()=>setPrimitivePreview(null)} onContext={primitivePreview.context}/>}
         {toolWorkbench && (
           <div className="tool-workbench-banner">
             <Cuboid size={15} />
@@ -2660,7 +2664,7 @@ export default function App() {
             </button>
           </div>
           <div className="inspector-scroll">
-            {showingPartOverview && state && activePart ? <PartOverview key={activePart.definition} state={state} part={activePart} measurements={measurementSection} onParameters={()=>setDialog("parameters")} run={run} disabled={busy||!!historyView}/> : component ? (
+            {primitivePreview ? <PrimitiveInspector template={primitivePreview.template}/> : showingPartOverview && state && activePart ? <PartOverview key={activePart.definition} state={state} part={activePart} measurements={measurementSection} onParameters={()=>setDialog("parameters")} run={run} disabled={busy||!!historyView}/> : component ? (
               <>
                 <div className="component-heading">
                   <div
@@ -3503,53 +3507,7 @@ export default function App() {
         </Modal>
       )}
       {dialog === "workspaces" && <WorkspaceManagerDialog workspace={workspace} canSwitch={!busy&&!operationActive.current&&!sketch&&!grouping} onClose={()=>setDialog(null)} onRefresh={async()=>{await refreshWorkspace();}}/>}
-      {dialog === "workspace" && <WorkspaceDialog workspace={workspace} activeDesign={currentDesignId()}
-        canSwitch={!busy && !operationActive.current && !sketch && !grouping}
-        onClose={() => setDialog(null)} reload={async () => { await refreshWorkspace(); await refresh(true); }} onError={report} />}
-      {dialog === "references" && (
-        <Modal
-          title="Reference designs"
-          eyebrow="NATIVE REFERENCE LIBRARY"
-          wide
-          onClose={() => setDialog(null)}
-        >
-          <div className="reference-options">
-            <button onClick={() => loadRecipe("mold")}>
-              <div className="reference-illustration mold-illustration">
-                <Boxes size={74} strokeWidth={0.65} />
-              </div>
-              <span className="eyebrow">MULTI-COMPONENT · FIT STUDY</span>
-              <h3>Silicone mold tooling</h3>
-              <p>
-                Removable printed forms, a locating base and casting master.
-                Shared dimensions and explicit clearances.
-              </p>
-              <span className="reference-link">
-                Open editable design
-                <ArrowRight size={15} />
-              </span>
-            </button>
-            <button onClick={() => loadRecipe("plate")}>
-              <div className="reference-illustration plate-illustration">
-                <Box size={74} strokeWidth={0.65} />
-              </div>
-              <span className="eyebrow">LINKED PARTS · PARAMETRIC DESIGN</span>
-              <h3>Mounting plate & pins</h3>
-              <p>
-                Four edge-located holes, two linked pins and a reusable edge
-                fillet. Change the inputs and inspect the result.
-              </p>
-              <span className="reference-link">
-                Open editable design
-                <ArrowRight size={15} />
-              </span>
-            </button>
-          </div>
-          <div className="inline-note">
-            Each reference opens as a separate design in this workspace.
-          </div>
-        </Modal>
-      )}
+      {["workspace","references","design-library"].includes(dialog||"")&&<DesignLibraryDialog key={dialog} initial={dialog==="references"?"stock":dialog==="workspace"?"blank":"yours"} activeDesign={currentDesignId()} canSwitch={!treeEditingDisabled} onClose={()=>setDialog(null)} onRefresh={async()=>{await refreshWorkspace();await refresh(true);}}/>}
       {state && dialog === "agents" && (
         <Modal
           title="External agents"
@@ -4398,19 +4356,3 @@ function ComponentActions({
   );
 }
 
-function DesignIcon() {
-  return (<svg
-              width="17"
-              height="17"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden="true"
-            >
-              <path d="M4 4h16v16H4zM4 13h6m4 0h6M13 4v5m0 4v7M10 13v-3" />
-              <path d="M10 10a3 3 0 0 1 3 3M2 2v3m0-3h3M22 19v3h-3" />
-            </svg>);
-}

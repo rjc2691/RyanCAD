@@ -117,7 +117,7 @@ export default function FileActions({
                 onReferences();
               }}
             >
-              Reference designs <small>Editable example designs</small>
+              Reference designs <small>Stock / standard workspace</small>
             </button>
           </div>
         )}

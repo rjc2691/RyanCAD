@@ -52,6 +52,8 @@ export async function api(path: string, options: RequestInit = {}) {
     } catch {
       payload = { error: { message: response.statusText } };
     }
+    if(response.status===404&&!payload.error)
+      payload={error:{code:"endpoint_unavailable",message:"This server does not support this request. Restart RyanCAD, then refresh the page."}};
     throw new ApiError(payload.error || payload);
   }
   return response.json();

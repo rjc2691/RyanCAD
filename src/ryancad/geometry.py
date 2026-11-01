@@ -577,6 +577,49 @@ class Evaluator:
             self.shapes = all_shapes
         return {"components": output, "timings": timings, "bindings": bindings, "sketches": sketches, "profiles":profile_info, "values": values,"operation_decisions":operation_decisions,"operation_displays":operation_displays, "reference_snapshots": reference_snapshots}
 
+    def reference_preview(self, payload, part):
+        """Read-only meshes of one library definition, including nested placements."""
+        import base64
+        from .project_structure import descendants
+        from .placements import flatten_instances
+        document=Document.model_validate(payload)
+        definition=document.components.get(part)
+        if not definition or definition.structure_role!="part":
+            raise CadError("missing_part","Choose a reusable part to preview.")
+        evaluation=self.evaluate(payload,_component_ids=descendants(document,part),tessellation=.15)
+        rows=flatten_instances(document,evaluation["values"])
+        root=next((o for o in rows if o["definition"]==part and o["parent"]=="root" and o["library"]),None)
+        if not root:raise CadError("missing_part","This part has no library definition.")
+        inverse=np.linalg.inv(np.array(root["matrix"]))
+        instances=[o for o in rows if o["id"].startswith(root["id"]+"/") and o["kind"]!="assembly" and not o["suppressed"]]
+        meshes={};placements=[]
+        for row in instances:
+            data=evaluation["components"].get(row["definition"],{})
+            if not data.get("mesh"):continue
+            meshes[row["definition"]]=base64.b64encode(data["mesh"]).decode("ascii")
+            placements.append({"definition":row["definition"],"matrix":(inverse@np.array(row["matrix"])).tolist()})
+        return {"name":definition.name,"revision":document.revision,"meshes":meshes,"placements":placements}
+
+    def design_preview(self,payload):
+        """Display only the active layout, without editing a design or creating history."""
+        import base64
+        from .project_structure import descendants
+        from .placements import flatten_instances
+        document=Document.model_validate(payload)
+        layout=document.components.get(document.active_layout)
+        if not layout or layout.structure_role!="layout":
+            layout=next((c for c in document.components.values() if c.structure_role=="layout"),None)
+        if not layout:raise CadError("missing_layout","This design has no layout to preview.")
+        evaluation=self.evaluate(payload,_component_ids=descendants(document,layout.id),tessellation=.15)
+        rows=[o for o in flatten_instances(document,evaluation["values"]) if o.get("layout")==layout.id and o["kind"]!="assembly" and o["visible"] and not o["suppressed"] and o.get("purpose")!="tool"]
+        meshes={};placements=[]
+        for row in rows:
+            data=evaluation["components"].get(row["definition"],{})
+            if not data.get("mesh"):continue
+            meshes[row["definition"]]=base64.b64encode(data["mesh"]).decode("ascii")
+            placements.append({"definition":row["definition"],"matrix":row["matrix"]})
+        return {"name":document.name,"revision":document.revision,"layout_id":layout.id,"layout_name":layout.name,"meshes":meshes,"placements":placements,"empty_message":"This layout has no visible parts."}
+
     def measure(self, payload, first, second, matrices):
         self.evaluate(payload)
         from OCP.gp import gp_Trsf

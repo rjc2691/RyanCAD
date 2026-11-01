@@ -12,7 +12,7 @@ The environment and production UI are already installed in this workspace:
 .\Start-RyanCAD.ps1
 ```
 
-Open **http://127.0.0.1:8790**. The launcher opens the browser. A new browser workspace starts with a blank design; reference examples are available from the project menu. The normal launcher keeps the terminal open; Ctrl+C closes the service. Startup opens browser workspaces only; it does not load an old standalone design or seed a demo.
+Open **http://127.0.0.1:8790**. On first visit, enter a display name and choose an existing design, a blank design, or an included reference. The startup chooser stays dismissed across refreshes for that browser session. The launcher opens the browser. A new browser workspace starts with a blank design; reference examples are available from the project menu. The normal launcher keeps the terminal open; Ctrl+C closes the service. Startup opens browser workspaces only; it does not load an old standalone design or seed a demo.
 
 On Windows, RyanCAD also places its icon in the notification area. Look under the **^** arrow if Windows hides it. Right-click the icon to open RyanCAD or quit the server; double-click opens the app. Hover over the icon to see which port that instance uses. Quitting shuts down the local server cleanly for every browser connected to it; saved designs remain on disk.
 
@@ -41,13 +41,13 @@ After setup the application works offline, with local bundled assets, no cloud s
 To open RyanCAD from a phone or another computer on the same network:
 
 ```powershell
-.\Start-RyanCAD.ps1 -Lan
+.\Start-RyanCAD.ps1
 # Optional: -Background -NoBrowser
 ```
 
-On macOS, run `bash Start-RyanCAD.command --lan`; on Linux or with the Python CLI, add `--lan` to `python -m ryancad`. Stop the previous instance before restarting it in LAN mode. The server prints **Local network** URLs such as `http://192.168.1.11:8790`; open the Wi-Fi/Ethernet address from the other device. Virtual adapter addresses may also be listed. Background launches record the addresses in the `lan_urls` field of `runtime/connection.json` (or `connection-PORT.json`).
+LAN access is enabled by default on Windows, macOS and Linux; no flag is needed. On macOS, run `bash Start-RyanCAD.command`; with the Python CLI, run `python -m ryancad`. The server prints **Local network** URLs such as `http://192.168.1.11:8790`; open the Wi-Fi/Ethernet address from the other device. Virtual adapter addresses may also be listed. Background launches record the addresses in the `lan_urls` field of `runtime/connection.json` (or `connection-PORT.json`).
 
-LAN mode listens on IPv4 interfaces and allows the computer's detected private interface addresses through the existing Host/Origin checks. It retains the localhost URL for the local browser, tray and MCP connector. Normal startup without `-Lan`/`--lan` remains limited to localhost. Restart after changing networks or receiving a different DHCP address.
+Startup listens on IPv4 interfaces and allows the computer's detected private interface addresses through the existing Host/Origin checks. It retains the localhost URL for the local browser, tray and MCP connector. For localhost-only access, use `.\Start-RyanCAD.ps1 -Lan:$false` or `python -m ryancad --no-lan`. Restart an existing localhost-only instance to load this default, and restart after changing networks or receiving a different DHCP address.
 
 No router port forwarding is needed. Devices must be on a network that permits communication between clients; a guest Wi-Fi network may isolate them. A host firewall can also block inbound connections. Starting RyanCAD does not change firewall settings or require administrator elevation. Each browser still receives its own workspace; use the existing workspace recovery code to open an existing workspace on another device.
 

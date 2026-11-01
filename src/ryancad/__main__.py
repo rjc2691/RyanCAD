@@ -15,7 +15,8 @@ def main():
     parser = argparse.ArgumentParser(description="RyanCAD local parametric CAD application")
     parser.add_argument("--project", type=Path, default=Path("runtime/projects/default.rycad"), help="Storage namespace; designs live in its .workspaces sibling directory")
     parser.add_argument("--port", type=int, default=8790)
-    parser.add_argument("--lan", action="store_true", help="Allow devices on the local network to connect over IPv4")
+    parser.add_argument("--lan", action=argparse.BooleanOptionalAction, default=True,
+                        help="Allow local-network access over IPv4 (default); --no-lan restricts access to localhost")
     parser.add_argument("--no-browser", action="store_true")
     parser.add_argument("--no-tray", action="store_true", help="Do not show the Windows notification-area icon")
     arguments = parser.parse_args()

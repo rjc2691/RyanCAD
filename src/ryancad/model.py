@@ -76,6 +76,7 @@ class Component(Model):
     structure_role: Literal["component", "part", "group", "layout"] = "component"
     group_kind: Literal["layout", "part"] | None = None
     read_only: bool = False
+    reference_source: dict[str, Any] | None = None
 
 
 class Instance(Model):

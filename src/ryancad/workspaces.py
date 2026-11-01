@@ -78,7 +78,7 @@ class WorkspaceManager:
             directory.mkdir(parents=True, exist_ok=True)
             identifier = self._new_project(directory, "Untitled design")
             self._write(code, {"version": 1, "recovery_code": code, "active_design": identifier,
-                               "designs": [{"id": identifier, "deleted": False}]})
+                               "designs": [{"id": identifier, "deleted": False}], "starter_design": identifier})
 
     @staticmethod
     def _new_project(directory: Path, name: str) -> str:
@@ -101,10 +101,11 @@ class WorkspaceManager:
                 return entry
         raise CadError("missing_design", "This design is not available in this workspace. It may have been deleted.")
 
-    def _name(self, code: str, identifier: str) -> str:
+    def _design_info(self, code: str, identifier: str) -> dict:
         service = self.services.get((code, identifier))
         if service:
-            return service.document.name
+            document=service.document
+            return {"name":document.name,"modified_at":document.modified_at,"is_empty":document.revision==0 and not document.features and not any(c.structure_role=="part" for c in document.components.values())}
         db = self._directory(code) / identifier / "journal.sqlite3"
         try:
             if not db.is_file():
@@ -112,11 +113,37 @@ class WorkspaceManager:
             connection = sqlite3.connect(db)
             try:
                 row = connection.execute("SELECT document FROM revisions ORDER BY revision DESC LIMIT 1").fetchone()
-                return Document.model_validate_json(row[0]).name
+                document=Document.model_validate_json(row[0])
+                return {"name":document.name,"modified_at":document.modified_at,"is_empty":document.revision==0 and not document.features and not any(c.structure_role=="part" for c in document.components.values())}
             finally:
                 connection.close()
         except (sqlite3.Error, ValueError, TypeError, IndexError) as exc:
             raise CadError("invalid_design", "A saved design could not be read. Its files have not been changed.") from exc
+
+    def _name(self, code: str, identifier: str) -> str:
+        return self._design_info(code,identifier)["name"]
+
+    def browser_profile(self, owner):
+        if not self.valid_code(owner):raise CadError("browser_required","Refresh RyanCAD to initialize this browser.")
+        path=self.root/"browser-profiles"/(hashlib.sha256(owner.encode()).hexdigest()+".json")
+        with self.lock:
+            if not path.is_file():return {"name":""}
+            return {"name":json.loads(path.read_text("utf-8")).get("name","")}
+
+    def name_browser(self, owner, code, name):
+        if not isinstance(name,str) or not name.strip() or len(name.strip())>60 or any(ord(c)<32 for c in name):
+            raise CadError("invalid_name","Enter a name of 1–60 characters.")
+        label=name.strip()
+        with self.lock:
+            previous=self.browser_profile(owner)["name"]
+            first=not previous
+            path=self.root/"browser-profiles"/(hashlib.sha256(owner.encode()).hexdigest()+".json")
+            path.parent.mkdir(exist_ok=True)
+            atomic_text(path,json.dumps({"name":label},ensure_ascii=False)+"\n")
+            workspace_name=self._read(code).get("name","Local Workspace")
+            if (first and workspace_name=="Local Workspace") or (previous and workspace_name==f"{previous}'s Workspace"):
+                self.rename_workspace(code,f"{label}'s Workspace")
+        return {"name":label}
 
     def describe(self, code: str) -> dict:
         with self.lock:
@@ -124,8 +151,8 @@ class WorkspaceManager:
             if not data.get("recovery_code"):
                 data["recovery_code"] = code
                 self._write(code, data)
-            return {"active_design": data["active_design"], "workspace_code": code, "name": data.get("name", "Local Workspace"),
-                    "designs": [{"id": entry["id"], "name": self._name(code, entry["id"]),
+            return {"active_design": data["active_design"], "workspace_code": code, "name": data.get("name", "Local Workspace"), "starter_design":data.get("starter_design"),
+                    "designs": [{"id": entry["id"], **self._design_info(code, entry["id"]),
                                  "deleted": bool(entry.get("deleted"))} for entry in data["designs"]]}
 
     def claim(self, code: str, owner: str):
